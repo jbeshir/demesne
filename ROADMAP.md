@@ -18,7 +18,7 @@ file disagrees with that node, the node wins — update this file to match.
 |------------------------------------|-------------|----------------------------------------------------------------|
 | Private GitHub repo                | Done        | `2128b887-721d-2c87-b4a8-62070672f651`                         |
 | **M1** — `sandbox_script`          | **Done**    | `18eeafba-e5a6-6c81-b75c-648b4533694c`                         |
-| M2 — persistent sandboxes          | Not started | `d77fdc59-ce80-cf01-0c02-ea9e5d6c1064`                         |
+| **M2** — persistent sandboxes      | **Done**    | `d77fdc59-ce80-cf01-0c02-ea9e5d6c1064`                         |
 | M3 — `sandbox_agent`               | Not started | `2c9fe6ee-bc4e-0e9b-6faa-fa97a50939f2`                         |
 | M4 — `sandbox_research`            | Not started | `780688b1-ba47-c04f-f754-278ea4cab2f3`                         |
 | M5 — MCP proxy                     | Not started | `1bad3a63-e185-9ffb-be8e-6d739af75ce4`                         |
@@ -38,29 +38,30 @@ README with mermaid diagrams, and `runner_integration_test.go` (env-gated
 end-to-end test against a real OpenSandbox, runnable via `make
 test-integration` with config in `.env` / `.env.dist`).
 
-## M2 — persistent sandboxes
+## M2 — persistent sandboxes (done)
 
-**Goal:** let an MCP client create a long-lived sandbox, run multiple commands
-against it, upload/download files, and destroy it explicitly.
+Shipped: `sandbox_create` / `sandbox_exec` / `sandbox_upload` /
+`sandbox_download` / `sandbox_destroy`. `sandbox_script` retained as the
+single-shot fast path.
 
-**Tools to add:**
-- `sandbox_create` — create a persistent sandbox; return its handle (UUID).
-- `sandbox_exec` — run a command in an existing sandbox; return stdout.
-- `sandbox_destroy` — kill and remove a sandbox.
-- `sandbox_upload` — copy a host path into the sandbox.
-- `sandbox_download` — copy a sandbox path back to the host.
-
-**Key decisions to make at planning time:**
-- Sandbox handle format and persistence (in-memory map? on-disk index? both?).
-- Whether `sandbox_script` becomes a thin wrapper over create+exec+destroy or
-  stays independent.
-- Resource limits per sandbox (CPU/memory/disk) — needs MCP-level config or
-  per-call params.
-- How to surface sandbox state changes (running, killed, errored) — polling or
-  events.
-
-**Out of scope for M2:** agent runners, MCP proxy, child sandboxes, streaming,
-results.json. Those land in later milestones.
+**Decisions taken:**
+- Handle = OpenSandbox sandbox ID (no host-side state). Re-attach via
+  `ConnectSandbox` on every operation. Our internal jobID (host /out dir
+  name) lives in sandbox metadata as `demesne.job`; `sandbox_download`
+  reads it from `GetInfo` to find the host downloads dir.
+- TTL = 24h (OpenSandbox default), refreshed on each `sandbox_exec` via
+  `sb.Renew`. Active sandboxes stay alive; idle ones expire — no janitor.
+- `sandbox_download` writes under `<output_dir>/downloads/<basename>` so
+  the caller never has to choose (or be authorised for) a host
+  destination.
+- Per-command timeout bumped to 12h (was 30m) — long data-processing
+  scripts are a legitimate use case.
+- `sandbox_script` stays independent (not refactored to wrap
+  create+exec+destroy). Shared logic factored into
+  `internal/sandbox/runner.go` helpers (`prepareSandbox`, `attach`,
+  `connectionConfig`).
+- Image / egress / mounts are fixed at create time. Runtime mutation
+  (`EgressClient`-based egress changes) deferred to a later milestone.
 
 ## M3 — `sandbox_agent`
 
