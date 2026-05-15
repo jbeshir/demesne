@@ -1,0 +1,81 @@
+{
+  "manifest_version": "0.3",
+  "name": "demesne-mcp",
+  "display_name": "Demesne",
+  "version": "0.1.0",
+  "description": "Run heterogeneous AI agents and shell commands in disposable OpenSandbox containers.",
+  "long_description": "Demesne is an MCP server that exposes sandboxed command execution backed by [OpenSandbox](https://github.com/alibaba/OpenSandbox).\n\n**Milestone 1 ships a single tool:**\n\n- **sandbox_script** — run a shell command in a fresh sandbox built from a whitelisted image (anaconda, python, or node). Caller-supplied host files and directories are mounted read-only at /in/<basename>. A writable /out mount is created automatically, and the host path is returned alongside stdout so the caller can read produced artifacts. Outbound network access is restricted by default.\n\nFuture milestones will add persistent sandboxes (sandbox_create/exec/destroy/upload/download), sandbox_agent for running Claude Code in a sandbox, sandbox_research for unrestricted research, and an MCP proxy for exposing host MCP servers inside sandboxes.",
+  "author": {
+    "name": "John Beshir",
+    "url": "https://github.com/jbeshir"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jbeshir/demesne.git"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/demesne-mcp-linux-amd64",
+    "mcp_config": {
+      "command": "${__dirname}/server/demesne-mcp-linux-amd64",
+      "args": [],
+      "env": {
+        "DEMESNE_ALLOWED_PATHS": "${user_config.allowed_paths}",
+        "DEMESNE_OUTPUT_ROOT": "${user_config.output_root}",
+        "OPEN_SANDBOX_DOMAIN": "${user_config.opensandbox_domain}",
+        "OPEN_SANDBOX_PROTOCOL": "${user_config.opensandbox_protocol}",
+        "OPEN_SANDBOX_API_KEY": "${user_config.opensandbox_api_key}"
+      },
+      "platform_overrides": {
+        "darwin": {
+          "command": "${__dirname}/server/demesne-mcp-darwin-arm64"
+        },
+        "win32": {
+          "command": "${__dirname}/server/demesne-mcp-windows-amd64.exe"
+        }
+      }
+    }
+  },
+  "user_config": {
+    "allowed_paths": {
+      "type": "string",
+      "title": "Allowed mount paths",
+      "description": "Colon-separated list of host directories under which the sandbox_script tool may mount files or directories. Anything outside is rejected.",
+      "required": true
+    },
+    "output_root": {
+      "type": "string",
+      "title": "Output root",
+      "description": "Host directory under which per-job /out mounts are created. Defaults to /tmp/demesne/out.",
+      "default": "/tmp/demesne/out",
+      "required": false
+    },
+    "opensandbox_domain": {
+      "type": "string",
+      "title": "OpenSandbox domain",
+      "description": "host:port of the OpenSandbox lifecycle server (e.g. localhost:8080).",
+      "required": true
+    },
+    "opensandbox_protocol": {
+      "type": "string",
+      "title": "OpenSandbox protocol",
+      "description": "http or https.",
+      "default": "http",
+      "required": false
+    },
+    "opensandbox_api_key": {
+      "type": "string",
+      "title": "OpenSandbox API key",
+      "description": "API key for the OpenSandbox lifecycle server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "tools": [
+    { "name": "sandbox_script", "description": "Run a shell command in a fresh sandbox; returns stdout and the host path of the /out mount" }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"]
+  }
+}
