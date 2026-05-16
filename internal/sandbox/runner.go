@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -37,13 +38,17 @@ func NewRunner(cfg Config) *Runner {
 // RunScript executes one sandbox_script invocation end-to-end: create a
 // fresh sandbox, run a single command, return stdout, tear the sandbox down.
 func (r *Runner) RunScript(ctx context.Context, req ScriptRequest) (ScriptResult, error) {
-	sb, outputHost, jobID, err := r.prepareSandbox(
-		ctx, req.Image, req.Egress, req.Files, req.Directories, "sandbox_script",
-	)
+	sb, outputHost, jobID, err := r.prepareSandbox(ctx, sandboxPrepOptions{
+		Image:       req.Image,
+		Egress:      req.Egress,
+		Files:       req.Files,
+		Directories: req.Directories,
+		Tool:        "sandbox_script",
+	})
 	if err != nil {
 		return ScriptResult{}, err
 	}
-	defer killSandbox(sb)
+	defer killSandbox(ctx, sb)
 
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
 		Command: req.Command,
@@ -73,6 +78,10 @@ func (r *Runner) connectionConfig() opensandbox.ConnectionConfig {
 		Domain:   r.cfg.OpenSandboxDomain,
 		Protocol: r.cfg.OpenSandboxProtocol,
 		APIKey:   r.cfg.OpenSandboxAPIKey,
+		// The SDK default is 30s, which kills long-running RunCommand SSE
+		// reads (agent tasks and data jobs both). Match commandTimeout so
+		// the transport never expires before the in-sandbox command does.
+		RequestTimeout: commandTimeout,
 	}
 }
 
@@ -86,30 +95,47 @@ func (r *Runner) attach(ctx context.Context, sandboxID string) (*opensandbox.San
 	return sb, nil
 }
 
+// sandboxPrepOptions captures everything prepareSandbox needs. The script
+// and create paths use Image/Egress from the whitelist; the agent path
+// supplies ImageOverride (a built image tag) and ExtraEgressAllow (the
+// proxy host that must be reachable).
+type sandboxPrepOptions struct {
+	Image            string     // resolved via ResolveImage; ignored if ImageOverride is set
+	ImageOverride    string     // a built image tag, used verbatim when non-empty
+	Egress           EgressMode // resolved via BuildNetworkPolicy
+	ExtraEgressAllow []string   // additional allow targets unioned with the egress mode
+	Files            []string
+	Directories      []string
+	Tool             string // value of the demesne.tool metadata label
+}
+
 // prepareSandbox validates inputs, mints the per-job UUID + host /out dir,
-// and creates the sandbox via the OpenSandbox SDK. Shared by RunScript and
-// Create. The caller decides whether to defer Kill (RunScript does; Create
-// does not — Create returns the sandbox for the caller to manage).
+// and creates the sandbox via the OpenSandbox SDK. Shared by RunScript,
+// Create, and Agent. The caller decides whether to defer Kill (RunScript
+// and Agent do; Create does not — Create returns the sandbox for the
+// caller to manage).
 //
 // Returns the SDK sandbox handle, the host /out path, and the demesne
 // jobID (stored in sandbox metadata as demesne.job so it can be recovered
 // from sb.GetInfo later — see Download).
 func (r *Runner) prepareSandbox(
 	ctx context.Context,
-	image string,
-	egress EgressMode,
-	files, directories []string,
-	tool string,
+	opts sandboxPrepOptions,
 ) (*opensandbox.Sandbox, string, string, error) {
-	imageURI, err := ResolveImage(image)
+	imageURI := opts.ImageOverride
+	if imageURI == "" {
+		resolved, err := ResolveImage(opts.Image)
+		if err != nil {
+			return nil, "", "", err
+		}
+		imageURI = resolved
+	}
+
+	policy, err := BuildNetworkPolicy(opts.Egress, opts.ExtraEgressAllow)
 	if err != nil {
 		return nil, "", "", err
 	}
-	policy, err := BuildNetworkPolicy(egress)
-	if err != nil {
-		return nil, "", "", err
-	}
-	mounts, err := r.resolveMounts(files, directories)
+	mounts, err := r.resolveMounts(opts.Files, opts.Directories)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -131,7 +157,7 @@ func (r *Runner) prepareSandbox(
 		NetworkPolicy: policy,
 		Metadata: map[string]string{
 			metadataDemesneJob:  jobID,
-			metadataDemesneTool: tool,
+			metadataDemesneTool: opts.Tool,
 		},
 	})
 	if err != nil {
@@ -140,12 +166,16 @@ func (r *Runner) prepareSandbox(
 	return sb, outputHost, jobID, nil
 }
 
-// killSandbox tears the sandbox down with a fresh context, so cleanup runs
-// even when the request context has been cancelled.
-func killSandbox(sb *opensandbox.Sandbox) {
-	killCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// killSandbox tears the sandbox down even when the request context has
+// already been cancelled. The caller passes ctx so values/deadlines
+// can be preserved; WithoutCancel keeps them while dropping the
+// cancellation that would otherwise short-circuit Kill.
+func killSandbox(ctx context.Context, sb *opensandbox.Sandbox) {
+	killCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
-	_ = sb.Kill(killCtx)
+	if err := sb.Kill(killCtx); err != nil {
+		log.Printf("sandbox: kill failed for %s: %v", sb.ID(), err)
+	}
 }
 
 // resolveMounts validates each requested input path and turns the result

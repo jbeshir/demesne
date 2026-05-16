@@ -26,15 +26,21 @@ type Config struct {
 
 	// OpenSandboxAPIKey authenticates the lifecycle requests.
 	OpenSandboxAPIKey string
+
+	// ClaudeCodeOAuthToken is the long-lived token from `claude setup-token`,
+	// injected into agent containers as CLAUDE_CODE_OAUTH_TOKEN. Required
+	// only when sandbox_agent is invoked.
+	ClaudeCodeOAuthToken string
 }
 
 // LoadConfigFromEnv reads required configuration from environment variables.
 func LoadConfigFromEnv() (Config, error) {
 	cfg := Config{
-		OutputRoot:          envOr("DEMESNE_OUTPUT_ROOT", "/tmp/demesne/out"),
-		OpenSandboxDomain:   os.Getenv("OPEN_SANDBOX_DOMAIN"),
-		OpenSandboxProtocol: envOr("OPEN_SANDBOX_PROTOCOL", "http"),
-		OpenSandboxAPIKey:   os.Getenv("OPEN_SANDBOX_API_KEY"),
+		OutputRoot:           envOr("DEMESNE_OUTPUT_ROOT", "/tmp/demesne/out"),
+		OpenSandboxDomain:    os.Getenv("OPEN_SANDBOX_DOMAIN"),
+		OpenSandboxProtocol:  envOr("OPEN_SANDBOX_PROTOCOL", "http"),
+		OpenSandboxAPIKey:    os.Getenv("OPEN_SANDBOX_API_KEY"),
+		ClaudeCodeOAuthToken: os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN"),
 	}
 
 	rawAllowed := os.Getenv("DEMESNE_ALLOWED_PATHS")

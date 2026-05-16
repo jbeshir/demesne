@@ -3,12 +3,12 @@ package server
 import (
 	"context"
 	"errors"
-	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/jbeshir/demesne/internal/sandbox"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeRunner struct {
@@ -34,6 +34,10 @@ type fakeRunner struct {
 	destroyCalls   int
 	gotDestroyReq  sandbox.DestroyRequest
 	destroyErr     error
+	agentCalls     int
+	gotAgentReq    sandbox.AgentRequest
+	agentRes       sandbox.AgentResult
+	agentErr       error
 }
 
 func (f *fakeRunner) RunScript(_ context.Context, req sandbox.ScriptRequest) (sandbox.ScriptResult, error) {
@@ -72,6 +76,12 @@ func (f *fakeRunner) Destroy(_ context.Context, req sandbox.DestroyRequest) erro
 	return f.destroyErr
 }
 
+func (f *fakeRunner) Agent(_ context.Context, req sandbox.AgentRequest) (sandbox.AgentResult, error) {
+	f.agentCalls++
+	f.gotAgentReq = req
+	return f.agentRes, f.agentErr
+}
+
 func newRequest(args map[string]any) mcp.CallToolRequest {
 	var req mcp.CallToolRequest
 	req.Params.Name = "sandbox_script"
@@ -81,16 +91,10 @@ func newRequest(args map[string]any) mcp.CallToolRequest {
 
 func resultText(t *testing.T, r *mcp.CallToolResult) string {
 	t.Helper()
-	if r == nil {
-		t.Fatal("nil result")
-	}
-	if len(r.Content) == 0 {
-		t.Fatal("result has no content")
-	}
+	require.NotNil(t, r)
+	require.NotEmpty(t, r.Content)
 	tc, ok := r.Content[0].(mcp.TextContent)
-	if !ok {
-		t.Fatalf("content is %T, want TextContent", r.Content[0])
-	}
+	require.True(t, ok, "content is %T, want TextContent", r.Content[0])
 	return tc.Text
 }
 
@@ -98,15 +102,9 @@ func TestHandleSandboxScript_MissingCommand(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	got, err := s.handleSandboxScript(context.Background(), newRequest(map[string]any{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.IsError {
-		t.Fatal("expected IsError=true for missing command")
-	}
-	if r.scriptCalls != 0 {
-		t.Fatalf("runner should not be called, got %d calls", r.scriptCalls)
-	}
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "expected IsError=true for missing command")
+	assert.Zero(t, r.scriptCalls, "runner should not be called")
 }
 
 func TestHandleSandboxScript_InvalidFiles(t *testing.T) {
@@ -116,15 +114,9 @@ func TestHandleSandboxScript_InvalidFiles(t *testing.T) {
 		"command": "true",
 		"files":   "not-an-array",
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.IsError {
-		t.Fatal("expected IsError=true for non-array files")
-	}
-	if r.scriptCalls != 0 {
-		t.Fatal("runner should not be called when args invalid")
-	}
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "expected IsError=true for non-array files")
+	assert.Zero(t, r.scriptCalls, "runner should not be called when args invalid")
 }
 
 func TestHandleSandboxScript_RunnerErrorSurfaced(t *testing.T) {
@@ -133,15 +125,9 @@ func TestHandleSandboxScript_RunnerErrorSurfaced(t *testing.T) {
 	got, err := s.handleSandboxScript(context.Background(), newRequest(map[string]any{
 		"command": "true",
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.IsError {
-		t.Fatal("expected IsError=true when runner fails")
-	}
-	if !strings.Contains(resultText(t, got), "boom") {
-		t.Fatalf("expected error text to contain runner error, got %q", resultText(t, got))
-	}
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "expected IsError=true when runner fails")
+	assert.Contains(t, resultText(t, got), "boom")
 }
 
 func TestHandleSandboxScript_HappyPath(t *testing.T) {
@@ -161,31 +147,20 @@ func TestHandleSandboxScript_HappyPath(t *testing.T) {
 		"files":       []any{"/some/file.txt"},
 		"directories": []any{"/some/dir"},
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.IsError {
-		t.Fatalf("unexpected error result: %s", resultText(t, got))
-	}
-	if r.scriptCalls != 1 {
-		t.Fatalf("expected 1 runner call, got %d", r.scriptCalls)
-	}
-	wantReq := sandbox.ScriptRequest{
+	require.NoError(t, err)
+	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	assert.Equal(t, 1, r.scriptCalls)
+	assert.Equal(t, sandbox.ScriptRequest{
 		Command:     "echo hello",
 		Image:       "anaconda",
 		Egress:      sandbox.EgressNone,
 		Files:       []string{"/some/file.txt"},
 		Directories: []string{"/some/dir"},
-	}
-	if !reflect.DeepEqual(r.gotScriptReq, wantReq) {
-		t.Errorf("runner request = %+v\nwant %+v", r.gotScriptReq, wantReq)
-	}
+	}, r.gotScriptReq)
 
 	text := resultText(t, got)
 	for _, want := range []string{"exit_code: 0", "output_dir: /tmp/demesne/out/abc-123", "job_id: abc-123", "hello"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("result missing %q\nfull:\n%s", want, text)
-		}
+		assert.Contains(t, text, want)
 	}
 }
 
@@ -195,12 +170,8 @@ func TestHandleSandboxScript_DefaultEgress(t *testing.T) {
 	_, err := s.handleSandboxScript(context.Background(), newRequest(map[string]any{
 		"command": "true",
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.gotScriptReq.Egress != sandbox.EgressPackageManagers {
-		t.Fatalf("default egress = %q, want %q", r.gotScriptReq.Egress, sandbox.EgressPackageManagers)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, sandbox.EgressPackageManagers, r.gotScriptReq.Egress)
 }
 
 func TestHandleSandboxCreate_HappyPath(t *testing.T) {
@@ -215,24 +186,13 @@ func TestHandleSandboxCreate_HappyPath(t *testing.T) {
 		"image":  "python",
 		"egress": "none",
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.IsError {
-		t.Fatalf("unexpected error result: %s", resultText(t, got))
-	}
-	if r.createCalls != 1 {
-		t.Fatalf("expected 1 Create call, got %d", r.createCalls)
-	}
-	wantReq := sandbox.CreateRequest{Image: "python", Egress: sandbox.EgressNone}
-	if !reflect.DeepEqual(r.gotCreateReq, wantReq) {
-		t.Errorf("Create request = %+v\nwant %+v", r.gotCreateReq, wantReq)
-	}
+	require.NoError(t, err)
+	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	assert.Equal(t, 1, r.createCalls)
+	assert.Equal(t, sandbox.CreateRequest{Image: "python", Egress: sandbox.EgressNone}, r.gotCreateReq)
 	text := resultText(t, got)
 	for _, want := range []string{"sandbox_id: sbx-1", "output_dir: /tmp/demesne/out/job-1"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("result missing %q\nfull:\n%s", want, text)
-		}
+		assert.Contains(t, text, want)
 	}
 }
 
@@ -240,34 +200,24 @@ func TestHandleSandboxCreate_DefaultEgress(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	_, err := s.handleSandboxCreate(context.Background(), newRequest(map[string]any{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.gotCreateReq.Egress != sandbox.EgressPackageManagers {
-		t.Fatalf("default egress = %q, want %q", r.gotCreateReq.Egress, sandbox.EgressPackageManagers)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, sandbox.EgressPackageManagers, r.gotCreateReq.Egress)
 }
 
 func TestHandleSandboxExec_MissingParams(t *testing.T) {
 	cases := []map[string]any{
-		{},                                       // missing both
-		{"sandbox_id": "sbx-1"},                  // missing command
-		{"command": "echo hi"},                   // missing sandbox_id
-		{"sandbox_id": "", "command": "echo hi"}, // empty sandbox_id
+		{},
+		{"sandbox_id": "sbx-1"},
+		{"command": "echo hi"},
+		{"sandbox_id": "", "command": "echo hi"},
 	}
 	for i, args := range cases {
 		r := &fakeRunner{}
 		s := NewServer(r)
 		got, err := s.handleSandboxExec(context.Background(), newRequest(args))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !got.IsError {
-			t.Errorf("case %d: expected IsError=true for %v", i, args)
-		}
-		if r.execCalls != 0 {
-			t.Errorf("case %d: runner should not be called", i)
-		}
+		require.NoError(t, err)
+		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
+		assert.Zero(t, r.execCalls, "case %d: runner should not be called", i)
 	}
 }
 
@@ -280,21 +230,12 @@ func TestHandleSandboxExec_HappyPath(t *testing.T) {
 		"sandbox_id": "sbx-1",
 		"command":    "echo hello",
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.IsError {
-		t.Fatalf("unexpected error result: %s", resultText(t, got))
-	}
-	wantReq := sandbox.ExecRequest{SandboxID: "sbx-1", Command: "echo hello"}
-	if !reflect.DeepEqual(r.gotExecReq, wantReq) {
-		t.Errorf("Exec request = %+v\nwant %+v", r.gotExecReq, wantReq)
-	}
+	require.NoError(t, err)
+	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	assert.Equal(t, sandbox.ExecRequest{SandboxID: "sbx-1", Command: "echo hello"}, r.gotExecReq)
 	text := resultText(t, got)
 	for _, want := range []string{"exit_code: 0", "hello"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("result missing %q\nfull:\n%s", want, text)
-		}
+		assert.Contains(t, text, want)
 	}
 }
 
@@ -305,15 +246,9 @@ func TestHandleSandboxExec_RunnerErrorSurfaced(t *testing.T) {
 		"sandbox_id": "sbx-1",
 		"command":    "true",
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.IsError {
-		t.Fatal("expected IsError=true when runner fails")
-	}
-	if !strings.Contains(resultText(t, got), "boom") {
-		t.Fatalf("expected error text to contain runner error, got %q", resultText(t, got))
-	}
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "expected IsError=true when runner fails")
+	assert.Contains(t, resultText(t, got), "boom")
 }
 
 func TestHandleSandboxUpload_MissingParams(t *testing.T) {
@@ -328,15 +263,9 @@ func TestHandleSandboxUpload_MissingParams(t *testing.T) {
 		r := &fakeRunner{}
 		s := NewServer(r)
 		got, err := s.handleSandboxUpload(context.Background(), newRequest(args))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !got.IsError {
-			t.Errorf("case %d: expected IsError=true for %v", i, args)
-		}
-		if r.uploadCalls != 0 {
-			t.Errorf("case %d: runner should not be called", i)
-		}
+		require.NoError(t, err)
+		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
+		assert.Zero(t, r.uploadCalls, "case %d: runner should not be called", i)
 	}
 }
 
@@ -348,20 +277,10 @@ func TestHandleSandboxUpload_HappyPath(t *testing.T) {
 		"src":        "/host/data.txt",
 		"dst":        "/tmp/data.txt",
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.IsError {
-		t.Fatalf("unexpected error result: %s", resultText(t, got))
-	}
-	wantReq := sandbox.UploadRequest{SandboxID: "sbx-1", HostSrc: "/host/data.txt", SandboxDst: "/tmp/data.txt"}
-	if !reflect.DeepEqual(r.gotUploadReq, wantReq) {
-		t.Errorf("Upload request = %+v\nwant %+v", r.gotUploadReq, wantReq)
-	}
-	text := resultText(t, got)
-	if !strings.Contains(text, "uploaded: data.txt -> /tmp/data.txt") {
-		t.Errorf("result text = %q", text)
-	}
+	require.NoError(t, err)
+	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	assert.Equal(t, sandbox.UploadRequest{SandboxID: "sbx-1", HostSrc: "/host/data.txt", SandboxDst: "/tmp/data.txt"}, r.gotUploadReq)
+	assert.Contains(t, resultText(t, got), "uploaded: data.txt -> /tmp/data.txt")
 }
 
 func TestHandleSandboxDownload_MissingParams(t *testing.T) {
@@ -375,15 +294,9 @@ func TestHandleSandboxDownload_MissingParams(t *testing.T) {
 		r := &fakeRunner{}
 		s := NewServer(r)
 		got, err := s.handleSandboxDownload(context.Background(), newRequest(args))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !got.IsError {
-			t.Errorf("case %d: expected IsError=true for %v", i, args)
-		}
-		if r.downloadCalls != 0 {
-			t.Errorf("case %d: runner should not be called", i)
-		}
+		require.NoError(t, err)
+		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
+		assert.Zero(t, r.downloadCalls, "case %d: runner should not be called", i)
 	}
 }
 
@@ -396,35 +309,19 @@ func TestHandleSandboxDownload_HappyPath(t *testing.T) {
 		"sandbox_id": "sbx-1",
 		"src":        "/sandbox/a.txt",
 	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.IsError {
-		t.Fatalf("unexpected error result: %s", resultText(t, got))
-	}
-	wantReq := sandbox.DownloadRequest{SandboxID: "sbx-1", SandboxSrc: "/sandbox/a.txt"}
-	if !reflect.DeepEqual(r.gotDownloadReq, wantReq) {
-		t.Errorf("Download request = %+v\nwant %+v", r.gotDownloadReq, wantReq)
-	}
-	text := resultText(t, got)
-	if !strings.Contains(text, "downloaded: /sandbox/a.txt -> /host/out/job-1/downloads/a.txt") {
-		t.Errorf("result text = %q", text)
-	}
+	require.NoError(t, err)
+	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	assert.Equal(t, sandbox.DownloadRequest{SandboxID: "sbx-1", SandboxSrc: "/sandbox/a.txt"}, r.gotDownloadReq)
+	assert.Contains(t, resultText(t, got), "downloaded: /sandbox/a.txt -> /host/out/job-1/downloads/a.txt")
 }
 
 func TestHandleSandboxDestroy_MissingParam(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	got, err := s.handleSandboxDestroy(context.Background(), newRequest(map[string]any{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.IsError {
-		t.Fatal("expected IsError=true for missing sandbox_id")
-	}
-	if r.destroyCalls != 0 {
-		t.Error("runner should not be called")
-	}
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "expected IsError=true for missing sandbox_id")
+	assert.Zero(t, r.destroyCalls, "runner should not be called")
 }
 
 func TestHandleSandboxDestroy_HappyPath(t *testing.T) {
@@ -433,16 +330,76 @@ func TestHandleSandboxDestroy_HappyPath(t *testing.T) {
 	got, err := s.handleSandboxDestroy(context.Background(), newRequest(map[string]any{
 		"sandbox_id": "sbx-1",
 	}))
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	assert.Equal(t, "sbx-1", r.gotDestroyReq.SandboxID)
+	assert.Contains(t, resultText(t, got), "destroyed: sbx-1")
+}
+
+func TestHandleSandboxAgent_MissingPrompt(t *testing.T) {
+	cases := []map[string]any{{}, {"prompt": ""}}
+	for i, args := range cases {
+		r := &fakeRunner{}
+		s := NewServer(r)
+		got, err := s.handleSandboxAgent(context.Background(), newRequest(args))
+		require.NoError(t, err)
+		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
+		assert.Zero(t, r.agentCalls, "case %d: runner should not be called", i)
 	}
-	if got.IsError {
-		t.Fatalf("unexpected error result: %s", resultText(t, got))
+}
+
+func TestHandleSandboxAgent_HappyPath(t *testing.T) {
+	r := &fakeRunner{
+		agentRes: sandbox.AgentResult{
+			JobID:      "abc",
+			OutputPath: "/tmp/demesne-out/abc",
+			Stdout:     "PONG\n",
+			ExitCode:   0,
+		},
 	}
-	if r.gotDestroyReq.SandboxID != "sbx-1" {
-		t.Errorf("Destroy SandboxID = %q", r.gotDestroyReq.SandboxID)
+	s := NewServer(r)
+	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
+		"prompt":      "reply PONG",
+		"model":       "haiku",
+		"preamble":    "say only the word",
+		"files":       []any{"/some/file.txt"},
+		"directories": []any{"/some/dir"},
+		"egress":      "package-managers",
+	}))
+	require.NoError(t, err)
+	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	assert.Equal(t, sandbox.AgentRequest{
+		Agent:       "",
+		Model:       "haiku",
+		Prompt:      "reply PONG",
+		Preamble:    "say only the word",
+		Files:       []string{"/some/file.txt"},
+		Directories: []string{"/some/dir"},
+		Egress:      sandbox.EgressPackageManagers,
+	}, r.gotAgentReq)
+	text := resultText(t, got)
+	for _, want := range []string{"exit_code: 0", "output_dir: /tmp/demesne-out/abc", "job_id: abc", "PONG"} {
+		assert.Contains(t, text, want)
 	}
-	if !strings.Contains(resultText(t, got), "destroyed: sbx-1") {
-		t.Errorf("result text = %q", resultText(t, got))
-	}
+}
+
+func TestHandleSandboxAgent_DefaultEgress(t *testing.T) {
+	r := &fakeRunner{}
+	s := NewServer(r)
+	_, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
+		"prompt": "hi",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, sandbox.EgressNone, r.gotAgentReq.Egress)
+}
+
+func TestHandleSandboxAgent_RunnerErrorSurfaced(t *testing.T) {
+	r := &fakeRunner{agentErr: errors.New("boom")}
+	s := NewServer(r)
+	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
+		"prompt": "hi",
+	}))
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "expected IsError=true")
+	assert.Contains(t, resultText(t, got), "boom")
 }

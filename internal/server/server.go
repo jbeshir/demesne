@@ -17,6 +17,7 @@ type Runner interface {
 	Upload(ctx context.Context, req sandbox.UploadRequest) error
 	Download(ctx context.Context, req sandbox.DownloadRequest) (sandbox.DownloadResult, error)
 	Destroy(ctx context.Context, req sandbox.DestroyRequest) error
+	Agent(ctx context.Context, req sandbox.AgentRequest) (sandbox.AgentResult, error)
 }
 
 // Server is the MCP server for Demesne.
@@ -136,6 +137,48 @@ func (s *Server) registerTools() {
 			mcp.Description("Sandbox handle returned by sandbox_create."),
 		),
 	), s.handleSandboxDestroy)
+
+	s.mcpServer.AddTool(mcp.NewTool("sandbox_agent",
+		mcp.WithDescription(agentToolDescription),
+		mcp.WithString("prompt",
+			mcp.Required(),
+			mcp.Description("Task for the agent. Free-form text."),
+		),
+		mcp.WithString("agent",
+			mcp.Description(
+				"Agent provider. Defaults to 'claude-code' (the only registered "+
+					"provider in this build).",
+			),
+		),
+		mcp.WithString("model",
+			mcp.Description(
+				"Model for the agent. One of 'opus', 'sonnet' (default), or "+
+					"'haiku'. Specific to the claude-code provider.",
+			),
+		),
+		mcp.WithString("preamble",
+			mcp.Description(
+				"Optional prose prepended verbatim to the generated CLAUDE.md "+
+					"before the auto-generated environment section.",
+			),
+		),
+		mcp.WithString("egress",
+			mcp.Description(
+				"Additional outbound network policy on top of the agent's "+
+					"backend proxy (which is always reachable). 'none' (default) "+
+					"means only the proxy; 'package-managers' also allows "+
+					"npm/PyPI/conda registries.",
+			),
+		),
+		mcp.WithArray("files",
+			mcp.Description(filesParamDescription),
+			mcp.Items(map[string]any{"type": "string"}),
+		),
+		mcp.WithArray("directories",
+			mcp.Description(directoriesParamDescription),
+			mcp.Items(map[string]any{"type": "string"}),
+		),
+	), s.handleSandboxAgent)
 }
 
 const imageParamDescription = "Container image. One of: 'node' (node:22), " +
@@ -204,3 +247,21 @@ const destroyToolDescription = `Destroy an existing sandbox.
 The sandbox container is killed. The host output directory (containing /out
 artefacts and any sandbox_download results) is preserved on the host for
 later inspection — remove it separately if no longer needed.`
+
+const agentToolDescription = `Run an AI agent inside a fresh sandbox against the caller's prompt.
+
+The sandbox is built from the agent's own container image (built lazily on
+first use) and torn down when the agent exits. Working directory is /out.
+
+The agent reads /out/CLAUDE.md before processing the task; that file is
+generated from the optional 'preamble' parameter plus an auto-generated
+'Environment' section listing any /in/<basename> inputs and the
+/out writable mount.
+
+Outbound network access is restricted: the on-host Anthropic API proxy is
+always reachable (the agent's CLI uses it), and the 'egress' parameter
+controls whatever else the sandbox may reach.
+
+The result text contains the exit code, the host path of /out (containing
+the generated CLAUDE.md and any agent-written artefacts), the job ID, and
+the agent's stdout.`

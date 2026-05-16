@@ -1,45 +1,48 @@
 package sandbox
 
-import "testing"
+import (
+	"testing"
 
-func TestBuildNetworkPolicy(t *testing.T) {
-	t.Run("none denies everything", func(t *testing.T) {
-		p, err := BuildNetworkPolicy(EgressNone)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if p.DefaultAction != "deny" {
-			t.Fatalf("default action = %q, want deny", p.DefaultAction)
-		}
-		if len(p.Egress) != 0 {
-			t.Fatalf("expected no egress rules, got %d", len(p.Egress))
-		}
-	})
+	opensandbox "github.com/alibaba/OpenSandbox/sdks/sandbox/go"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
-	t.Run("package-managers allows registry hosts", func(t *testing.T) {
-		p, err := BuildNetworkPolicy(EgressPackageManagers)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if p.DefaultAction != "deny" {
-			t.Fatalf("default action = %q, want deny", p.DefaultAction)
-		}
-		if len(p.Egress) != len(PackageManagerHosts) {
-			t.Fatalf("expected %d egress rules, got %d", len(PackageManagerHosts), len(p.Egress))
-		}
-		for i, host := range PackageManagerHosts {
-			if p.Egress[i].Action != "allow" {
-				t.Fatalf("rule %d action = %q, want allow", i, p.Egress[i].Action)
-			}
-			if p.Egress[i].Target != host {
-				t.Fatalf("rule %d target = %q, want %q", i, p.Egress[i].Target, host)
-			}
-		}
-	})
+const defaultDeny = "deny"
 
-	t.Run("unknown mode rejected", func(t *testing.T) {
-		if _, err := BuildNetworkPolicy(EgressMode("anywhere")); err == nil {
-			t.Fatal("expected error for unknown mode")
-		}
-	})
+func TestBuildNetworkPolicy_None(t *testing.T) {
+	p, err := BuildNetworkPolicy(EgressNone, nil)
+	require.NoError(t, err)
+	assertDefaultDeny(t, p)
+	assert.Empty(t, p.Egress)
+}
+
+func TestBuildNetworkPolicy_PackageManagers(t *testing.T) {
+	p, err := BuildNetworkPolicy(EgressPackageManagers, nil)
+	require.NoError(t, err)
+	assertDefaultDeny(t, p)
+	require.Len(t, p.Egress, len(PackageManagerHosts))
+	for i, host := range PackageManagerHosts {
+		assert.Equal(t, "allow", p.Egress[i].Action, "rule %d action", i)
+		assert.Equal(t, host, p.Egress[i].Target, "rule %d target", i)
+	}
+}
+
+func TestBuildNetworkPolicy_UnknownMode(t *testing.T) {
+	_, err := BuildNetworkPolicy(EgressMode("anywhere"), nil)
+	assert.Error(t, err)
+}
+
+func TestBuildNetworkPolicy_ExtraAllow(t *testing.T) {
+	p, err := BuildNetworkPolicy(EgressNone, []string{"api.anthropic.com"})
+	require.NoError(t, err)
+	assertDefaultDeny(t, p)
+	require.Len(t, p.Egress, 1)
+	assert.Equal(t, "api.anthropic.com", p.Egress[0].Target)
+	assert.Equal(t, "allow", p.Egress[0].Action)
+}
+
+func assertDefaultDeny(t *testing.T, p *opensandbox.NetworkPolicy) {
+	t.Helper()
+	assert.Equal(t, defaultDeny, p.DefaultAction)
 }

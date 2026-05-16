@@ -1,6 +1,11 @@
 package sandbox
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestResolveImage(t *testing.T) {
 	tests := []struct {
@@ -19,17 +24,11 @@ func TestResolveImage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ResolveImage(tt.name)
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error for %q, got %s", tt.name, got)
-				}
+				assert.Error(t, err)
 				return
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.want {
-				t.Fatalf("ResolveImage(%q) = %q, want %q", tt.name, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

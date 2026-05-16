@@ -15,19 +15,19 @@ setup-files: .env
 validate: lint test-short build
 
 .PHONY: lint
-lint:
+lint: sidecar-binary
 	golangci-lint run --config .golangci.yml ./...
 
 .PHONY: test-short
-test-short:
+test-short: sidecar-binary
 	go test -v -short ./...
 
 .PHONY: test
-test:
+test: sidecar-binary
 	go test -v ./...
 
 .PHONY: test-integration
-test-integration: .env
+test-integration: sidecar-binary .env
 	godotenv -f .env go test -v -tags integration ./internal/sandbox/
 
 .PHONY: fmt
@@ -37,12 +37,22 @@ fmt:
 
 # ── Build ─────────────────────────────────────────────────────
 
+# sidecar-binary cross-compiles the linux/amd64 sidecar into
+# internal/sidecar/dist/demesne-sidecar so go:embed picks it up
+# before any other `go build` or `go test` runs.
+.PHONY: sidecar-binary
+sidecar-binary:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+		-trimpath -ldflags="-s -w" \
+		-o internal/sidecar/dist/demesne-sidecar \
+		./cmd/demesne-sidecar
+
 .PHONY: build
-build:
+build: sidecar-binary
 	go build -o bin/demesne-mcp ./cmd/demesne-mcp
 
 .PHONY: build-all-platforms
-build-all-platforms:
+build-all-platforms: sidecar-binary
 	GOOS=darwin GOARCH=amd64 go build -o bin/demesne-mcp-darwin-amd64 ./cmd/demesne-mcp
 	GOOS=darwin GOARCH=arm64 go build -o bin/demesne-mcp-darwin-arm64 ./cmd/demesne-mcp
 	GOOS=linux GOARCH=amd64 go build -o bin/demesne-mcp-linux-amd64 ./cmd/demesne-mcp
@@ -59,4 +69,4 @@ mcpb:
 
 .PHONY: clean
 clean:
-	rm -rf bin/
+	rm -rf bin/ internal/sidecar/dist/demesne-sidecar
