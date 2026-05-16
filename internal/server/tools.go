@@ -185,6 +185,50 @@ func (s *Server) handleSandboxDestroy(
 	return mcp.NewToolResultText("destroyed: " + sandboxID), nil
 }
 
+func (s *Server) handleSandboxAgent(
+	ctx context.Context,
+	request mcp.CallToolRequest,
+) (*mcp.CallToolResult, error) {
+	prompt, err := request.RequireString("prompt")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if prompt == "" {
+		return mcp.NewToolResultError("prompt is required"), nil
+	}
+
+	agentName := request.GetString("agent", "")
+	model := request.GetString("model", "")
+	preamble := request.GetString("preamble", "")
+	egress := request.GetString("egress", string(sandbox.EgressNone))
+
+	files, err := optionalStringSlice(request, "files")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	directories, err := optionalStringSlice(request, "directories")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	res, err := s.runner.Agent(ctx, sandbox.AgentRequest{
+		Agent:       agentName,
+		Model:       model,
+		Prompt:      prompt,
+		Preamble:    preamble,
+		Files:       files,
+		Directories: directories,
+		Egress:      sandbox.EgressMode(egress),
+	})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return mcp.NewToolResultText(
+		fmt.Sprintf("exit_code: %d\noutput_dir: %s\njob_id: %s\n---\n%s",
+			res.ExitCode, res.OutputPath, res.JobID, res.Stdout),
+	), nil
+}
+
 // optionalStringSlice returns the named argument as []string. It treats a
 // missing argument as an empty slice but rejects a present-but-wrong-typed one.
 func optionalStringSlice(request mcp.CallToolRequest, key string) ([]string, error) {

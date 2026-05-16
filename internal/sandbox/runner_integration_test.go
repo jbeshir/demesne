@@ -6,9 +6,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
+
+	// Side-effect: register the claude-code agent and the anthropic proxy.
+	_ "github.com/jbeshir/demesne/internal/agents/anthropic"
+	_ "github.com/jbeshir/demesne/internal/proxies/anthropic"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Integration tests drive a real sandbox end-to-end against an OpenSandbox
@@ -23,12 +28,8 @@ func integrationRunner(t *testing.T) *Runner {
 	t.Helper()
 	domain := os.Getenv("OPEN_SANDBOX_DOMAIN")
 	apiKey := os.Getenv("OPEN_SANDBOX_API_KEY")
-	if domain == "" {
-		t.Fatal("OPEN_SANDBOX_DOMAIN is required for integration tests")
-	}
-	if apiKey == "" {
-		t.Fatal("OPEN_SANDBOX_API_KEY is required for integration tests")
-	}
+	require.NotEmpty(t, domain, "OPEN_SANDBOX_DOMAIN is required for integration tests")
+	require.NotEmpty(t, apiKey, "OPEN_SANDBOX_API_KEY is required for integration tests")
 	return NewRunner(Config{
 		AllowedPaths:        []string{t.TempDir()},
 		OutputRoot:          t.TempDir(),
@@ -48,24 +49,14 @@ func TestRunner_Integration_OutputMount(t *testing.T) {
 		Image:   "python",
 		Egress:  EgressNone,
 	})
-	if err != nil {
-		t.Fatalf("RunScript: %v", err)
-	}
-	if res.ExitCode != 0 {
-		t.Errorf("exit code = %d, want 0 (stdout=%q)", res.ExitCode, res.Stdout)
-	}
-	if !strings.Contains(res.Stdout, "hello") {
-		t.Errorf("stdout = %q, want to contain 'hello'", res.Stdout)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q", res.Stdout)
+	assert.Contains(t, res.Stdout, "hello")
 
 	outFile := filepath.Join(res.OutputPath, "x.txt")
 	contents, err := os.ReadFile(outFile) //nolint:gosec // path is under t.TempDir()
-	if err != nil {
-		t.Fatalf("read %s: %v", outFile, err)
-	}
-	if !strings.Contains(string(contents), "hello") {
-		t.Errorf("%s = %q, want to contain 'hello'", outFile, contents)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(contents), "hello")
 }
 
 // TestRunner_Integration_EgressNoneBlocksAll verifies that egress="none"
@@ -82,17 +73,13 @@ python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect(('1.1.1
 		Image:  "python",
 		Egress: EgressNone,
 	})
-	if err != nil {
-		t.Fatalf("RunScript: %v", err)
-	}
-	if !strings.Contains(res.Stdout, "DNS_BLOCKED") {
-		t.Errorf("DNS lookup of pypi.org was not blocked under egress=none (stdout=%q)", res.Stdout)
-	}
-	if !strings.Contains(res.Stdout, "IP_BLOCKED") {
-		t.Errorf("raw-IP egress to 1.1.1.1:443 was not blocked under egress=none "+
-			"(stdout=%q). If OpenSandbox is using [egress] mode=\"dns\", switch to "+
-			"\"dns+nft\" — dns-only filtering does not block raw-IP traffic.", res.Stdout)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, res.Stdout, "DNS_BLOCKED",
+		"DNS lookup of pypi.org was not blocked under egress=none")
+	assert.Contains(t, res.Stdout, "IP_BLOCKED",
+		"raw-IP egress to 1.1.1.1:443 was not blocked under egress=none. "+
+			"If OpenSandbox is using [egress] mode=\"dns\", switch to "+
+			"\"dns+nft\" — dns-only filtering does not block raw-IP traffic.")
 }
 
 // TestRunner_Integration_EgressPackageManagersAllowsPyPI verifies that
@@ -107,13 +94,9 @@ func TestRunner_Integration_EgressPackageManagersAllowsPyPI(t *testing.T) {
 		Image:   "python",
 		Egress:  EgressPackageManagers,
 	})
-	if err != nil {
-		t.Fatalf("RunScript: %v", err)
-	}
-	if res.ExitCode != 0 {
-		t.Errorf("getent hosts pypi.org exit=%d under egress=package-managers (stdout=%q)",
-			res.ExitCode, res.Stdout)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode,
+		"getent hosts pypi.org under egress=package-managers (stdout=%q)", res.Stdout)
 }
 
 // TestRunner_Integration_PersistentLifecycle exercises the full M2 happy
@@ -124,90 +107,53 @@ func TestRunner_Integration_PersistentLifecycle(t *testing.T) {
 	runner := integrationRunner(t)
 	ctx := context.Background()
 
-	created, err := runner.Create(ctx, CreateRequest{
-		Image:  "python",
-		Egress: EgressNone,
-	})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	created, err := runner.Create(ctx, CreateRequest{Image: "python", Egress: EgressNone})
+	require.NoError(t, err)
 	sandboxID := created.SandboxID
 	t.Logf("sandbox_id=%s output_dir=%s", sandboxID, created.OutputPath)
-
-	// Ensure the sandbox is killed even if the test fails partway through.
 	t.Cleanup(func() {
 		_ = runner.Destroy(context.Background(), DestroyRequest{SandboxID: sandboxID})
 	})
 
-	step1, err := runner.Exec(ctx, ExecRequest{
-		SandboxID: sandboxID,
-		Command:   "echo step1 > /out/a",
-	})
-	if err != nil {
-		t.Fatalf("Exec step1: %v", err)
-	}
-	if step1.ExitCode != 0 {
-		t.Errorf("step1 exit=%d stdout=%q", step1.ExitCode, step1.Stdout)
-	}
+	mustExec(t, runner, ctx, sandboxID, "echo step1 > /out/a")
 
-	// Upload a host file the sandbox can read.
 	uploadSrc := filepath.Join(runner.cfg.AllowedPaths[0], "in.txt")
-	if err := os.WriteFile(uploadSrc, []byte("hello-from-host\n"), 0o600); err != nil {
-		t.Fatalf("write %s: %v", uploadSrc, err)
-	}
-	if err := runner.Upload(ctx, UploadRequest{
-		SandboxID:  sandboxID,
-		HostSrc:    uploadSrc,
-		SandboxDst: "/tmp/in.txt",
-	}); err != nil {
-		t.Fatalf("Upload: %v", err)
-	}
+	require.NoError(t, os.WriteFile(uploadSrc, []byte("hello-from-host\n"), 0o600))
+	require.NoError(t, runner.Upload(ctx, UploadRequest{
+		SandboxID: sandboxID, HostSrc: uploadSrc, SandboxDst: "/tmp/in.txt",
+	}))
 
-	step2, err := runner.Exec(ctx, ExecRequest{
-		SandboxID: sandboxID,
-		Command:   "cat /tmp/in.txt > /out/b && cat /out/b",
-	})
-	if err != nil {
-		t.Fatalf("Exec step2: %v", err)
-	}
-	if step2.ExitCode != 0 {
-		t.Errorf("step2 exit=%d stdout=%q", step2.ExitCode, step2.Stdout)
-	}
-	if !strings.Contains(step2.Stdout, "hello-from-host") {
-		t.Errorf("step2 stdout = %q, want 'hello-from-host'", step2.Stdout)
-	}
+	step2 := mustExec(t, runner, ctx, sandboxID, "cat /tmp/in.txt > /out/b && cat /out/b")
+	assert.Contains(t, step2.Stdout, "hello-from-host")
 
-	// Both /out artifacts visible on host.
-	for _, name := range []string{"a", "b"} {
-		p := filepath.Join(created.OutputPath, name)
-		if _, err := os.Stat(p); err != nil {
-			t.Errorf("expected %s on host: %v", p, err)
-		}
-	}
+	assertHostOutFiles(t, created.OutputPath, []string{"a", "b"})
 
-	dl, err := runner.Download(ctx, DownloadRequest{
-		SandboxID:  sandboxID,
-		SandboxSrc: "/etc/hostname",
-	})
-	if err != nil {
-		t.Fatalf("Download: %v", err)
-	}
-	contents, err := os.ReadFile(dl.HostPath) //nolint:gosec // path is under r.cfg.OutputRoot/<jobID>/downloads
-	if err != nil {
-		t.Fatalf("read %s: %v", dl.HostPath, err)
-	}
-	if len(contents) == 0 {
-		t.Errorf("downloaded /etc/hostname is empty (path=%s)", dl.HostPath)
-	}
+	dl, err := runner.Download(ctx, DownloadRequest{SandboxID: sandboxID, SandboxSrc: "/etc/hostname"})
+	require.NoError(t, err)
+	contents, err := os.ReadFile(dl.HostPath)
+	require.NoError(t, err)
+	assert.NotEmpty(t, contents, "downloaded /etc/hostname is empty (path=%s)", dl.HostPath)
 
-	if err := runner.Destroy(ctx, DestroyRequest{SandboxID: sandboxID}); err != nil {
-		t.Fatalf("Destroy: %v", err)
-	}
+	require.NoError(t, runner.Destroy(ctx, DestroyRequest{SandboxID: sandboxID}))
 
 	// After destroy, further operations should error — either at attach or
 	// at command time. Either is acceptable: the sandbox is gone.
-	if _, err := runner.Exec(ctx, ExecRequest{SandboxID: sandboxID, Command: "true"}); err == nil {
-		t.Errorf("Exec after Destroy succeeded; expected error")
+	_, err = runner.Exec(ctx, ExecRequest{SandboxID: sandboxID, Command: "true"})
+	assert.Error(t, err, "Exec after Destroy succeeded; expected error")
+}
+
+func mustExec(t *testing.T, r *Runner, ctx context.Context, sandboxID, cmd string) ExecResult {
+	t.Helper()
+	res, err := r.Exec(ctx, ExecRequest{SandboxID: sandboxID, Command: cmd})
+	require.NoError(t, err, "Exec %q", cmd)
+	require.Equal(t, 0, res.ExitCode, "Exec %q stdout=%q", cmd, res.Stdout)
+	return res
+}
+
+func assertHostOutFiles(t *testing.T, outputDir string, names []string) {
+	t.Helper()
+	for _, name := range names {
+		assert.FileExists(t, filepath.Join(outputDir, name))
 	}
 }
 
@@ -219,21 +165,15 @@ func TestRunner_Integration_AutoRenew(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := runner.Create(ctx, CreateRequest{Image: "python", Egress: EgressNone})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = runner.Destroy(context.Background(), DestroyRequest{SandboxID: created.SandboxID})
 	})
 
 	sb, err := runner.attach(ctx, created.SandboxID)
-	if err != nil {
-		t.Fatalf("attach: %v", err)
-	}
+	require.NoError(t, err)
 	before, err := sb.GetInfo(ctx)
-	if err != nil {
-		t.Fatalf("GetInfo before: %v", err)
-	}
+	require.NoError(t, err)
 	if before.ExpiresAt == nil {
 		t.Skip("sandbox created without an ExpiresAt; nothing to renew")
 	}
@@ -241,22 +181,64 @@ func TestRunner_Integration_AutoRenew(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	if _, err := runner.Exec(ctx, ExecRequest{SandboxID: created.SandboxID, Command: "true"}); err != nil {
-		t.Fatalf("Exec: %v", err)
-	}
+	_, err = runner.Exec(ctx, ExecRequest{SandboxID: created.SandboxID, Command: "true"})
+	require.NoError(t, err)
 
 	sb2, err := runner.attach(ctx, created.SandboxID)
-	if err != nil {
-		t.Fatalf("attach: %v", err)
-	}
+	require.NoError(t, err)
 	after, err := sb2.GetInfo(ctx)
-	if err != nil {
-		t.Fatalf("GetInfo after: %v", err)
+	require.NoError(t, err)
+	require.NotNil(t, after.ExpiresAt, "ExpiresAt missing after renew")
+	assert.True(t, after.ExpiresAt.After(beforeExpiry),
+		"ExpiresAt did not advance: before=%s after=%s", beforeExpiry, *after.ExpiresAt)
+}
+
+// TestRunner_Integration_Agent exercises the full sandbox_agent path:
+// the demesne sidecar image is built (or reused) and started in the
+// OpenSandbox egress sidecar's network namespace, the claude-code image
+// is built (or reused), and an OAuth-authenticated request to
+// api.anthropic.com flows through the per-sandbox proxy.
+//
+// Slow: the first run on a host builds two images (multi-minute) and
+// every run does a real Anthropic API round-trip.
+func TestRunner_Integration_Agent(t *testing.T) {
+	oauthToken := os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN")
+	require.NotEmpty(t, oauthToken,
+		"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for agent integration tests")
+
+	runner := agentIntegrationRunner(t, oauthToken)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	res, err := runner.Agent(ctx, AgentRequest{
+		Prompt: "Reply with the single word PONG and nothing else.",
+		Model:  "haiku",
+		Egress: EgressNone,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q", res.Stdout)
+	assert.Contains(t, res.Stdout, "PONG")
+	for _, p := range []string{res.OutputPath, res.WorkspacePath} {
+		assert.DirExists(t, p)
 	}
-	if after.ExpiresAt == nil {
-		t.Fatalf("ExpiresAt missing after renew")
-	}
-	if !after.ExpiresAt.After(beforeExpiry) {
-		t.Errorf("ExpiresAt did not advance: before=%s after=%s", beforeExpiry, *after.ExpiresAt)
-	}
+	claudemd := filepath.Join(filepath.Dir(res.OutputPath), "claudemd", "CLAUDE.md")
+	body, err := os.ReadFile(claudemd) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "## Task")
+}
+
+func agentIntegrationRunner(t *testing.T, oauthToken string) *Runner {
+	t.Helper()
+	domain := os.Getenv("OPEN_SANDBOX_DOMAIN")
+	apiKey := os.Getenv("OPEN_SANDBOX_API_KEY")
+	require.NotEmpty(t, domain, "OPEN_SANDBOX_DOMAIN is required for integration tests")
+	require.NotEmpty(t, apiKey, "OPEN_SANDBOX_API_KEY is required for integration tests")
+	return NewRunner(Config{
+		AllowedPaths:         []string{t.TempDir()},
+		OutputRoot:           t.TempDir(),
+		OpenSandboxDomain:    domain,
+		OpenSandboxProtocol:  envOr("OPEN_SANDBOX_PROTOCOL", "http"),
+		OpenSandboxAPIKey:    apiKey,
+		ClaudeCodeOAuthToken: oauthToken,
+	})
 }

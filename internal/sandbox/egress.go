@@ -18,18 +18,25 @@ var PackageManagerHosts = []string{
 }
 
 // BuildNetworkPolicy translates an EgressMode into the OpenSandbox network
-// policy applied at sandbox creation time.
-func BuildNetworkPolicy(mode EgressMode) (*opensandbox.NetworkPolicy, error) {
+// policy applied at sandbox creation time. Extra allow targets — hostnames
+// or IPs supplied by the caller — are unioned with the mode's allowlist.
+// This is how the agent runner adds host.docker.internal on top of the
+// caller-visible egress mode without inventing extra egress modes.
+func BuildNetworkPolicy(mode EgressMode, extraAllow []string) (*opensandbox.NetworkPolicy, error) {
+	var hosts []string
 	switch mode {
 	case EgressNone:
-		return &opensandbox.NetworkPolicy{DefaultAction: "deny"}, nil
+		hosts = nil
 	case EgressPackageManagers:
-		rules := make([]opensandbox.NetworkRule, 0, len(PackageManagerHosts))
-		for _, host := range PackageManagerHosts {
-			rules = append(rules, opensandbox.NetworkRule{Action: "allow", Target: host})
-		}
-		return &opensandbox.NetworkPolicy{DefaultAction: "deny", Egress: rules}, nil
+		hosts = append(hosts, PackageManagerHosts...)
 	default:
 		return nil, fmt.Errorf("egress mode %q is not in the whitelist (none, package-managers)", mode)
 	}
+	hosts = append(hosts, extraAllow...)
+
+	rules := make([]opensandbox.NetworkRule, 0, len(hosts))
+	for _, host := range hosts {
+		rules = append(rules, opensandbox.NetworkRule{Action: "allow", Target: host})
+	}
+	return &opensandbox.NetworkPolicy{DefaultAction: "deny", Egress: rules}, nil
 }

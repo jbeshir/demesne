@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateMountPath(t *testing.T) {
@@ -13,15 +16,15 @@ func TestValidateMountPath(t *testing.T) {
 	sibling := filepath.Join(root, "allowed2")
 	outside := filepath.Join(root, "outside")
 	for _, d := range []string{allowed, sibling, outside} {
-		mustMkdir(t, d)
+		require.NoError(t, os.MkdirAll(d, 0o750))
 	}
 	nestedFile := filepath.Join(allowed, "sub", "data.txt")
-	mustMkdir(t, filepath.Dir(nestedFile))
-	mustWriteFile(t, nestedFile, "x")
+	require.NoError(t, os.MkdirAll(filepath.Dir(nestedFile), 0o750))
+	require.NoError(t, os.WriteFile(nestedFile, []byte("x"), 0o600))
 	innerSymlink := filepath.Join(allowed, "linked")
-	mustSymlink(t, nestedFile, innerSymlink)
+	require.NoError(t, os.Symlink(nestedFile, innerSymlink))
 	escapeSymlink := filepath.Join(allowed, "escape")
-	mustSymlink(t, outside, escapeSymlink)
+	require.NoError(t, os.Symlink(outside, escapeSymlink))
 
 	allowedList := []string{allowed}
 
@@ -46,41 +49,13 @@ func TestValidateMountPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ValidateMountPath(tt.host, allowedList)
 			if tt.wantErr != "" {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil (resolved=%s)", tt.wantErr, got)
-				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
-				}
+				require.Error(t, err, "resolved=%s", got)
+				assert.Contains(t, err.Error(), tt.wantErr)
 				return
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if !strings.HasPrefix(got, allowed) {
-				t.Fatalf("resolved path %s is not under %s", got, allowed)
-			}
+			require.NoError(t, err)
+			assert.True(t, strings.HasPrefix(got, allowed),
+				"resolved path %s is not under %s", got, allowed)
 		})
-	}
-}
-
-func mustMkdir(t *testing.T, dir string) {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func mustWriteFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func mustSymlink(t *testing.T, target, link string) {
-	t.Helper()
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
 	}
 }

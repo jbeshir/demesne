@@ -19,7 +19,7 @@ file disagrees with that node, the node wins — update this file to match.
 | Private GitHub repo                | Done        | `2128b887-721d-2c87-b4a8-62070672f651`                         |
 | **M1** — `sandbox_script`          | **Done**    | `18eeafba-e5a6-6c81-b75c-648b4533694c`                         |
 | **M2** — persistent sandboxes      | **Done**    | `d77fdc59-ce80-cf01-0c02-ea9e5d6c1064`                         |
-| M3 — `sandbox_agent`               | Not started | `2c9fe6ee-bc4e-0e9b-6faa-fa97a50939f2`                         |
+| **M3** — `sandbox_agent`           | **Done**    | `2c9fe6ee-bc4e-0e9b-6faa-fa97a50939f2`                         |
 | M4 — `sandbox_research`            | Not started | `780688b1-ba47-c04f-f754-278ea4cab2f3`                         |
 | M5 — MCP proxy                     | Not started | `1bad3a63-e185-9ffb-be8e-6d739af75ce4`                         |
 | M6 — demesne-in-sandbox           | Not started | `86f18069-38d6-3e93-7170-0a557b9d70b8`                         |
@@ -63,29 +63,61 @@ single-shot fast path.
 - Image / egress / mounts are fixed at create time. Runtime mutation
   (`EgressClient`-based egress changes) deferred to a later milestone.
 
-## M3 — `sandbox_agent`
+## M3 — `sandbox_agent` (done)
 
-**Goal:** run an AI agent inside a sandbox against a prompt; return results.
+Shipped: `sandbox_agent` runs a Claude Code instance in a fresh sandbox
+against a caller-supplied prompt. A per-sandbox proxy sidecar handles
+all outbound HTTPS, joined into OpenSandbox's egress-sidecar network
+namespace; the agent only ever talks to 127.0.0.1. Provider abstraction
+is in place so future agents (Codex, etc.) slot in alongside
+`claude-code`, and a separate proxy registry handles future MCP and
+Go-module proxies inside the same per-sandbox sidecar.
 
-**Tool to add:**
-- `sandbox_agent` — params: agent (`claude-code` initially), model
-  (`opus`/`sonnet`/`haiku`), prompt. Returns the agent's output.
+**Decisions taken / how it diverged from the original sketch:**
+- Provider package is named for the **vendor** (`internal/agents/anthropic/`),
+  not the CLI, so future Anthropic-vendor agents (e.g. a slimmer
+  research client) share the package. Provider registration is via
+  `init() { agents.Register(...) }` plus a blank import from
+  `cmd/demesne-mcp/main.go`.
+- Proxies live in a separate top-level package
+  (`internal/proxies/<vendor>/`) with their own registry. Each proxy
+  declares `EgressHosts()` and `ListenAddr()`; the sandbox runner adds
+  every registered proxy's hosts to the egress allowlist.
+- Per-sandbox **proxy sidecar** (`cmd/demesne-sidecar` + image built
+  from an embedded linux/amd64 binary) runs all registered proxies on
+  127.0.0.1. The sidecar joins OpenSandbox's egress sidecar via
+  `--network=container:<egress-sidecar-id>` so the proxy's outbound
+  traffic flows through OpenSandbox's nftables/DNS filtering just like
+  any other sandbox egress. This replaced an earlier host-side proxy
+  design that didn't work: OpenSandbox's DNS-based filter never sees
+  `host.docker.internal` lookups (resolved via /etc/hosts), so
+  hostname-allow rules couldn't whitelist the proxy IP.
+- Auth: long-lived `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`,
+  injected into the container env. `claude -p` runs without `--bare`
+  (bare mode ignores the OAuth token env var). The proxy is pass-through;
+  the token transits unchanged.
+- Egress: `BuildNetworkPolicy` gained an `extraAllow` parameter; the
+  agent path passes `proxies.EgressHosts()`. For M3 that's just
+  `api.anthropic.com`. Default egress for `sandbox_agent` is `none`
+  (proxy upstream only); `package-managers` is also available.
+- Sandbox layout: `/in` (read-only inputs + the generated `CLAUDE.md`),
+  `/workspace` (writable scratch, agent's cwd), `/out` (writable output
+  only). `CLAUDE.md` is single-file-mounted at `/in/CLAUDE.md` and
+  symlinked from `/workspace/CLAUDE.md` so the CLI finds it relative to
+  cwd. The cross-cutting "shared `/workspace` across siblings" feature
+  is deferred to M6.
+- `CLAUDE.md` generator takes a caller `preamble` (prepended verbatim)
+  plus an auto-generated `## Environment` section listing inputs, env
+  conventions, `/workspace`, `/out`, and a `## Task` section with the
+  prompt.
+- Agent image is built locally from an embedded Dockerfile
+  (`internal/agents/anthropic/Dockerfile`) tagged
+  `demesne-claude-code:<hash>`. Build is sync.Mutex-guarded and skipped
+  when `docker image inspect` already finds the tag.
 
-**Key decisions:**
-- Embed Dockerfiles for agent images (built locally via Docker/Podman before
-  OpenSandbox sees them). Image build cache strategy.
-- Subpackage layout: one provider per subpackage (e.g. `internal/agents/anthropic/`),
-  each owning its `CLAUDE.md` generator, env vars, etc. The top-level runner
-  command must not know any model/provider/agent names — registration only.
-- Anthropic API proxy: a host-side HTTP proxy mounted into the container so
-  Claude Code calls the proxy, which forwards to api.anthropic.com. Lets us
-  rate-limit, log, and inject `IS_SANDBOX=true` etc. Skip permission checks
-  inside the sandbox.
-- Long-lived Claude Code auth token: comes in via demesne config, gets
-  set in the sandbox env. Mechanism for rotation.
-
-**Out of scope for M3:** MCP proxy, child sandboxes, the demesne-in-sandbox
-reduced toolset.
+**Out of scope for M3 (now M4+ work):** `sandbox_research`, MCP proxy,
+streaming output, `results.json` with usage roll-up, shared
+`/workspace`, multiple provider registrations.
 
 ## M4 — `sandbox_research`
 

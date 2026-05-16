@@ -73,3 +73,23 @@ type DownloadResult struct {
 type DestroyRequest struct {
 	SandboxID string
 }
+
+// AgentRequest captures the inputs to sandbox_agent.
+type AgentRequest struct {
+	Agent       string
+	Model       string
+	Prompt      string
+	Preamble    string
+	Files       []string
+	Directories []string
+	Egress      EgressMode
+}
+
+// AgentResult captures the outputs of sandbox_agent.
+type AgentResult struct {
+	JobID         string
+	OutputPath    string // host path mounted at /out (output-only)
+	WorkspacePath string // host path mounted at /workspace (the agent's scratch area)
+	Stdout        string
+	ExitCode      int
+}

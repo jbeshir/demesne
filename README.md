@@ -4,16 +4,17 @@ A Go [Model Context Protocol](https://modelcontextprotocol.io/) server that lets
 
 ## Status
 
-Milestones 1 and 2 shipped: `sandbox_script` (single-shot), plus the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`). Future milestones will add a `sandbox_agent` runner for Claude Code inside a sandbox, a `sandbox_research` mode with unrestricted internet, and an MCP proxy for exposing host MCP servers inside sandboxes. See [ROADMAP.md](ROADMAP.md).
+Milestones 1–3 shipped: `sandbox_script` (single-shot), the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`), and `sandbox_agent` — drop a Claude Code instance into a fresh sandbox against a caller-supplied prompt, with all outbound HTTPS funnelled through a host-side Anthropic API proxy. Future milestones will add a `sandbox_research` mode with broader egress and an MCP proxy for exposing host MCP servers inside sandboxes. See [ROADMAP.md](ROADMAP.md).
 
 ## Key concepts
 
 - **MCP (Model Context Protocol)** — JSON-RPC over stdio. Demesne is a stdio-transport MCP server; an AI agent (the parent process) sends `tools/call` requests and reads results from stdout.
 - **OpenSandbox** — Alibaba's container-based sandbox runtime. Demesne talks to a lifecycle server over HTTP using their Go SDK.
 - **Sandbox** — a container instance. `sandbox_script` creates one, runs a command, kills it. `sandbox_create` returns a long-lived handle; commands run against it via `sandbox_exec` until `sandbox_destroy`. Persistent sandboxes have a 24h TTL that's refreshed by each `sandbox_exec` call.
-- **Image whitelist** — three accepted names: `node` (`node:22`), `python` (`python:3.12`), and `anaconda` (`continuumio/anaconda3:latest`, the default).
+- **Image whitelist** — three accepted names for shell tools: `node` (`node:22`), `python` (`python:3.12`), and `anaconda` (`continuumio/anaconda3:latest`, the default). `sandbox_agent` uses its own image, built locally from an embedded Dockerfile and tagged `demesne-claude-code:<hash>`.
 - **Egress modes** — `none` denies all outbound; `package-managers` (default) denies by default and allows registry.npmjs.org, pypi.org, files.pythonhosted.org, repo.anaconda.com, and conda.anaconda.org. Image and egress are fixed at create time.
-- **Mounts** — caller-supplied host files and directories are mounted **read-only** at `/in/<basename>`. A writable `/out` mount is provisioned automatically; its host path is returned so the caller can read produced artifacts. `sandbox_upload` and `sandbox_download` move individual files in and out at runtime via the SDK (not through `/out`).
+- **Mounts** — caller-supplied host files and directories are mounted **read-only** at `/in/<basename>`. A writable `/out` mount is provisioned automatically; its host path is returned so the caller can read produced artifacts. `sandbox_agent` adds a writable `/workspace` mount as the agent's working directory, and a read-only `/in/CLAUDE.md` generated from the prompt + inputs. `sandbox_upload` and `sandbox_download` move individual files in and out at runtime via the SDK (not through `/out`).
+- **Per-sandbox proxy sidecar** — for `sandbox_agent`, demesne starts a sidecar container that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs every registered proxy (today: Anthropic on `127.0.0.1:8088`). The agent only ever connects to 127.0.0.1; the proxy bypasses OpenSandbox's egress filter via `SO_MARK` (it has `CAP_NET_ADMIN`; the agent does not), so the agent has no path to `api.anthropic.com` and must go through the proxy. The OAuth token transits the Anthropic proxy unchanged.
 - **AllowedPaths** — env-configured whitelist (`DEMESNE_ALLOWED_PATHS`) of host paths under which inputs may be mounted or uploaded. Both the candidate path and the allowlist entries are symlink-resolved before the containment check, so symlink escapes are rejected.
 - **Sandbox ID** — handle returned by `sandbox_create` (the OpenSandbox-issued UUID). Passed to `sandbox_exec` / `sandbox_upload` / `sandbox_download` / `sandbox_destroy`. The host output directory for a persistent sandbox is returned as `output_dir` in the create response; treat it as opaque.
 
@@ -106,6 +107,7 @@ The deferred `Kill` runs against a fresh `context.Background()` with a 30-second
 | `sandbox_upload`   | Copy a host file into an existing sandbox.                                                                                                                                                                                                  |
 | `sandbox_download` | Copy a file out of an existing sandbox; written under `<output_dir>/downloads/<basename>`. Returns the host path.                                                                                                                           |
 | `sandbox_destroy`  | Kill an existing sandbox. Host output dir is preserved.                                                                                                                                                                                     |
+| `sandbox_agent`    | Run a Claude Code agent in a fresh sandbox against a caller-supplied prompt. Returns exit code, stdout, and the `/out` host path. Outbound HTTPS is restricted to the Anthropic API proxy.                                                  |
 
 ### `sandbox_script` parameters
 
@@ -158,7 +160,21 @@ Same as `sandbox_script` minus `command`. Returns `sandbox_id` and `output_dir`.
 |--------------|--------|----------|------------------------------------------------------------------------------------------|
 | `sandbox_id` | string | yes      | Handle returned by `sandbox_create`. The host output directory is preserved.             |
 
-### Persistent sandbox lifecycle
+### `sandbox_agent` parameters
+
+| Name          | Type             | Required | Default       | Description                                                                                                                          |
+|---------------|------------------|----------|---------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `prompt`      | string           | yes      |               | Task description handed to the agent. Becomes the `## Task` section of the generated `/in/CLAUDE.md`.                                |
+| `agent`       | string           | no       | `claude-code` | Agent provider to run. Only `claude-code` is registered today.                                                                       |
+| `model`       | string           | no       | `sonnet`      | One of `opus`, `sonnet`, or `haiku`.                                                                                                  |
+| `preamble`    | string           | no       |               | Free-form prose prepended verbatim to the generated `/in/CLAUDE.md` before the auto-generated environment section.                   |
+| `files`       | array of strings | no       | `[]`          | Host file paths mounted read-only at `/in/<basename>`. Each must be inside `DEMESNE_ALLOWED_PATHS`.                                  |
+| `directories` | array of strings | no       | `[]`          | Host directory paths mounted read-only at `/in/<basename>`. Same containment rule.                                                   |
+| `egress`      | string           | no       | `none`        | `none` allows only the Anthropic proxy; `package-managers` also opens npm/PyPI/conda registries. The proxy is always reachable.       |
+
+The agent runs in a fresh container with cwd `/workspace`. The result text contains the exit code, the host path of the `/out` mount, the job ID, and the agent's stdout.
+
+
 
 A typical persistent-sandbox session looks like:
 
@@ -169,6 +185,57 @@ A typical persistent-sandbox session looks like:
 5. `sandbox_download(sandbox_id, src="/results.json")` — pulls a specific artefact back.
 6. `sandbox_destroy(sandbox_id)` — explicit teardown. The host `output_dir` is left in place.
 
+## Agents
+
+`sandbox_agent` runs a Claude Code instance inside a fresh sandbox against
+a caller-supplied prompt. Authentication uses your long-lived
+`CLAUDE_CODE_OAUTH_TOKEN` (generated once on the host via
+`claude setup-token`).
+
+For each agent invocation demesne starts a **per-sandbox sidecar
+container** that joins OpenSandbox's egress-sidecar network namespace.
+The sidecar runs every registered proxy (today: the Anthropic API
+proxy on `127.0.0.1:8088`); the agent reaches them all on localhost.
+Each proxy's upstream hostnames are added to OpenSandbox's egress
+allowlist, so the proxy can reach (only) `api.anthropic.com` while the
+agent itself only ever talks to 127.0.0.1.
+
+```mermaid
+flowchart TD
+    Agent["Agent sandbox<br/>(claude CLI)"]
+    Sidecar["demesne sidecar<br/>127.0.0.1:8088"]
+    Egress["OpenSandbox egress<br/>(allowlist)"]
+    Anthropic["api.anthropic.com"]
+
+    Agent -->|"HTTPS<br/>127.0.0.1:8088"| Sidecar
+    Sidecar -->|"HTTPS"| Egress
+    Egress -->|"allow api.anthropic.com"| Anthropic
+    Anthropic -.->|"response"| Egress
+    Egress -.->|"response"| Sidecar
+    Sidecar -.->|"response"| Agent
+    Proxy -.->|"response"| Container
+```
+
+Inside the container the agent sees three mounts:
+
+- **`/in`** — read-only inputs. Caller `files` / `directories` land here
+  at `/in/<basename>`. A generated `/in/CLAUDE.md` describes the
+  environment + task; the agent reads it as project context.
+- **`/workspace`** — writable scratch, also the agent's cwd. Use this
+  for intermediate state.
+- **`/out`** — writable. Anything written here is preserved on the host
+  at the returned `output_dir` after the sandbox is torn down.
+
+The agent run is one-shot. The sandbox is destroyed once `claude -p`
+exits; the `output_dir`, `workspace_dir`, and generated `CLAUDE.md`
+remain on the host.
+
+**Get an OAuth token:** `claude setup-token` on the host generates a
+long-lived token tied to your Anthropic account and prints it. Put it
+in `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN`. The token is injected into the
+container's environment unchanged; the host-side proxy does no auth
+translation.
+
 ## Configuration
 
 | Environment variable      | Required | Default               | Description                                                                                                       |
@@ -178,6 +245,7 @@ A typical persistent-sandbox session looks like:
 | `OPEN_SANDBOX_DOMAIN`     | yes      |                       | Host:port of the OpenSandbox lifecycle server (e.g. `localhost:8080`).                                            |
 | `OPEN_SANDBOX_PROTOCOL`   | no       | `http`                | `http` or `https`.                                                                                                |
 | `OPEN_SANDBOX_API_KEY`    | yes      |                       | API key for the OpenSandbox lifecycle server.                                                                     |
+| `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no | | Long-lived Claude Code OAuth token, generated by running `claude setup-token` on the host. Required by `sandbox_agent`; other tools work without it. |
 
 ## Run a local OpenSandbox
 

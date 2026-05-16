@@ -4,7 +4,7 @@
   "display_name": "Demesne",
   "version": "0.1.0",
   "description": "Run heterogeneous AI agents and shell commands in disposable OpenSandbox containers.",
-  "long_description": "Demesne is an MCP server that exposes sandboxed command execution backed by [OpenSandbox](https://github.com/alibaba/OpenSandbox).\n\n**Tools:**\n\n- **sandbox_script** — single-shot: run one shell command in a fresh sandbox and tear it down.\n- **sandbox_create / sandbox_exec / sandbox_upload / sandbox_download / sandbox_destroy** — persistent sandboxes: spin one up, run multiple commands, move files in and out, then explicitly destroy. Active sandboxes are kept alive by sandbox_exec; idle ones expire after 24h.\n\nAll sandboxes are built from a whitelisted image (anaconda, python, or node). Caller-supplied host paths are mounted read-only at /in/<basename>. A writable /out mount is created automatically and its host path is returned so the caller can read produced artifacts. Outbound network access is restricted by default — 'package-managers' allows npm/PyPI/conda registries, 'none' denies all egress.\n\nFuture milestones will add sandbox_agent for running Claude Code in a sandbox, sandbox_research for unrestricted research, and an MCP proxy for exposing host MCP servers inside sandboxes.",
+  "long_description": "Demesne is an MCP server that exposes sandboxed command execution backed by [OpenSandbox](https://github.com/alibaba/OpenSandbox).\n\n**Tools:**\n\n- **sandbox_script** — single-shot: run one shell command in a fresh sandbox and tear it down.\n- **sandbox_create / sandbox_exec / sandbox_upload / sandbox_download / sandbox_destroy** — persistent sandboxes: spin one up, run multiple commands, move files in and out, then explicitly destroy. Active sandboxes are kept alive by sandbox_exec; idle ones expire after 24h.\n- **sandbox_agent** — run a Claude Code agent in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to a host-side Anthropic API proxy, so the agent can reach the API but nothing else (unless the caller also opts in to 'package-managers' egress).\n\nAll sandboxes are built from a whitelisted image (anaconda, python, node, or — for agents — a demesne-built claude-code image). Caller-supplied host paths are mounted read-only at /in/<basename>. A writable /out mount is created automatically and its host path is returned so the caller can read produced artifacts; agents also get a writable /workspace as their cwd. Outbound network access is restricted by default — 'package-managers' allows npm/PyPI/conda registries, 'none' denies all egress.\n\nFuture milestones will add sandbox_research for broader-egress research and an MCP proxy for exposing host MCP servers inside sandboxes.",
   "author": {
     "name": "John Beshir",
     "url": "https://github.com/jbeshir"
@@ -25,7 +25,8 @@
         "DEMESNE_OUTPUT_ROOT": "${user_config.output_root}",
         "OPEN_SANDBOX_DOMAIN": "${user_config.opensandbox_domain}",
         "OPEN_SANDBOX_PROTOCOL": "${user_config.opensandbox_protocol}",
-        "OPEN_SANDBOX_API_KEY": "${user_config.opensandbox_api_key}"
+        "OPEN_SANDBOX_API_KEY": "${user_config.opensandbox_api_key}",
+        "DEMESNE_CLAUDE_CODE_OAUTH_TOKEN": "${user_config.claude_code_oauth_token}"
       },
       "platform_overrides": {
         "darwin": {
@@ -70,6 +71,13 @@
       "description": "API key for the OpenSandbox lifecycle server.",
       "sensitive": true,
       "required": true
+    },
+    "claude_code_oauth_token": {
+      "type": "string",
+      "title": "Claude Code OAuth token",
+      "description": "Long-lived OAuth token for Claude Code, produced by `claude setup-token`. Required to run sandbox_agent; other tools work without it.",
+      "sensitive": true,
+      "required": false
     }
   },
   "tools": [
@@ -78,7 +86,8 @@
     { "name": "sandbox_exec", "description": "Run a shell command in an existing sandbox; refreshes the sandbox TTL" },
     { "name": "sandbox_upload", "description": "Copy a host file into an existing sandbox" },
     { "name": "sandbox_download", "description": "Copy a file out of an existing sandbox to the host" },
-    { "name": "sandbox_destroy", "description": "Kill an existing sandbox; host output dir is preserved" }
+    { "name": "sandbox_destroy", "description": "Kill an existing sandbox; host output dir is preserved" },
+    { "name": "sandbox_agent", "description": "Run a Claude Code agent in a fresh sandbox; outbound HTTPS is restricted to a host-side Anthropic API proxy" }
   ],
   "compatibility": {
     "platforms": ["darwin", "win32", "linux"]
