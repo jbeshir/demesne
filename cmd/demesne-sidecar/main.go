@@ -1,25 +1,24 @@
-// demesne-sidecar runs all demesne-managed proxies inside a
+// demesne-sidecar runs the demesne-managed vendor proxy inside a
 // per-sandbox sidecar container. The container shares the OpenSandbox
-// egress sidecar's network namespace, so the agent reaches every proxy
-// on 127.0.0.1:<port> and outbound traffic from each proxy passes
-// through OpenSandbox's egress filter as normal.
+// egress sidecar's network namespace, so the agent reaches the proxy
+// on 127.0.0.1:<port> and outbound traffic from the proxy passes
+// through OpenSandbox's egress filter as normal. A sandbox runs
+// exactly one vendor proxy — pick which one per agent vendor.
 //
-// Proxies register themselves via internal/proxies; this binary
-// blank-imports each provider's proxy package and runs every registered
-// proxy concurrently.
+// All env-var reads happen in this file: proxy packages receive their
+// config as explicit constructor arguments and never call os.Getenv
+// themselves.
 package main
 
 import (
 	"context"
 	"errors"
 	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/jbeshir/demesne/internal/proxies"
-
-	// Side-effect imports: register one proxy per package.
-	_ "github.com/jbeshir/demesne/internal/proxies/anthropic"
+	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
 )
 
 func main() {
@@ -32,24 +31,33 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	registered := proxies.All()
-	if len(registered) == 0 {
-		return errors.New("no proxies registered")
+	anth, err := buildAnthropicProxy()
+	if err != nil {
+		return err
 	}
 
-	errCh := make(chan error, len(registered))
-	for _, p := range registered {
-		p := p
-		log.Printf("starting proxy %q on %s", p.Name(), p.ListenAddr())
-		go func() { errCh <- p.Run(ctx) }()
+	log.Printf("starting proxy %q on %s", proxyanthropic.Name, proxyanthropic.BindAddr())
+	if err := anth.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		return err
 	}
+	return nil
+}
 
-	var firstErr error
-	for range registered {
-		if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) && firstErr == nil {
-			firstErr = err
-			stop()
-		}
+// buildAnthropicProxy wires the Anthropic proxy from its env vars.
+// Tokens and the usage path are required at the sidecar level.
+func buildAnthropicProxy() (*proxyanthropic.ProxyServer, error) {
+	auth := os.Getenv(proxyanthropic.AuthTokenEnv)
+	if auth == "" {
+		return nil, errors.New(proxyanthropic.AuthTokenEnv + " must be set on the anthropic proxy sidecar")
 	}
-	return firstErr
+	upstream := os.Getenv(proxyanthropic.UpstreamTokenEnv)
+	if upstream == "" {
+		return nil, errors.New(proxyanthropic.UpstreamTokenEnv + " must be set on the anthropic proxy sidecar")
+	}
+	usagePath := os.Getenv(proxyanthropic.UsagePathEnv)
+	if err := proxyanthropic.EnsureUsageDir(usagePath); err != nil {
+		return nil, err
+	}
+	tracker := proxyanthropic.NewTracker(usagePath)
+	return proxyanthropic.NewProxyServer(proxyanthropic.BindAddr(), auth, upstream, tracker), nil
 }

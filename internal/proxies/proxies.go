@@ -10,7 +10,6 @@
 package proxies
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -31,9 +30,13 @@ func BypassDialerControl(_, _ string, c syscall.RawConn) error {
 	return setErr
 }
 
-// Proxy is the contract every demesne proxy implements. Implementations
-// must be safe for concurrent invocations of Run/Shutdown across
-// goroutines — the sidecar starts all proxies in parallel.
+// Proxy is the registry-side contract every demesne proxy implements.
+// It's discovery metadata only — the sandbox runner uses EgressHosts to
+// build the per-sandbox egress allowlist, and the sidecar binary uses
+// ListenAddr (via the concrete package) for logging. Construction and
+// serving of each proxy live in the sidecar's main, which reads
+// per-proxy config from env vars and invokes each package's exported
+// constructor directly.
 type Proxy interface {
 	// Name is a short identifier used in logs and metrics ("anthropic",
 	// "mcp", "go-mod"). Must be unique within the registry.
@@ -48,9 +51,6 @@ type Proxy interface {
 	// ListenAddr is the 127.0.0.1:<port> the proxy binds inside the
 	// sidecar. The agent reaches the proxy at this address.
 	ListenAddr() string
-
-	// Run serves until ctx is cancelled. Returns nil on clean shutdown.
-	Run(ctx context.Context) error
 }
 
 var (

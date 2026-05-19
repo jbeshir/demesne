@@ -38,8 +38,11 @@ type Agent interface {
 
 	// GenerateContext returns the contents of the context file (e.g.
 	// CLAUDE.md) that should be written into the sandbox before the agent
-	// starts. Inputs describe each /in/<basename> mount.
-	GenerateContext(preamble, prompt string, inputs []InputInfo) string
+	// starts. Inputs describe each /in/<basename> mount; egress is the
+	// caller-visible egress mode string ("none", "package-managers",
+	// "open") so the provider can tell the model exactly what's
+	// reachable. Empty egress is treated as "none".
+	GenerateContext(preamble, prompt, egress string, inputs []InputInfo) string
 
 	// ContextFileName is the basename of the context file under the
 	// sandbox cwd (e.g. "CLAUDE.md").

@@ -20,7 +20,7 @@ file disagrees with that node, the node wins — update this file to match.
 | **M1** — `sandbox_script`          | **Done**    | `18eeafba-e5a6-6c81-b75c-648b4533694c`                         |
 | **M2** — persistent sandboxes      | **Done**    | `d77fdc59-ce80-cf01-0c02-ea9e5d6c1064`                         |
 | **M3** — `sandbox_agent`           | **Done**    | `2c9fe6ee-bc4e-0e9b-6faa-fa97a50939f2`                         |
-| M4 — `sandbox_research`            | Not started | `780688b1-ba47-c04f-f754-278ea4cab2f3`                         |
+| **M4** — `sandbox_research`        | **Done**    | `780688b1-ba47-c04f-f754-278ea4cab2f3`                         |
 | M5 — MCP proxy                     | Not started | `1bad3a63-e185-9ffb-be8e-6d739af75ce4`                         |
 | M6 — demesne-in-sandbox           | Not started | `86f18069-38d6-3e93-7170-0a557b9d70b8`                         |
 | Cross-cutting additions            | Not started | `b3dceb25-b74a-98e1-508e-bb9c7d976029`                         |
@@ -119,21 +119,49 @@ Go-module proxies inside the same per-sandbox sidecar.
 streaming output, `results.json` with usage roll-up, shared
 `/workspace`, multiple provider registrations.
 
-## M4 — `sandbox_research`
+## M4 — `sandbox_research` (done)
 
-**Goal:** an agent invocation with unrestricted internet for long-running
-research.
+Shipped: `sandbox_research` runs a Claude Code instance with no input
+mounts and unrestricted outbound internet egress. The per-sandbox
+Anthropic proxy stays in front of the model API and reports indicative
+cumulative cost via `usage.json`.
 
-**Tool to add:**
-- `sandbox_research` — like `sandbox_agent` but no input mounts and egress
-  fully open.
+**Decisions taken / divergences from the original sketch:**
+- Shared plumbing: `Runner.Agent` and `Runner.Research` both call a
+  private `runAgent(internalAgentSpec)`. The spec carries the tool
+  metadata label; the public adapters are thin request/result
+  translators.
+- New `EgressOpen = "open"` mode; `BuildNetworkPolicy` returns
+  `DefaultAction: "allow"` (no rules). `sandbox_agent` rejects `open`
+  at the MCP boundary so the inputs+open-egress combination is
+  unreachable.
+- **Indicative cost reporting (no cap).** The Anthropic proxy parses
+  SSE `message_start` / `message_delta` events (and non-streaming JSON
+  responses) for the `usage` block, accumulates per-model token counts,
+  computes USD via an embedded pricing table, and rewrites
+  `usage.json` atomically after every response. An enforced cost cap
+  was built and then removed: for the typical Claude Code OAuth path
+  the user is billed against a Console subscription rather than per
+  request, so the figure is informational only and a hard ceiling
+  conveyed the wrong model of how billing actually works.
+- Pricing table lives at `internal/proxies/anthropic/pricing.go`;
+  longest-prefix-match keyed on the family name so dated Anthropic
+  model IDs (e.g. `claude-opus-4-7-20251201`) route to the family
+  entry. Updating prices is a single-file change.
+- Sidecar runtime gained a `ProxyConfig` (renamed from `ProxyTokens`)
+  with `ResultsHost`. The sidecar bind-mounts a per-job results dir
+  only into the sidecar (not the agent), so the agent can't tamper
+  with the usage record. The runner copies `usage.json` into `/out`
+  after the run for caller visibility.
+- `Agent.GenerateContext` grew an `egress string` parameter so the
+  CLI's CLAUDE.md tells the model exactly what's reachable
+  (`none` / `package-managers` / `open`). The `open` variant also
+  carries a research framing note ("flush partial findings to `/out`
+  as you go").
 
-**Key decisions:**
-- Should this share most of M3's plumbing (likely yes — it's `sandbox_agent`
-  with an alternate egress policy and no inputs).
-- Cost limits — research runs can be long and expensive; need a usage cap.
-
-**Out of scope:** anything that doesn't follow from M3 + an open egress policy.
+**Out of scope (deferred):**
+- `results.json` proper (with `total_usage_usd` rolled up across
+  child sandboxes) — lands with M6.
 
 ## M5 — MCP proxy
 

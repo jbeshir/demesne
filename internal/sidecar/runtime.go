@@ -10,20 +10,36 @@ import (
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
 )
 
+// SidecarResultsDir is the path the proxy sees inside the sidecar
+// container for the host-bind-mounted results directory. The
+// agent-vendor proxy writes usage.json under here after every
+// request; the host runner reads it back from the matching
+// ResultsHost path after the sandbox exits.
+const SidecarResultsDir = "/sidecar-results"
+
+// SidecarUsageFile is the absolute in-container path of the
+// agent-vendor usage snapshot the proxy maintains.
+const SidecarUsageFile = SidecarResultsDir + "/usage.json"
+
 // EgressSidecarLabel is OpenSandbox's label on its own per-sandbox egress
 // sidecar container. We use it to find the container ID so we can join
 // its network namespace.
 const EgressSidecarLabel = "opensandbox.io/egress-sidecar-for"
 
-// ProxyTokens carries the credentials each proxy needs at sidecar
-// startup. The agent-facing token is validated by the proxy on every
-// inbound request; the upstream token is what the proxy sends to the
-// real Anthropic API. Keeping both off-host avoids storing them in
-// sidecar image layers or container args (visible via docker inspect).
-// They're passed via env vars on docker run -e instead.
-type ProxyTokens struct {
+// ProxyConfig carries the per-sandbox configuration the agent-vendor
+// proxy needs at sidecar startup. The agent-facing token is validated
+// by the proxy on every inbound request; the upstream token is what
+// the proxy sends to the real vendor API. Keeping both off-host
+// avoids storing them in sidecar image layers or container args
+// (visible via docker inspect) — they're passed via docker run -e
+// instead.
+//
+// ResultsHost is the host path bind-mounted to SidecarResultsDir
+// inside the sidecar; the vendor proxy writes its usage.json there.
+type ProxyConfig struct {
 	AgentToken    string
 	UpstreamToken string
+	ResultsHost   string
 }
 
 // Handle is a running demesne sidecar container attached to an
@@ -39,14 +55,17 @@ type Handle struct {
 // purely internal and have no host-side surface.
 //
 // imageRef is the image returned by EnsureImage. sandboxID is the
-// OpenSandbox-issued UUID. tokens carries the per-sandbox auth values
-// the Anthropic proxy uses to gate and forward traffic.
-func Start(ctx context.Context, sandboxID, imageRef string, tokens ProxyTokens) (*Handle, error) {
-	if tokens.AgentToken == "" {
+// OpenSandbox-issued UUID. cfg carries the per-sandbox auth values
+// and host results path the agent-vendor proxy needs.
+func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*Handle, error) {
+	if cfg.AgentToken == "" {
 		return nil, errors.New("sidecar.Start: AgentToken is required")
 	}
-	if tokens.UpstreamToken == "" {
+	if cfg.UpstreamToken == "" {
 		return nil, errors.New("sidecar.Start: UpstreamToken is required")
+	}
+	if cfg.ResultsHost == "" {
+		return nil, errors.New("sidecar.Start: ResultsHost is required")
 	}
 	egressID, err := findEgressSidecar(ctx, sandboxID)
 	if err != nil {
@@ -67,8 +86,10 @@ func Start(ctx context.Context, sandboxID, imageRef string, tokens ProxyTokens) 
 		// which is how they bypass the egress sidecar's daddr filter
 		// without their upstream hosts being in the allowlist.
 		"--cap-add", "NET_ADMIN",
-		"-e", proxyanthropic.AuthTokenEnv + "=" + tokens.AgentToken,
-		"-e", proxyanthropic.UpstreamTokenEnv + "=" + tokens.UpstreamToken,
+		"-v", cfg.ResultsHost + ":" + SidecarResultsDir,
+		"-e", proxyanthropic.AuthTokenEnv + "=" + cfg.AgentToken,
+		"-e", proxyanthropic.UpstreamTokenEnv + "=" + cfg.UpstreamToken,
+		"-e", proxyanthropic.UsagePathEnv + "=" + SidecarUsageFile,
 		imageRef,
 	}
 	//nolint:gosec // args composed from validated input

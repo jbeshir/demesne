@@ -6,6 +6,11 @@ type EgressMode string
 const (
 	EgressNone            EgressMode = "none"
 	EgressPackageManagers EgressMode = "package-managers"
+	// EgressOpen is unrestricted outbound access. Only sandbox_research
+	// uses it; sandbox_agent rejects it because pairing read-only inputs
+	// with open egress is the data-exfiltration shape we want to keep
+	// off the surface.
+	EgressOpen EgressMode = "open"
 )
 
 // ScriptRequest captures the inputs to a single sandbox_script invocation.
@@ -92,4 +97,27 @@ type AgentResult struct {
 	WorkspacePath string // host path mounted at /workspace (the agent's scratch area)
 	Stdout        string
 	ExitCode      int
+	// CostUSD is the indicative cumulative API spend (USD) the run
+	// incurred through its vendor proxy.
+	CostUSD float64
+}
+
+// ResearchRequest captures the inputs to sandbox_research. It mirrors
+// AgentRequest minus the input-mount and egress knobs: research runs
+// have no /in/<basename> mounts and unrestricted outbound internet.
+type ResearchRequest struct {
+	Agent    string
+	Model    string
+	Prompt   string
+	Preamble string
+}
+
+// ResearchResult captures the outputs of sandbox_research.
+type ResearchResult struct {
+	JobID         string
+	OutputPath    string
+	WorkspacePath string
+	Stdout        string
+	ExitCode      int
+	CostUSD       float64
 }

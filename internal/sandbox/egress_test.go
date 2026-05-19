@@ -42,6 +42,20 @@ func TestBuildNetworkPolicy_ExtraAllow(t *testing.T) {
 	assert.Equal(t, "allow", p.Egress[0].Action)
 }
 
+func TestBuildNetworkPolicy_Open(t *testing.T) {
+	p, err := BuildNetworkPolicy(EgressOpen, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "allow", p.DefaultAction)
+	assert.Empty(t, p.Egress)
+}
+
+func TestBuildNetworkPolicy_OpenIgnoresExtraAllow(t *testing.T) {
+	p, err := BuildNetworkPolicy(EgressOpen, []string{"example.com"})
+	require.NoError(t, err)
+	assert.Equal(t, "allow", p.DefaultAction)
+	assert.Empty(t, p.Egress)
+}
+
 func assertDefaultDeny(t *testing.T, p *opensandbox.NetworkPolicy) {
 	t.Helper()
 	assert.Equal(t, defaultDeny, p.DefaultAction)

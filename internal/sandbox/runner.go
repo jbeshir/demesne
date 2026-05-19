@@ -17,6 +17,18 @@ import (
 // case. The caller can still cancel via the request context.
 const commandTimeout = 12 * time.Hour
 
+// oneShotSandboxTTLSeconds is the OpenSandbox-side TTL for sandboxes
+// created by RunScript / Agent / Research — paths that always
+// defer-Kill on return. Match commandTimeout so the server-side TTL
+// can't undercut the command timeout (the OpenSandbox SDK default of
+// 600s would).
+const oneShotSandboxTTLSeconds = int(12 * 60 * 60)
+
+// persistentSandboxTTLSeconds is the initial TTL for sandbox_create
+// sandboxes. Matches the documented 24h, after which sandbox_exec's
+// Renew(24h) refreshes the window on every call.
+const persistentSandboxTTLSeconds = int(24 * 60 * 60)
+
 const (
 	metadataDemesneJob  = "demesne.job"
 	metadataDemesneTool = "demesne.tool"
@@ -39,11 +51,12 @@ func NewRunner(cfg Config) *Runner {
 // fresh sandbox, run a single command, return stdout, tear the sandbox down.
 func (r *Runner) RunScript(ctx context.Context, req ScriptRequest) (ScriptResult, error) {
 	sb, outputHost, jobID, err := r.prepareSandbox(ctx, sandboxPrepOptions{
-		Image:       req.Image,
-		Egress:      req.Egress,
-		Files:       req.Files,
-		Directories: req.Directories,
-		Tool:        "sandbox_script",
+		Image:          req.Image,
+		Egress:         req.Egress,
+		Files:          req.Files,
+		Directories:    req.Directories,
+		Tool:           "sandbox_script",
+		TimeoutSeconds: oneShotSandboxTTLSeconds,
 	})
 	if err != nil {
 		return ScriptResult{}, err
@@ -107,6 +120,10 @@ type sandboxPrepOptions struct {
 	Files            []string
 	Directories      []string
 	Tool             string // value of the demesne.tool metadata label
+	// TimeoutSeconds is the sandbox's OpenSandbox TTL. The SDK default
+	// is 600s which is too short for long-running agent or research
+	// runs; callers must set this explicitly.
+	TimeoutSeconds int
 }
 
 // prepareSandbox validates inputs, mints the per-job UUID + host /out dir,
@@ -151,10 +168,15 @@ func (r *Runner) prepareSandbox(
 		MountPath: "/out",
 	})
 
+	if opts.TimeoutSeconds <= 0 {
+		return nil, "", "", fmt.Errorf("sandboxPrepOptions: TimeoutSeconds must be set for %s", opts.Tool)
+	}
+	timeoutSec := opts.TimeoutSeconds
 	sb, err := opensandbox.CreateSandbox(ctx, r.connectionConfig(), opensandbox.SandboxCreateOptions{
-		Image:         imageURI,
-		Volumes:       mounts,
-		NetworkPolicy: policy,
+		Image:          imageURI,
+		Volumes:        mounts,
+		NetworkPolicy:  policy,
+		TimeoutSeconds: &timeoutSec,
 		Metadata: map[string]string{
 			metadataDemesneJob:  jobID,
 			metadataDemesneTool: opts.Tool,

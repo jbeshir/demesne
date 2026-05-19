@@ -18,6 +18,7 @@ type Runner interface {
 	Download(ctx context.Context, req sandbox.DownloadRequest) (sandbox.DownloadResult, error)
 	Destroy(ctx context.Context, req sandbox.DestroyRequest) error
 	Agent(ctx context.Context, req sandbox.AgentRequest) (sandbox.AgentResult, error)
+	Research(ctx context.Context, req sandbox.ResearchRequest) (sandbox.ResearchResult, error)
 }
 
 // Server is the MCP server for Demesne.
@@ -158,8 +159,9 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithString("preamble",
 			mcp.Description(
-				"Optional prose prepended verbatim to the generated CLAUDE.md "+
-					"before the auto-generated environment section.",
+				"Optional prose prepended verbatim to the generated agent "+
+					"context file (e.g. CLAUDE.md for claude-code) before the "+
+					"auto-generated environment section.",
 			),
 		),
 		mcp.WithString("egress",
@@ -167,7 +169,9 @@ func (s *Server) registerTools() {
 				"Additional outbound network policy on top of the agent's "+
 					"backend proxy (which is always reachable). 'none' (default) "+
 					"means only the proxy; 'package-managers' also allows "+
-					"npm/PyPI/conda registries.",
+					"npm/PyPI/conda registries. 'open' is rejected — use "+
+					"sandbox_research for unrestricted egress (which has no "+
+					"input mounts).",
 			),
 		),
 		mcp.WithArray("files",
@@ -179,6 +183,33 @@ func (s *Server) registerTools() {
 			mcp.Items(map[string]any{"type": "string"}),
 		),
 	), s.handleSandboxAgent)
+
+	s.mcpServer.AddTool(mcp.NewTool("sandbox_research",
+		mcp.WithDescription(researchToolDescription),
+		mcp.WithString("prompt",
+			mcp.Required(),
+			mcp.Description("Research task for the agent. Free-form text."),
+		),
+		mcp.WithString("agent",
+			mcp.Description(
+				"Agent provider. Defaults to 'claude-code' (the only registered "+
+					"provider in this build).",
+			),
+		),
+		mcp.WithString("model",
+			mcp.Description(
+				"Model for the agent. One of 'opus', 'sonnet' (default), or "+
+					"'haiku'. Specific to the claude-code provider.",
+			),
+		),
+		mcp.WithString("preamble",
+			mcp.Description(
+				"Optional prose prepended verbatim to the generated agent "+
+					"context file (e.g. CLAUDE.md for claude-code) before the "+
+					"auto-generated environment section.",
+			),
+		),
+	), s.handleSandboxResearch)
 }
 
 const imageParamDescription = "Container image. One of: 'node' (node:22), " +
@@ -253,15 +284,48 @@ const agentToolDescription = `Run an AI agent inside a fresh sandbox against the
 The sandbox is built from the agent's own container image (built lazily on
 first use) and torn down when the agent exits. Working directory is /out.
 
-The agent reads /out/CLAUDE.md before processing the task; that file is
-generated from the optional 'preamble' parameter plus an auto-generated
-'Environment' section listing any /in/<basename> inputs and the
-/out writable mount.
+The agent reads its provider-specific context file (e.g.
+/in/CLAUDE.md for claude-code) before processing the task. The file
+is generated from the optional 'preamble' parameter plus an
+auto-generated 'Environment' section listing any /in/<basename>
+inputs and the /out writable mount.
 
-Outbound network access is restricted: the on-host Anthropic API proxy is
-always reachable (the agent's CLI uses it), and the 'egress' parameter
-controls whatever else the sandbox may reach.
+Outbound network access is restricted: the on-host agent-vendor API
+proxy is always reachable (the agent's CLI uses it), and the 'egress'
+parameter controls whatever else the sandbox may reach. 'open' egress
+is not permitted here — use sandbox_research for unrestricted egress
+(which also forbids /in mounts).
 
-The result text contains the exit code, the host path of /out (containing
-the generated CLAUDE.md and any agent-written artefacts), the job ID, and
-the agent's stdout.`
+The result text contains the exit code, the host path of /out
+(containing the generated agent context file and any agent-written
+artefacts), the job ID, the cost summary, and the agent's stdout. The
+cost_usd field is the *indicative* dollar spend the run incurred
+through its vendor proxy, computed from the vendor's published API
+pricing; it is reported regardless of how the underlying OAuth token
+is billed (for example, Claude Code OAuth tokens typically authorise
+against a Claude Console subscription rather than per-request API
+billing, so the user is not charged per request).`
+
+const researchToolDescription = `Run a long-running research agent in a fresh sandbox with unrestricted
+outbound internet access.
+
+Like sandbox_agent but with two deliberate differences:
+  - No /in mounts. The agent only sees its prompt and whatever it
+    fetches from the open web.
+  - Egress is fully open. The agent-vendor proxy still gates calls to
+    the model API; any other public HTTPS endpoint is reachable
+    directly.
+
+These choices are tied together: open egress without input mounts is
+research; input mounts without open egress is the agent path. The
+combination of inputs + open egress is not exposed.
+
+The result text contains the exit code, the host path of /out
+(containing the generated agent context file, usage.json, and any
+artefacts the agent wrote), the job ID, the cost summary, and the
+agent's stdout. The cost_usd field is the *indicative* dollar spend
+the run incurred through its vendor proxy, computed from the vendor's
+published API pricing; it is reported regardless of how the underlying
+OAuth token is billed (for example, Claude Code OAuth tokens typically
+authorise against a Claude Console subscription rather than
+per-request API billing, so the user is not charged per request).`

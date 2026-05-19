@@ -51,7 +51,7 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken)
+	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -87,11 +87,11 @@ func TestProxyAllowsCountTokens(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken)
+	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
-	req := mustRequest(t, http.MethodPost, tsrv.URL+"/v1/messages/count_tokens", testAgentToken)
+	req := mustRequest(t, http.MethodPost, tsrv.URL+"/v1/messages/count_tokens")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -107,12 +107,12 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken)
+	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
 	for _, path := range []string{"/v1/files", "/v1/messages/batches", "/admin/keys", "/"} {
-		req := mustRequest(t, http.MethodPost, tsrv.URL+path, testAgentToken)
+		req := mustRequest(t, http.MethodPost, tsrv.URL+path)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
@@ -130,12 +130,12 @@ func TestProxyDeniesUnknownMethod(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken)
+	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
-		req := mustRequest(t, method, tsrv.URL+"/v1/messages", testAgentToken)
+		req := mustRequest(t, method, tsrv.URL+"/v1/messages")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
@@ -155,7 +155,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken)
+	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -189,7 +189,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 
 // TestProxyShutdown confirms Shutdown stops the server cleanly.
 func TestProxyShutdown(t *testing.T) {
-	p := NewProxyServerTo("127.0.0.1:0", "http://127.0.0.1:1", testAgentToken, testUpstreamToken)
+	p := NewProxyServerTo("127.0.0.1:0", "http://127.0.0.1:1", testAgentToken, testUpstreamToken, nil)
 
 	startCtx, startCancel := context.WithCancel(context.Background())
 	defer startCancel()
@@ -208,15 +208,13 @@ func TestProxyShutdown(t *testing.T) {
 	}
 }
 
-func mustRequest(t *testing.T, method, url, agentToken string) *http.Request {
+func mustRequest(t *testing.T, method, url string) *http.Request {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
 	req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader("{}"))
 	require.NoError(t, err)
-	if agentToken != "" {
-		req.Header.Set("Authorization", "Bearer "+agentToken)
-	}
+	req.Header.Set("Authorization", "Bearer "+testAgentToken)
 	return req
 }
 
@@ -224,4 +222,41 @@ func upstreamHostPort(rawURL string) string {
 	trim := strings.TrimPrefix(rawURL, "http://")
 	trim = strings.TrimPrefix(trim, "https://")
 	return trim
+}
+
+// TestProxyTracksUsageFromSSE confirms a streaming response with
+// Anthropic-shaped SSE events updates the tracker's cost.
+func TestProxyTracksUsageFromSSE(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`event: message_start
+data: {"type":"message_start","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":1000,"output_tokens":1}}}
+
+event: message_delta
+data: {"type":"message_delta","delta":{},"usage":{"output_tokens":2000}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`))
+	}))
+	defer upstream.Close()
+
+	tracker := NewTracker("")
+	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, tracker)
+	tsrv := httptest.NewServer(p.server.Handler)
+	defer tsrv.Close()
+
+	req := mustRequest(t, http.MethodPost, tsrv.URL+"/v1/messages")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Contains(t, string(body), "message_stop", "body must pass through to caller")
+
+	snap := tracker.Snapshot()
+	// 1k input @ $3/MTok + 2k output @ $15/MTok = $0.003 + $0.030 = $0.033.
+	assert.InDelta(t, 0.033, snap.CostUSD, 1e-9)
 }

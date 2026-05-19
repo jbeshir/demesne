@@ -242,3 +242,32 @@ func agentIntegrationRunner(t *testing.T, oauthToken string) *Runner {
 		ClaudeCodeOAuthToken: oauthToken,
 	})
 }
+
+// TestRunner_Integration_Research exercises the sandbox_research path:
+// a Claude Code instance running in a sandbox with open egress (so it
+// can curl the live web). Asserts that:
+//   - the agent can reach a public HTTPS endpoint outside Anthropic,
+//   - the proxy populated usage.json with a non-zero cost.
+//
+// Slow: real Anthropic API round-trip plus an outbound HTTPS fetch.
+func TestRunner_Integration_Research(t *testing.T) {
+	oauthToken := os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN")
+	require.NotEmpty(t, oauthToken,
+		"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for research integration tests")
+
+	runner := agentIntegrationRunner(t, oauthToken)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	res, err := runner.Research(ctx, ResearchRequest{
+		Prompt: "Use the Bash tool to run `curl -sSf https://example.com/` " +
+			"and reply with just the text inside the page's <title> tag.",
+		Model: "haiku",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q", res.Stdout)
+	assert.Contains(t, res.Stdout, "Example Domain",
+		"expected the agent to fetch example.com and report its <title>")
+	assert.Greater(t, res.CostUSD, 0.0, "research run should report non-zero cost")
+	assert.FileExists(t, filepath.Join(res.OutputPath, "usage.json"))
+}
