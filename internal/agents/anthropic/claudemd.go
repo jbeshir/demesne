@@ -11,8 +11,12 @@ import (
 // /in/CLAUDE.md (symlinked to ./CLAUDE.md in cwd).
 //
 // Layout: caller-supplied preamble (verbatim), then an auto-generated
-// "Environment" section, then "Task" with the prompt.
-func generateContext(preamble, prompt string, inputs []agents.InputInfo) string {
+// "Environment" section, then "Task" with the prompt. The egress
+// argument controls the wording of the outbound-network sentence
+// (one of "none", "package-managers", "open"; empty is treated as
+// "none"). When egress is "open" we also add a long-running-research
+// framing note so the model knows to flush incremental notes to /out.
+func generateContext(preamble, prompt, egress string, inputs []agents.InputInfo) string {
 	var b strings.Builder
 	if preamble != "" {
 		b.WriteString(strings.TrimSpace(preamble))
@@ -45,11 +49,34 @@ func generateContext(preamble, prompt string, inputs []agents.InputInfo) string 
 	} else {
 		b.WriteString("- No caller-supplied inputs were mounted under `/in/`.\n")
 	}
-	b.WriteString("- Outbound network access is restricted to the Anthropic API " +
-		"backing this CLI; nothing else is reachable.\n")
+	b.WriteString("- " + egressDescription(egress) + "\n")
+	if egress == "open" {
+		b.WriteString("- **This is a long-running research task.** Cumulative " +
+			"Anthropic spend is capped; if the cap is reached the proxy returns " +
+			"402 and you will exit. Flush partial findings to `/out` as you go " +
+			"so progress survives interruption.\n")
+	}
 
 	b.WriteString("\n## Task\n\n")
 	b.WriteString(strings.TrimSpace(prompt))
 	b.WriteString("\n")
 	return b.String()
+}
+
+// egressDescription returns the human-readable sentence describing
+// what the sandbox can reach over the network, given the egress mode
+// string. Unknown values fall back to the strictest case so we never
+// promise more reachability than the policy allows.
+func egressDescription(egress string) string {
+	switch egress {
+	case "open":
+		return "Outbound network access is unrestricted — you can reach any " +
+			"HTTPS endpoint on the open internet."
+	case "package-managers":
+		return "Outbound network access is restricted to the Anthropic API " +
+			"backing this CLI and the standard npm/PyPI/conda package registries."
+	default:
+		return "Outbound network access is restricted to the Anthropic API " +
+			"backing this CLI; nothing else is reachable."
+	}
 }

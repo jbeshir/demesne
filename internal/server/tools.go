@@ -201,6 +201,17 @@ func (s *Server) handleSandboxAgent(
 	model := request.GetString("model", "")
 	preamble := request.GetString("preamble", "")
 	egress := request.GetString("egress", string(sandbox.EgressNone))
+	// sandbox_agent never permits open egress: the combination of
+	// read-only /in mounts and unrestricted outbound is the
+	// data-exfiltration shape we keep off the MCP surface. Callers
+	// that want open egress use sandbox_research (which has no
+	// inputs).
+	if sandbox.EgressMode(egress) == sandbox.EgressOpen {
+		return mcp.NewToolResultError(
+			"egress 'open' is not permitted for sandbox_agent; " +
+				"use sandbox_research for unrestricted egress",
+		), nil
+	}
 
 	files, err := optionalStringSlice(request, "files")
 	if err != nil {
@@ -223,10 +234,54 @@ func (s *Server) handleSandboxAgent(
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	return mcp.NewToolResultText(
-		fmt.Sprintf("exit_code: %d\noutput_dir: %s\njob_id: %s\n---\n%s",
-			res.ExitCode, res.OutputPath, res.JobID, res.Stdout),
-	), nil
+	return mcp.NewToolResultText(formatAgentRunResult(
+		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.Stdout,
+	)), nil
+}
+
+func (s *Server) handleSandboxResearch(
+	ctx context.Context,
+	request mcp.CallToolRequest,
+) (*mcp.CallToolResult, error) {
+	prompt, err := request.RequireString("prompt")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if prompt == "" {
+		return mcp.NewToolResultError("prompt is required"), nil
+	}
+
+	agentName := request.GetString("agent", "")
+	model := request.GetString("model", "")
+	preamble := request.GetString("preamble", "")
+
+	res, err := s.runner.Research(ctx, sandbox.ResearchRequest{
+		Agent:    agentName,
+		Model:    model,
+		Prompt:   prompt,
+		Preamble: preamble,
+	})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return mcp.NewToolResultText(formatAgentRunResult(
+		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.Stdout,
+	)), nil
+}
+
+// formatAgentRunResult is the shared output formatter for sandbox_agent
+// and sandbox_research. Both surface the same set of fields; keeping a
+// single formatter ensures the result text doesn't drift between them.
+func formatAgentRunResult(
+	exitCode int,
+	outputPath, jobID string,
+	costUSD float64,
+	stdout string,
+) string {
+	return fmt.Sprintf(
+		"exit_code: %d\noutput_dir: %s\njob_id: %s\ncost_usd: %.4f\n---\n%s",
+		exitCode, outputPath, jobID, costUSD, stdout,
+	)
 }
 
 // optionalStringSlice returns the named argument as []string. It treats a

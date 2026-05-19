@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/jbeshir/demesne/internal/proxies"
@@ -31,8 +30,11 @@ const listenAddr = "127.0.0.1:" + listenPort
 // Name is the registered name for the Anthropic API proxy.
 const Name = "anthropic"
 
-// Env vars the sidecar reads at startup. demesne-mcp sets both when it
-// launches the sidecar container per agent invocation.
+// Env-var names the sidecar passes through to the Anthropic proxy.
+// Constants live next to the implementation so the contract is
+// documented in one place, but the *reads* happen in the sidecar's
+// main (see cmd/demesne-sidecar/main.go) — the proxy itself receives
+// its config as explicit arguments.
 const (
 	// AuthTokenEnv carries the per-sandbox agent-facing token. The
 	// agent receives the same value in its CLAUDE_CODE_OAUTH_TOKEN env
@@ -43,6 +45,10 @@ const (
 	// proxy substitutes this for the agent token before forwarding to
 	// api.anthropic.com. The agent never sees this value.
 	UpstreamTokenEnv = "DEMESNE_ANTHROPIC_UPSTREAM_TOKEN" //nolint:gosec // env var name, not a credential
+	// UsagePathEnv is the host-bind-mounted file path the proxy
+	// rewrites with a usage snapshot after every request. Empty means
+	// "track in memory only" (used in tests).
+	UsagePathEnv = "DEMESNE_ANTHROPIC_USAGE_PATH"
 )
 
 // allowedEndpoints is the explicit (method, path) allowlist the proxy
@@ -60,29 +66,24 @@ var allowedEndpoints = map[string]map[string]struct{}{
 // ListenURL is what agent providers wire into ANTHROPIC_BASE_URL.
 func ListenURL() string { return "http://" + listenAddr }
 
+// BindAddr is the 127.0.0.1:<port> the proxy binds inside the sidecar.
+// Used by the sidecar's main when constructing the proxy server.
+func BindAddr() string { return listenAddr }
+
 func init() {
-	proxies.Register(&registration{})
+	proxies.Register(registration{})
 }
 
-// registration implements proxies.Proxy. Tokens are read at Run time
-// from env vars set by the sidecar container's docker run -e flags.
+// registration is the discovery-only registry entry: it exposes Name,
+// EgressHosts, and ListenAddr so the sandbox runner can collect the
+// proxy's egress hosts (none, in this case — SO_MARK bypasses the
+// egress filter) and the sidecar can log the bind addr. Construction
+// and serving happen in the sidecar's main via NewProxyServer.
 type registration struct{}
 
 func (registration) Name() string          { return Name }
 func (registration) EgressHosts() []string { return nil }
 func (registration) ListenAddr() string    { return listenAddr }
-
-func (r registration) Run(ctx context.Context) error {
-	auth := os.Getenv(AuthTokenEnv)
-	upstream := os.Getenv(UpstreamTokenEnv)
-	if auth == "" {
-		return errors.New(AuthTokenEnv + " must be set on the anthropic proxy sidecar")
-	}
-	if upstream == "" {
-		return errors.New(UpstreamTokenEnv + " must be set on the anthropic proxy sidecar")
-	}
-	return NewProxyServer(r.ListenAddr(), auth, upstream).Start(ctx)
-}
 
 // ProxyServer is a hardened reverse proxy for api.anthropic.com.
 // It enforces an explicit endpoint allowlist, verifies that the caller
@@ -97,22 +98,25 @@ type ProxyServer struct {
 // forwarding to APIBase over a transport that sets the egress-bypass
 // SO_MARK on every outbound socket. agentToken is the value the agent
 // must present; upstreamToken is what the proxy sends to Anthropic.
-func NewProxyServer(bindAddr, agentToken, upstreamToken string) *ProxyServer {
-	return newProxyServer(bindAddr, APIBase, bypassTransport(), agentToken, upstreamToken)
+// tracker accumulates usage (cost reported indicatively); pass nil to
+// disable tracking.
+func NewProxyServer(bindAddr, agentToken, upstreamToken string, tracker *Tracker) *ProxyServer {
+	return newProxyServer(bindAddr, APIBase, bypassTransport(), agentToken, upstreamToken, tracker)
 }
 
 // NewProxyServerTo is the test-only constructor: forwards to the given
 // upstream URL over http.DefaultTransport, so tests that exercise the
 // gating logic on a host without CAP_NET_ADMIN don't fail in
 // setsockopt(SO_MARK). Production callers must use NewProxyServer.
-func NewProxyServerTo(bindAddr, upstreamURL, agentToken, upstreamToken string) *ProxyServer {
-	return newProxyServer(bindAddr, upstreamURL, http.DefaultTransport, agentToken, upstreamToken)
+func NewProxyServerTo(bindAddr, upstreamURL, agentToken, upstreamToken string, tracker *Tracker) *ProxyServer {
+	return newProxyServer(bindAddr, upstreamURL, http.DefaultTransport, agentToken, upstreamToken, tracker)
 }
 
 func newProxyServer(
 	bindAddr, upstreamURL string,
 	transport http.RoundTripper,
 	agentToken, upstreamToken string,
+	tracker *Tracker,
 ) *ProxyServer {
 	target, err := url.Parse(upstreamURL)
 	if err != nil {
@@ -123,9 +127,22 @@ func newProxyServer(
 			r.SetURL(target)
 			// Make the upstream see the right virtual host.
 			r.Out.Host = target.Host
+			if tracker != nil {
+				// Force identity so the usage parser sees raw SSE/JSON
+				// bytes — Anthropic otherwise responds with gzip and
+				// the parser would silently miss every usage block.
+				// Bandwidth cost is negligible (loopback to sidecar).
+				r.Out.Header.Set("Accept-Encoding", "identity")
+			}
 		},
 		Transport: transport,
 		ErrorLog:  log.New(log.Writer(), "anthropic-proxy: ", log.LstdFlags),
+	}
+	if tracker != nil {
+		rp.ModifyResponse = func(resp *http.Response) error {
+			resp.Body = wrapResponseBody(resp.Body, resp.Header.Get("Content-Type"), tracker)
+			return nil
+		}
 	}
 
 	return &ProxyServer{
@@ -139,10 +156,10 @@ func newProxyServer(
 }
 
 // gatingHandler wraps the reverse proxy with the endpoint allowlist
-// and agent-token check. Accepted requests have their Authorization
-// header rewritten to the real upstream token; x-api-key (the
-// alternative Anthropic auth scheme) is stripped so the proxy is the
-// only credential authority for the upstream.
+// and the agent-token check. Accepted requests have their
+// Authorization header rewritten to the real upstream token; x-api-key
+// (the alternative Anthropic auth scheme) is stripped so the proxy is
+// the only credential authority for the upstream.
 func gatingHandler(next http.Handler, agentToken, upstreamToken string) http.Handler {
 	expectedAuth := "Bearer " + agentToken
 	upstreamAuth := "Bearer " + upstreamToken

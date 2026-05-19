@@ -38,6 +38,10 @@ type fakeRunner struct {
 	gotAgentReq    sandbox.AgentRequest
 	agentRes       sandbox.AgentResult
 	agentErr       error
+	researchCalls  int
+	gotResearchReq sandbox.ResearchRequest
+	researchRes    sandbox.ResearchResult
+	researchErr    error
 }
 
 func (f *fakeRunner) RunScript(_ context.Context, req sandbox.ScriptRequest) (sandbox.ScriptResult, error) {
@@ -80,6 +84,12 @@ func (f *fakeRunner) Agent(_ context.Context, req sandbox.AgentRequest) (sandbox
 	f.agentCalls++
 	f.gotAgentReq = req
 	return f.agentRes, f.agentErr
+}
+
+func (f *fakeRunner) Research(_ context.Context, req sandbox.ResearchRequest) (sandbox.ResearchResult, error) {
+	f.researchCalls++
+	f.gotResearchReq = req
+	return f.researchRes, f.researchErr
 }
 
 func newRequest(args map[string]any) mcp.CallToolRequest {
@@ -355,6 +365,7 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 			OutputPath: "/tmp/demesne-out/abc",
 			Stdout:     "PONG\n",
 			ExitCode:   0,
+			CostUSD:    0.0123,
 		},
 	}
 	s := NewServer(r)
@@ -378,9 +389,25 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 		Egress:      sandbox.EgressPackageManagers,
 	}, r.gotAgentReq)
 	text := resultText(t, got)
-	for _, want := range []string{"exit_code: 0", "output_dir: /tmp/demesne-out/abc", "job_id: abc", "PONG"} {
+	for _, want := range []string{
+		"exit_code: 0", "output_dir: /tmp/demesne-out/abc", "job_id: abc",
+		"cost_usd: 0.0123", "PONG",
+	} {
 		assert.Contains(t, text, want)
 	}
+}
+
+func TestHandleSandboxAgent_RejectsOpenEgress(t *testing.T) {
+	r := &fakeRunner{}
+	s := NewServer(r)
+	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
+		"prompt": "hi",
+		"egress": "open",
+	}))
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "open egress must be refused for sandbox_agent")
+	assert.Contains(t, resultText(t, got), "sandbox_research")
+	assert.Zero(t, r.agentCalls, "runner must not be called")
 }
 
 func TestHandleSandboxAgent_DefaultEgress(t *testing.T) {
@@ -401,5 +428,61 @@ func TestHandleSandboxAgent_RunnerErrorSurfaced(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	assert.True(t, got.IsError, "expected IsError=true")
+	assert.Contains(t, resultText(t, got), "boom")
+}
+
+func TestHandleSandboxResearch_MissingPrompt(t *testing.T) {
+	cases := []map[string]any{{}, {"prompt": ""}}
+	for i, args := range cases {
+		r := &fakeRunner{}
+		s := NewServer(r)
+		got, err := s.handleSandboxResearch(context.Background(), newRequest(args))
+		require.NoError(t, err)
+		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
+		assert.Zero(t, r.researchCalls, "case %d: runner should not be called", i)
+	}
+}
+
+func TestHandleSandboxResearch_HappyPath(t *testing.T) {
+	r := &fakeRunner{
+		researchRes: sandbox.ResearchResult{
+			JobID:      "rsh",
+			OutputPath: "/tmp/demesne-out/rsh",
+			Stdout:     "DONE\n",
+			ExitCode:   0,
+			CostUSD:    0.42,
+		},
+	}
+	s := NewServer(r)
+	got, err := s.handleSandboxResearch(context.Background(), newRequest(map[string]any{
+		"prompt":   "investigate the corpus",
+		"model":    "sonnet",
+		"preamble": "stay focused",
+	}))
+	require.NoError(t, err)
+	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	assert.Equal(t, sandbox.ResearchRequest{
+		Agent:    "",
+		Model:    "sonnet",
+		Prompt:   "investigate the corpus",
+		Preamble: "stay focused",
+	}, r.gotResearchReq)
+	text := resultText(t, got)
+	for _, want := range []string{
+		"exit_code: 0", "output_dir: /tmp/demesne-out/rsh", "job_id: rsh",
+		"cost_usd: 0.4200", "DONE",
+	} {
+		assert.Contains(t, text, want)
+	}
+}
+
+func TestHandleSandboxResearch_RunnerErrorSurfaced(t *testing.T) {
+	r := &fakeRunner{researchErr: errors.New("boom")}
+	s := NewServer(r)
+	got, err := s.handleSandboxResearch(context.Background(), newRequest(map[string]any{
+		"prompt": "hi",
+	}))
+	require.NoError(t, err)
+	assert.True(t, got.IsError)
 	assert.Contains(t, resultText(t, got), "boom")
 }

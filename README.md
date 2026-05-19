@@ -4,17 +4,18 @@ A Go [Model Context Protocol](https://modelcontextprotocol.io/) server that lets
 
 ## Status
 
-Milestones 1–3 shipped: `sandbox_script` (single-shot), the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`), and `sandbox_agent` — drop a Claude Code instance into a fresh sandbox against a caller-supplied prompt, with all outbound HTTPS funnelled through a host-side Anthropic API proxy. Future milestones will add a `sandbox_research` mode with broader egress and an MCP proxy for exposing host MCP servers inside sandboxes. See [ROADMAP.md](ROADMAP.md).
+Milestones 1–4 shipped: `sandbox_script` (single-shot), the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`), `sandbox_agent` — an AI coding agent (currently the Claude Code CLI) in a fresh sandbox with outbound HTTPS funnelled through a host-side per-vendor API proxy, and `sandbox_research` — a long-running research variant with no input mounts and unrestricted outbound internet. The proxy parses each agent-model API response for usage events and writes `usage.json` to the run's `/out` directory; the reported `cost_usd` is indicative. Future milestones will add an MCP proxy for exposing host MCP servers inside sandboxes. See [ROADMAP.md](ROADMAP.md).
 
 ## Key concepts
 
 - **MCP (Model Context Protocol)** — JSON-RPC over stdio. Demesne is a stdio-transport MCP server; an AI agent (the parent process) sends `tools/call` requests and reads results from stdout.
 - **OpenSandbox** — Alibaba's container-based sandbox runtime. Demesne talks to a lifecycle server over HTTP using their Go SDK.
 - **Sandbox** — a container instance. `sandbox_script` creates one, runs a command, kills it. `sandbox_create` returns a long-lived handle; commands run against it via `sandbox_exec` until `sandbox_destroy`. Persistent sandboxes have a 24h TTL that's refreshed by each `sandbox_exec` call.
-- **Image whitelist** — three accepted names for shell tools: `node` (`node:22`), `python` (`python:3.12`), and `anaconda` (`continuumio/anaconda3:latest`, the default). `sandbox_agent` uses its own image, built locally from an embedded Dockerfile and tagged `demesne-claude-code:<hash>`.
-- **Egress modes** — `none` denies all outbound; `package-managers` (default) denies by default and allows registry.npmjs.org, pypi.org, files.pythonhosted.org, repo.anaconda.com, and conda.anaconda.org. Image and egress are fixed at create time.
-- **Mounts** — caller-supplied host files and directories are mounted **read-only** at `/in/<basename>`. A writable `/out` mount is provisioned automatically; its host path is returned so the caller can read produced artifacts. `sandbox_agent` adds a writable `/workspace` mount as the agent's working directory, and a read-only `/in/CLAUDE.md` generated from the prompt + inputs. `sandbox_upload` and `sandbox_download` move individual files in and out at runtime via the SDK (not through `/out`).
-- **Per-sandbox proxy sidecar** — for `sandbox_agent`, demesne starts a sidecar container that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs every registered proxy (today: Anthropic on `127.0.0.1:8088`). The agent only ever connects to 127.0.0.1; the proxy bypasses OpenSandbox's egress filter via `SO_MARK` (it has `CAP_NET_ADMIN`; the agent does not), so the agent has no path to `api.anthropic.com` and must go through the proxy. The OAuth token transits the Anthropic proxy unchanged.
+- **Image whitelist** — three accepted names for shell tools: `node` (`node:22`), `python` (`python:3.12`), and `anaconda` (`continuumio/anaconda3:latest`, the default). `sandbox_agent` and `sandbox_research` use the agent provider's own image, built locally from an embedded Dockerfile (today: `demesne-claude-code:<hash>` for the claude-code provider).
+- **Egress modes** — `none` denies all outbound; `package-managers` (default for `sandbox_script` / `sandbox_create`) allows registry.npmjs.org, pypi.org, files.pythonhosted.org, repo.anaconda.com, and conda.anaconda.org; `open` allows everything and is only reachable through `sandbox_research`. `sandbox_agent` rejects `open` — combining read-only `/in` mounts with unrestricted outbound is the data-exfiltration shape the surface keeps off. Image and egress are fixed at create time.
+- **Mounts** — caller-supplied host files and directories are mounted **read-only** at `/in/<basename>`. A writable `/out` mount is provisioned automatically; its host path is returned so the caller can read produced artifacts. `sandbox_agent` adds a writable `/workspace` mount as the agent's working directory, and a read-only context file at `/in/<context-file>` (filename comes from the agent provider — `CLAUDE.md` for claude-code) generated from the prompt + inputs. `sandbox_research` is the same but never has any other `/in/<basename>` mounts. `sandbox_upload` and `sandbox_download` move individual files in and out at runtime via the SDK (not through `/out`).
+- **Per-sandbox proxy sidecar** — for `sandbox_agent` and `sandbox_research`, demesne starts a sidecar container that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs exactly one vendor proxy — the one matching the agent vendor (today: the anthropic proxy on `127.0.0.1:8088`). The agent only ever connects to 127.0.0.1; the proxy bypasses OpenSandbox's egress filter via `SO_MARK` (it has `CAP_NET_ADMIN`; the agent does not), so the agent has no path to the real vendor API and must go through the proxy. The real OAuth token transits the vendor proxy unchanged.
+- **Indicative cost reporting** — the sandbox's vendor proxy parses upstream API responses for `usage` blocks (both streaming SSE and JSON bodies), accumulates token counts per model family, and computes USD cost from an embedded pricing table. Snapshots are rewritten atomically to `usage.json` after every request and surfaced in the MCP response as `cost_usd`. The value is **indicative** — for example, Claude Code OAuth tokens typically authorise against a Claude Console subscription rather than per-request API billing, so the figure is useful for budgeting but not what the user is actually charged.
 - **AllowedPaths** — env-configured whitelist (`DEMESNE_ALLOWED_PATHS`) of host paths under which inputs may be mounted or uploaded. Both the candidate path and the allowlist entries are symlink-resolved before the containment check, so symlink escapes are rejected.
 - **Sandbox ID** — handle returned by `sandbox_create` (the OpenSandbox-issued UUID). Passed to `sandbox_exec` / `sandbox_upload` / `sandbox_download` / `sandbox_destroy`. The host output directory for a persistent sandbox is returned as `output_dir` in the create response; treat it as opaque.
 
@@ -107,7 +108,8 @@ The deferred `Kill` runs against a fresh `context.Background()` with a 30-second
 | `sandbox_upload`   | Copy a host file into an existing sandbox.                                                                                                                                                                                                  |
 | `sandbox_download` | Copy a file out of an existing sandbox; written under `<output_dir>/downloads/<basename>`. Returns the host path.                                                                                                                           |
 | `sandbox_destroy`  | Kill an existing sandbox. Host output dir is preserved.                                                                                                                                                                                     |
-| `sandbox_agent`    | Run a Claude Code agent in a fresh sandbox against a caller-supplied prompt. Returns exit code, stdout, and the `/out` host path. Outbound HTTPS is restricted to the Anthropic API proxy.                                                  |
+| `sandbox_agent`    | Run an AI coding agent (currently the Claude Code CLI) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the per-vendor API proxy. Returns exit code, stdout, the `/out` host path, and the (indicative) cost summary.                       |
+| `sandbox_research` | Run a long-running research agent with no input mounts and unrestricted outbound internet. Returns exit code, stdout, the `/out` host path, and the (indicative) cost summary.                                                              |
 
 ### `sandbox_script` parameters
 
@@ -162,17 +164,28 @@ Same as `sandbox_script` minus `command`. Returns `sandbox_id` and `output_dir`.
 
 ### `sandbox_agent` parameters
 
-| Name          | Type             | Required | Default       | Description                                                                                                                          |
-|---------------|------------------|----------|---------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| `prompt`      | string           | yes      |               | Task description handed to the agent. Becomes the `## Task` section of the generated `/in/CLAUDE.md`.                                |
-| `agent`       | string           | no       | `claude-code` | Agent provider to run. Only `claude-code` is registered today.                                                                       |
-| `model`       | string           | no       | `sonnet`      | One of `opus`, `sonnet`, or `haiku`.                                                                                                  |
-| `preamble`    | string           | no       |               | Free-form prose prepended verbatim to the generated `/in/CLAUDE.md` before the auto-generated environment section.                   |
-| `files`       | array of strings | no       | `[]`          | Host file paths mounted read-only at `/in/<basename>`. Each must be inside `DEMESNE_ALLOWED_PATHS`.                                  |
-| `directories` | array of strings | no       | `[]`          | Host directory paths mounted read-only at `/in/<basename>`. Same containment rule.                                                   |
-| `egress`      | string           | no       | `none`        | `none` allows only the Anthropic proxy; `package-managers` also opens npm/PyPI/conda registries. The proxy is always reachable.       |
+| Name           | Type             | Required | Default       | Description                                                                                                                          |
+|----------------|------------------|----------|---------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `prompt`       | string           | yes      |               | Task description handed to the agent. Becomes the `## Task` section of the generated context file.                                    |
+| `agent`        | string           | no       | `claude-code` | Agent provider to run. Only `claude-code` is registered today.                                                                       |
+| `model`        | string           | no       | `sonnet`      | One of `opus`, `sonnet`, or `haiku`. Provider-specific (claude-code).                                                                 |
+| `preamble`     | string           | no       |               | Free-form prose prepended verbatim to the generated agent context file (e.g. `/in/CLAUDE.md` for claude-code) before the auto-generated environment section. |
+| `files`        | array of strings | no       | `[]`          | Host file paths mounted read-only at `/in/<basename>`. Each must be inside `DEMESNE_ALLOWED_PATHS`.                                  |
+| `directories`  | array of strings | no       | `[]`          | Host directory paths mounted read-only at `/in/<basename>`. Same containment rule.                                                   |
+| `egress`       | string           | no       | `none`        | `none` allows only the per-vendor API proxy; `package-managers` also opens npm/PyPI/conda registries; `open` is **refused** here — use `sandbox_research`. |
 
-The agent runs in a fresh container with cwd `/workspace`. The result text contains the exit code, the host path of the `/out` mount, the job ID, and the agent's stdout.
+The agent runs in a fresh container with cwd `/workspace`. The result text contains the exit code, the host path of the `/out` mount, the job ID, the indicative `cost_usd`, and the agent's stdout. A structured `usage.json` is also written into the `/out` directory. `cost_usd` is indicative — see *Indicative cost reporting* under Key concepts.
+
+### `sandbox_research` parameters
+
+| Name           | Type   | Required | Default       | Description                                                                                                          |
+|----------------|--------|----------|---------------|----------------------------------------------------------------------------------------------------------------------|
+| `prompt`       | string | yes      |               | Task description. Becomes the `## Task` section of the generated agent context file.                                  |
+| `agent`        | string | no       | `claude-code` | Agent provider to run. Only `claude-code` is registered today.                                                       |
+| `model`        | string | no       | `sonnet`      | One of `opus`, `sonnet`, or `haiku`. Provider-specific (claude-code).                                                 |
+| `preamble`     | string | no       |               | Free-form prose prepended verbatim to the generated agent context file (e.g. `/in/CLAUDE.md` for claude-code) before the auto-generated environment section. |
+
+Egress is always `open`; there is no caller-visible egress knob, no `files`, and no `directories`. The combination of read-only inputs + open egress is not exposed (use `sandbox_agent` for inputs, or `sandbox_research` for open egress — never both). The result text and on-disk `usage.json` mirror `sandbox_agent`'s.
 
 
 
@@ -187,54 +200,81 @@ A typical persistent-sandbox session looks like:
 
 ## Agents
 
-`sandbox_agent` runs a Claude Code instance inside a fresh sandbox against
-a caller-supplied prompt. Authentication uses your long-lived
-`CLAUDE_CODE_OAUTH_TOKEN` (generated once on the host via
-`claude setup-token`).
+`sandbox_agent` and `sandbox_research` both run a registered AI
+coding agent inside a fresh sandbox against a caller-supplied prompt.
+The only provider registered today is **claude-code** (the Anthropic
+Claude Code CLI), which authenticates with a long-lived
+`CLAUDE_CODE_OAUTH_TOKEN` generated on the host via `claude
+setup-token`; future providers slot in alongside it through the
+`internal/agents/<vendor>` package layout.
 
-For each agent invocation demesne starts a **per-sandbox sidecar
-container** that joins OpenSandbox's egress-sidecar network namespace.
-The sidecar runs every registered proxy (today: the Anthropic API
-proxy on `127.0.0.1:8088`); the agent reaches them all on localhost.
-Each proxy's upstream hostnames are added to OpenSandbox's egress
-allowlist, so the proxy can reach (only) `api.anthropic.com` while the
-agent itself only ever talks to 127.0.0.1.
+`sandbox_agent` is the input-bearing variant: caller-supplied host
+paths are mounted read-only at `/in/<basename>`, and egress is
+restricted to the agent provider's API proxy (with `package-managers`
+as an opt-in extra). `sandbox_research` is the open-egress variant:
+no inputs, but the sandbox can reach anywhere on the open internet.
+The combination of read-only inputs and open egress is the
+data-exfiltration shape kept off the surface — `sandbox_agent`
+refuses `egress: "open"`, and `sandbox_research` accepts no `files` /
+`directories`.
+
+For each invocation demesne starts a **per-sandbox sidecar container**
+that joins OpenSandbox's egress-sidecar network namespace. The sidecar
+runs exactly one vendor proxy — the one matching the agent vendor
+(today: the anthropic proxy on `127.0.0.1:8088`); the agent reaches it
+on localhost. The proxy holds the real upstream OAuth token; the
+agent only ever sees a per-sandbox fake token (`demesne-agent-...`)
+that the proxy validates and swaps. The proxy parses the upstream API
+response for token usage and writes a `usage.json` to the
+sidecar-private results dir after every request (copied to `/out`
+after the run). Tracking is read-only — the `cost_usd` figure is
+indicative.
 
 ```mermaid
 flowchart TD
-    Agent["Agent sandbox<br/>(claude CLI)"]
-    Sidecar["demesne sidecar<br/>127.0.0.1:8088"]
-    Egress["OpenSandbox egress<br/>(allowlist)"]
-    Anthropic["api.anthropic.com"]
+    Agent["Agent sandbox<br/>(provider CLI, e.g. claude)"]
+    Sidecar["demesne sidecar<br/>(vendor proxy on 127.0.0.1<br/>usage tracker)"]
+    Egress["OpenSandbox egress<br/>(allowlist or open)"]
+    Vendor["Agent vendor API<br/>(e.g. api.anthropic.com)"]
+    Internet["Open internet<br/>(sandbox_research only)"]
 
-    Agent -->|"HTTPS<br/>127.0.0.1:8088"| Sidecar
+    Agent -->|"HTTPS<br/>loopback"| Sidecar
     Sidecar -->|"HTTPS"| Egress
-    Egress -->|"allow api.anthropic.com"| Anthropic
-    Anthropic -.->|"response"| Egress
+    Egress -->|"allow vendor API"| Vendor
+    Agent -.->|"sandbox_research:<br/>direct egress"| Egress
+    Egress -.->|"sandbox_research:<br/>allow-all"| Internet
+    Vendor -.->|"response"| Egress
     Egress -.->|"response"| Sidecar
     Sidecar -.->|"response"| Agent
-    Proxy -.->|"response"| Container
 ```
 
 Inside the container the agent sees three mounts:
 
-- **`/in`** — read-only inputs. Caller `files` / `directories` land here
-  at `/in/<basename>`. A generated `/in/CLAUDE.md` describes the
-  environment + task; the agent reads it as project context.
+- **`/in`** — read-only inputs. For `sandbox_agent`, caller `files` /
+  `directories` land here at `/in/<basename>`; `sandbox_research`
+  never has any of those. A generated context file lives at
+  `/in/<context-file>` — the filename comes from the agent provider
+  (`CLAUDE.md` for claude-code) — describing the environment + task
+  for the agent to read as project context.
 - **`/workspace`** — writable scratch, also the agent's cwd. Use this
   for intermediate state.
-- **`/out`** — writable. Anything written here is preserved on the host
-  at the returned `output_dir` after the sandbox is torn down.
+- **`/out`** — writable. Anything written here (including the
+  generated `usage.json`) is preserved on the host at the returned
+  `output_dir` after the sandbox is torn down.
 
-The agent run is one-shot. The sandbox is destroyed once `claude -p`
-exits; the `output_dir`, `workspace_dir`, and generated `CLAUDE.md`
-remain on the host.
+The agent run is one-shot. The sandbox is destroyed once the
+provider's CLI exits; the `output_dir`, `workspace_dir`, generated
+context file, and `usage.json` remain on the host.
 
-**Get an OAuth token:** `claude setup-token` on the host generates a
-long-lived token tied to your Anthropic account and prints it. Put it
-in `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN`. The token is injected into the
-container's environment unchanged; the host-side proxy does no auth
-translation.
+### Getting an OAuth token (claude-code provider)
+
+`claude setup-token` on the host generates a long-lived token tied to
+your Anthropic account and prints it. Put it in
+`DEMESNE_CLAUDE_CODE_OAUTH_TOKEN`. The sandbox's vendor proxy reads
+it from its sidecar environment, validates inbound agent requests
+against the per-sandbox fake token, and substitutes the real one
+upstream — the agent container never sees the real token. Future
+providers register their own OAuth env var alongside this one.
 
 ## Configuration
 
@@ -245,7 +285,7 @@ translation.
 | `OPEN_SANDBOX_DOMAIN`     | yes      |                       | Host:port of the OpenSandbox lifecycle server (e.g. `localhost:8080`).                                            |
 | `OPEN_SANDBOX_PROTOCOL`   | no       | `http`                | `http` or `https`.                                                                                                |
 | `OPEN_SANDBOX_API_KEY`    | yes      |                       | API key for the OpenSandbox lifecycle server.                                                                     |
-| `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no | | Long-lived Claude Code OAuth token, generated by running `claude setup-token` on the host. Required by `sandbox_agent`; other tools work without it. |
+| `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no | | Long-lived Claude Code OAuth token, generated by running `claude setup-token` on the host. Required by `sandbox_agent` and `sandbox_research`; other tools work without it. |
 
 ## Run a local OpenSandbox
 

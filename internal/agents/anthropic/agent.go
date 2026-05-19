@@ -28,8 +28,8 @@ func (claudeCodeAgent) EnsureImage(ctx context.Context) (string, error) {
 	return ensureImage(ctx)
 }
 
-func (claudeCodeAgent) GenerateContext(preamble, prompt string, inputs []agents.InputInfo) string {
-	return generateContext(preamble, prompt, inputs)
+func (claudeCodeAgent) GenerateContext(preamble, prompt, egress string, inputs []agents.InputInfo) string {
+	return generateContext(preamble, prompt, egress, inputs)
 }
 
 func (claudeCodeAgent) ContextFileName() string { return "CLAUDE.md" }
