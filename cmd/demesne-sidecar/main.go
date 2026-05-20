@@ -19,6 +19,7 @@ import (
 	"syscall"
 
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
+	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
 
 func main() {
@@ -35,12 +36,43 @@ func run() error {
 	if err != nil {
 		return err
 	}
-
-	log.Printf("starting proxy %q on %s", proxyanthropic.Name, proxyanthropic.BindAddr())
-	if err := anth.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	mcpSrv, err := buildMCPProxy()
+	if err != nil {
 		return err
 	}
+
+	// Both proxies serve under the same shutdown context; the first
+	// non-context error wins and cancels the other.
+	errCh := make(chan error, 2)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		log.Printf("starting proxy %q on %s", proxyanthropic.Name, proxyanthropic.BindAddr())
+		errCh <- anth.Start(runCtx)
+	}()
+	go func() {
+		errCh <- mcpSrv.Start(runCtx)
+	}()
+
+	for range 2 {
+		if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
+			cancel()
+			return err
+		}
+	}
 	return nil
+}
+
+// buildMCPProxy wires the MCP tunnel from its env vars. An
+// unset/empty DEMESNE_MCP_BINDINGS yields a tunnel with no listeners
+// that simply blocks until shutdown — the sandbox just has no host
+// MCP tools.
+func buildMCPProxy() (*proxymcp.Server, error) {
+	bindings, err := proxymcp.ParseBindings(os.Getenv(proxymcp.BindingsEnv))
+	if err != nil {
+		return nil, err
+	}
+	return proxymcp.NewServer(os.Getenv(proxymcp.SocketPathEnv), bindings), nil
 }
 
 // buildAnthropicProxy wires the Anthropic proxy from its env vars.

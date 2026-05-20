@@ -11,12 +11,19 @@ import (
 // /in/CLAUDE.md (symlinked to ./CLAUDE.md in cwd).
 //
 // Layout: caller-supplied preamble (verbatim), then an auto-generated
-// "Environment" section, then "Task" with the prompt. The egress
-// argument controls the wording of the outbound-network sentence
-// (one of "none", "package-managers", "open"; empty is treated as
-// "none"). When egress is "open" we also add a long-running-research
-// framing note so the model knows to flush incremental notes to /out.
-func generateContext(preamble, prompt, egress string, inputs []agents.InputInfo) string {
+// "Environment" section, then optionally "Available host tools", then
+// "Task" with the prompt. The egress argument controls the wording of
+// the outbound-network sentence (one of "none", "package-managers",
+// "open"; empty is treated as "none"). When egress is "open" we also
+// add a long-running-research framing note so the model knows to flush
+// incremental notes to /out. mcpServers, when non-empty, are listed
+// under their native tool names so the model knows what host tools it
+// can call.
+func generateContext(
+	preamble, prompt, egress string,
+	inputs []agents.InputInfo,
+	mcpServers []agents.MCPServerInfo,
+) string {
 	var b strings.Builder
 	if preamble != "" {
 		b.WriteString(strings.TrimSpace(preamble))
@@ -51,16 +58,39 @@ func generateContext(preamble, prompt, egress string, inputs []agents.InputInfo)
 	}
 	b.WriteString("- " + egressDescription(egress) + "\n")
 	if egress == "open" {
-		b.WriteString("- **This is a long-running research task.** Cumulative " +
-			"Anthropic spend is capped; if the cap is reached the proxy returns " +
-			"402 and you will exit. Flush partial findings to `/out` as you go " +
-			"so progress survives interruption.\n")
+		b.WriteString("- **This is a long-running research task.** Flush " +
+			"partial findings to `/out` as you go so progress survives " +
+			"interruption.\n")
 	}
+
+	writeHostTools(&b, mcpServers)
 
 	b.WriteString("\n## Task\n\n")
 	b.WriteString(strings.TrimSpace(prompt))
 	b.WriteString("\n")
 	return b.String()
+}
+
+// writeHostTools appends the "Available host tools" section listing
+// each server's allowlisted tools under their native names. No-op
+// when no MCP servers are wired in.
+func writeHostTools(b *strings.Builder, mcpServers []agents.MCPServerInfo) {
+	if len(mcpServers) == 0 {
+		return
+	}
+	b.WriteString("\n## Available host tools\n\n")
+	b.WriteString("These read-only MCP servers from the host are wired into this " +
+		"run. Call their tools directly by name:\n\n")
+	for _, s := range mcpServers {
+		fmt.Fprintf(b, "- **%s**:\n", s.Name)
+		for _, t := range s.Tools {
+			if t.Description != "" {
+				fmt.Fprintf(b, "    - `%s` — %s\n", t.Name, t.Description)
+			} else {
+				fmt.Fprintf(b, "    - `%s`\n", t.Name)
+			}
+		}
+	}
 }
 
 // egressDescription returns the human-readable sentence describing

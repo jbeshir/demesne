@@ -21,7 +21,7 @@ file disagrees with that node, the node wins — update this file to match.
 | **M2** — persistent sandboxes      | **Done**    | `d77fdc59-ce80-cf01-0c02-ea9e5d6c1064`                         |
 | **M3** — `sandbox_agent`           | **Done**    | `2c9fe6ee-bc4e-0e9b-6faa-fa97a50939f2`                         |
 | **M4** — `sandbox_research`        | **Done**    | `780688b1-ba47-c04f-f754-278ea4cab2f3`                         |
-| M5 — MCP proxy                     | Not started | `1bad3a63-e185-9ffb-be8e-6d739af75ce4`                         |
+| **M5** — MCP proxy                 | **Done**    | `1bad3a63-e185-9ffb-be8e-6d739af75ce4`                         |
 | M6 — demesne-in-sandbox           | Not started | `86f18069-38d6-3e93-7170-0a557b9d70b8`                         |
 | Cross-cutting additions            | Not started | `b3dceb25-b74a-98e1-508e-bb9c7d976029`                         |
 | Quality gates (descriptions/tests) | Ongoing     | `e9fa65f6`, `974e9a09`, `f23b4cd2`                             |
@@ -163,26 +163,54 @@ cumulative cost via `usage.json`.
 - `results.json` proper (with `total_usage_usd` rolled up across
   child sandboxes) — lands with M6.
 
-## M5 — MCP proxy
+## M5 — MCP proxy (done)
 
-**Goal:** expose a curated, read-only subset of host MCP servers to
-sandboxed agents.
+Shipped: demesne re-exposes a curated, read-only subset of the
+stdio MCP servers in the host's Claude Code config to sandboxed
+agents. An in-process aggregator discovers the servers, spawns
+them lazily, and serves one Streamable-HTTP MCP endpoint per
+server on host loopback; each sandbox's sidecar runs one tunnel
+listener per server (sharing a single outbound connection) and the
+agent is pointed at them via `--mcp-config --strict-mcp-config`.
 
-**Mechanism:**
-- Read host MCP config (e.g. `~/.config/claude/mcp.json` or equivalent).
-- Spin up the relevant MCP servers on the host.
-- Expose a single HTTP MCP endpoint inside the container, gating to a
-  whitelist of approved read-only tools (e.g. Workflowy read, search). Point
-  the in-container agent at this endpoint via config.
+**Decisions taken / divergences from the original sketch:**
+- **Hybrid architecture**: the aggregator lives in-process inside
+  `demesne-mcp` (no separate binary), but the sandbox still sees
+  HTTP MCP endpoints via the sidecar tunnel
+  (`internal/proxies/mcp/`).
+- **Per-server endpoints, native tool names**: rather than one
+  aggregated endpoint with synthetic `{server}__{tool}` names, the
+  aggregator mounts one MCPServer per upstream at `/{server}/mcp`
+  and the sidecar runs one listener per server (ports `8089+`).
+  The agent sees each server separately under its upstream's own
+  tool names. Listeners share a single egress-bypass
+  `http.Transport` (the "one outward tunnel" property).
+- **No auth** between agent, tunnel, and aggregator. The sandbox
+  edge plus the egress filter are the trust boundary; the
+  aggregator listens only on a host-reachable IP within the same
+  trust domain. (Contrast the Anthropic proxy, whose token check
+  exists to substitute a credential the agent must not see.)
+- **Allowlist**: built-in read-only defaults per known server
+  (`internal/mcpproxy/defaults.go`), overridable per server via a
+  JSON file at `~/.config/demesne/mcp-allowlist.json`
+  (`"default"` / `"*"` / explicit list / `[]`), auto-seeded on
+  first run. Enforcement is at the aggregator: a non-allowlisted
+  tool never appears in `tools/list`.
+- **Host reachability via unix socket**: the aggregator listens on a
+  unix socket; the runner bind-mounts it into each sidecar and the
+  tunnel forwards over it. This was the crux of M5 — under rootless
+  podman the sandbox network namespace can't reach a host-process
+  TCP port (and `--add-host` is rejected in `--network=container:`
+  mode), so every TCP-to-host scheme failed with a 502. A
+  bind-mounted socket is a filesystem object and crosses the
+  namespace boundary regardless. Socket path defaults to
+  `/tmp/demesne-mcp/aggregator.sock` (`DEMESNE_MCP_SOCKET`).
+- Discovery reads `~/.claude.json` (overridable via
+  `DEMESNE_HOST_MCP_CONFIG`); stdio servers only, the `demesne`
+  self-entry is skipped.
 
-**Key decisions:**
-- Which tools count as "read-only" — explicit allowlist per server, not
-  derived heuristics.
-- Auth between sandbox and the host MCP endpoint (shared secret over the
-  mounted config? mTLS over a unix socket bind-mount?).
-- Lifecycle: per-sandbox proxy instance, or a single shared proxy?
-
-**Out of scope:** mutating tools, anything not on the read-only allowlist.
+**Out of scope (deferred):** HTTP/SSE upstream servers, write
+tools, per-sandbox MCP quotas, MCP resources/prompts.
 
 ## M6 — demesne-in-sandbox (child sandboxes)
 
@@ -239,7 +267,7 @@ Apply per milestone, not as a separate phase:
 1. Read this file + the linked Workflowy node for that milestone.
 2. Spawn the **Plan** subagent (or `/plan` skill) with the milestone's
    "Goal" + "Key decisions" + the current state of `internal/sandbox/`.
-   Output: a milestone-specific plan in `~/.claude/plans/`.
+   Output: a milestone-specific plan in `plans/` (in-repo).
 3. Get the plan approved (`ExitPlanMode`).
 4. Implement, lint, test, write the integration test.
 5. Run `/jbeshir-agent-skills:quality-pass`.

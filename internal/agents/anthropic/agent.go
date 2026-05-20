@@ -28,8 +28,16 @@ func (claudeCodeAgent) EnsureImage(ctx context.Context) (string, error) {
 	return ensureImage(ctx)
 }
 
-func (claudeCodeAgent) GenerateContext(preamble, prompt, egress string, inputs []agents.InputInfo) string {
-	return generateContext(preamble, prompt, egress, inputs)
+func (claudeCodeAgent) GenerateContext(
+	preamble, prompt, egress string,
+	inputs []agents.InputInfo,
+	mcpServers []agents.MCPServerInfo,
+) string {
+	return generateContext(preamble, prompt, egress, inputs, mcpServers)
+}
+
+func (claudeCodeAgent) WriteAgentConfig(workspaceDir string, cfg agents.AgentConfig) error {
+	return writeMCPConfig(workspaceDir, cfg.MCPServers)
 }
 
 func (claudeCodeAgent) ContextFileName() string { return "CLAUDE.md" }
@@ -45,6 +53,12 @@ func (claudeCodeAgent) Command(prompt, model string) []string {
 		"--model", model,
 		"--output-format", "text",
 		"--dangerously-skip-permissions",
+		// WriteAgentConfig always writes this file (empty mcpServers
+		// when no host servers are wired in); --strict-mcp-config makes
+		// it the sole source of MCP servers, so the sandbox never picks
+		// up unrelated config.
+		"--mcp-config", mcpConfigPath,
+		"--strict-mcp-config",
 	}
 }
 

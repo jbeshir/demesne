@@ -2,12 +2,15 @@ package sidecar
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
+	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
 
 // SidecarResultsDir is the path the proxy sees inside the sidecar
@@ -16,6 +19,11 @@ import (
 // request; the host runner reads it back from the matching
 // ResultsHost path after the sandbox exits.
 const SidecarResultsDir = "/sidecar-results"
+
+// SidecarMCPDir is the in-sidecar mount point for the directory
+// holding the host MCP aggregator's unix socket. The MCP tunnel
+// forwards over the socket at SidecarMCPDir/<socket-basename>.
+const SidecarMCPDir = "/demesne-mcp"
 
 // SidecarUsageFile is the absolute in-container path of the
 // agent-vendor usage snapshot the proxy maintains.
@@ -36,10 +44,28 @@ const EgressSidecarLabel = "opensandbox.io/egress-sidecar-for"
 //
 // ResultsHost is the host path bind-mounted to SidecarResultsDir
 // inside the sidecar; the vendor proxy writes its usage.json there.
+//
+// MCPUpstreams, when non-empty, configure the sidecar's MCP tunnel:
+// one loopback listener per upstream, all forwarding over the
+// bind-mounted aggregator unix socket (MCPSocketHost). A unix socket
+// rather than a host TCP hop is what makes this work under rootless
+// podman, where the sandbox network namespace can't reach a
+// host-process port. Empty MCPUpstreams means no MCP tunnel.
 type ProxyConfig struct {
 	AgentToken    string
 	UpstreamToken string
 	ResultsHost   string
+	MCPUpstreams  []MCPUpstream
+	MCPSocketHost string
+}
+
+// MCPUpstream is one host MCP server to tunnel: its name, the
+// loopback port the agent reaches it at inside the sidecar, and the
+// HTTP path it's served at on the aggregator socket.
+type MCPUpstream struct {
+	Name       string
+	ListenPort int
+	Path       string
 }
 
 // Handle is a running demesne sidecar container attached to an
@@ -90,8 +116,37 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 		"-e", proxyanthropic.AuthTokenEnv + "=" + cfg.AgentToken,
 		"-e", proxyanthropic.UpstreamTokenEnv + "=" + cfg.UpstreamToken,
 		"-e", proxyanthropic.UsagePathEnv + "=" + SidecarUsageFile,
-		imageRef,
 	}
+	// The MCP tunnel is optional. It reaches the host aggregator over a
+	// bind-mounted unix socket — a filesystem hop that works under
+	// rootless podman, where the sandbox network namespace can't reach
+	// a host-process TCP port (and --add-host is rejected in
+	// --network=container: mode anyway).
+	if len(cfg.MCPUpstreams) > 0 {
+		if cfg.MCPSocketHost == "" {
+			return nil, errors.New("sidecar.Start: MCPSocketHost is required when MCPUpstreams are set")
+		}
+		socketDir := filepath.Dir(cfg.MCPSocketHost)
+		inSidecarSocket := SidecarMCPDir + "/" + filepath.Base(cfg.MCPSocketHost)
+		bindings := make([]proxymcp.Binding, 0, len(cfg.MCPUpstreams))
+		for _, u := range cfg.MCPUpstreams {
+			bindings = append(bindings, proxymcp.Binding{
+				Name:       u.Name,
+				ListenPort: u.ListenPort,
+				Path:       u.Path,
+			})
+		}
+		raw, err := json.Marshal(bindings)
+		if err != nil {
+			return nil, fmt.Errorf("sidecar.Start: marshal MCP bindings: %w", err)
+		}
+		args = append(args,
+			"-v", socketDir+":"+SidecarMCPDir,
+			"-e", proxymcp.SocketPathEnv+"="+inSidecarSocket,
+			"-e", proxymcp.BindingsEnv+"="+string(raw),
+		)
+	}
+	args = append(args, imageRef)
 	//nolint:gosec // args composed from validated input
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	// Output (stdout only) — CombinedOutput would mix in Podman's

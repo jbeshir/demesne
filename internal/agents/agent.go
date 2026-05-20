@@ -24,6 +24,29 @@ type InputInfo struct {
 	Size     int64
 }
 
+// MCPToolInfo names one host MCP tool exposed to the agent, with the
+// upstream's own description (for CLAUDE.md listing).
+type MCPToolInfo struct {
+	Name        string
+	Description string
+}
+
+// MCPServerInfo describes one host MCP server the agent can reach
+// through the sidecar tunnel. URL is the sandbox-facing endpoint
+// (e.g. http://127.0.0.1:8089/mcp); Tools are the allowlisted tools
+// the agent will see under their native names.
+type MCPServerInfo struct {
+	Name  string
+	URL   string
+	Tools []MCPToolInfo
+}
+
+// AgentConfig carries the data WriteAgentConfig needs to emit the
+// agent CLI's MCP configuration into the workspace.
+type AgentConfig struct {
+	MCPServers []MCPServerInfo
+}
+
 // Agent is the provider abstraction for sandbox_agent. Each vendor's
 // subpackage supplies one or more implementations.
 type Agent interface {
@@ -41,8 +64,16 @@ type Agent interface {
 	// starts. Inputs describe each /in/<basename> mount; egress is the
 	// caller-visible egress mode string ("none", "package-managers",
 	// "open") so the provider can tell the model exactly what's
-	// reachable. Empty egress is treated as "none".
-	GenerateContext(preamble, prompt, egress string, inputs []InputInfo) string
+	// reachable. Empty egress is treated as "none". mcpServers lists the
+	// host MCP servers wired into this run (empty when none); the
+	// provider documents them in the context file.
+	GenerateContext(preamble, prompt, egress string, inputs []InputInfo, mcpServers []MCPServerInfo) string
+
+	// WriteAgentConfig writes whatever CLI configuration the agent needs
+	// into workspaceDir before the sandbox starts (e.g. an mcp.json
+	// pointing at the per-sandbox MCP tunnel). It is always called, even
+	// when cfg has no MCP servers, so providers can no-op cleanly.
+	WriteAgentConfig(workspaceDir string, cfg AgentConfig) error
 
 	// ContextFileName is the basename of the context file under the
 	// sandbox cwd (e.g. "CLAUDE.md").
