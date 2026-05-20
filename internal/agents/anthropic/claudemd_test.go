@@ -9,13 +9,14 @@ import (
 
 func TestGenerateContext(t *testing.T) {
 	tests := []struct {
-		name     string
-		preamble string
-		prompt   string
-		egress   string
-		inputs   []agents.InputInfo
-		want     []string
-		notWant  []string
+		name       string
+		preamble   string
+		prompt     string
+		egress     string
+		inputs     []agents.InputInfo
+		mcpServers []agents.MCPServerInfo
+		want       []string
+		notWant    []string
 	}{
 		{
 			name:    "no preamble no inputs",
@@ -90,11 +91,39 @@ func TestGenerateContext(t *testing.T) {
 				"nothing else is reachable",
 			},
 		},
+		{
+			name:    "no host tools omits the section",
+			prompt:  "do the thing",
+			egress:  "none",
+			notWant: []string{"Available host tools"},
+		},
+		{
+			name:   "host tools listed under native names",
+			prompt: "look something up",
+			egress: "none",
+			mcpServers: []agents.MCPServerInfo{
+				{
+					Name: "workflowy",
+					URL:  "http://127.0.0.1:8089/mcp",
+					Tools: []agents.MCPToolInfo{
+						{Name: "search_nodes", Description: "search the tree"},
+						{Name: "get_node"},
+					},
+				},
+			},
+			want: []string{
+				"## Available host tools",
+				"**workflowy**",
+				"`search_nodes` — search the tree",
+				"`get_node`",
+			},
+			notWant: []string{"workflowy__search_nodes"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := generateContext(tt.preamble, tt.prompt, tt.egress, tt.inputs)
+			got := generateContext(tt.preamble, tt.prompt, tt.egress, tt.inputs, tt.mcpServers)
 			for _, s := range tt.want {
 				assert.Contains(t, got, s)
 			}

@@ -14,8 +14,11 @@ import (
 
 	opensandbox "github.com/alibaba/OpenSandbox/sdks/sandbox/go"
 	"github.com/google/uuid"
+	"github.com/mark3labs/mcp-go/mcp"
+
 	"github.com/jbeshir/demesne/internal/agents"
 	"github.com/jbeshir/demesne/internal/proxies"
+	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 	"github.com/jbeshir/demesne/internal/sidecar"
 )
 
@@ -123,7 +126,9 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		return agentRunResult{}, fmt.Errorf("generate agent token: %w", err)
 	}
 
-	sb, paths, err := r.createAgentSandbox(ctx, spec, prep)
+	wiring := r.buildMCPWiring()
+
+	sb, paths, err := r.createAgentSandbox(ctx, spec, prep, wiring.agentServers)
 	if err != nil {
 		return agentRunResult{}, err
 	}
@@ -133,6 +138,8 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		AgentToken:    agentToken,
 		UpstreamToken: r.cfg.ClaudeCodeOAuthToken,
 		ResultsHost:   paths.resultsHost,
+		MCPUpstreams:  wiring.sidecarUpstreams,
+		MCPSocketHost: r.cfg.MCPSocketPath,
 	})
 	if err != nil {
 		return agentRunResult{}, fmt.Errorf("start sidecar: %w", err)
@@ -216,6 +223,7 @@ func (r *Runner) createAgentSandbox(
 	ctx context.Context,
 	spec internalAgentSpec,
 	prep agentPrep,
+	mcpServers []agents.MCPServerInfo,
 ) (*opensandbox.Sandbox, agentPaths, error) {
 	policy, err := BuildNetworkPolicy(spec.egress, proxies.EgressHosts())
 	if err != nil {
@@ -229,9 +237,12 @@ func (r *Runner) createAgentSandbox(
 	if err != nil {
 		return nil, agentPaths{}, err
 	}
-	body := prep.agent.GenerateContext(spec.preamble, spec.prompt, string(spec.egress), prep.inputs)
+	body := prep.agent.GenerateContext(spec.preamble, spec.prompt, string(spec.egress), prep.inputs, mcpServers)
 	if err := os.WriteFile(paths.contextHost, []byte(body), 0o600); err != nil {
 		return nil, agentPaths{}, fmt.Errorf("write %s: %w", paths.contextHost, err)
+	}
+	if err := prep.agent.WriteAgentConfig(paths.workspaceHost, agents.AgentConfig{MCPServers: mcpServers}); err != nil {
+		return nil, agentPaths{}, fmt.Errorf("write agent config: %w", err)
 	}
 
 	mounts = append(mounts, agentVolumes(paths, prep.agent.ContextFileName())...)
@@ -384,6 +395,48 @@ func egressOrDefault(m, def EgressMode) EgressMode {
 		return def
 	}
 	return m
+}
+
+// mcpWiring is the per-sandbox MCP plumbing derived from the host
+// aggregator's exposed servers and tool catalogue: the sidecar
+// tunnel upstreams (with assigned loopback ports — the host-side
+// URL is completed in sidecar.Start once the egress gateway is
+// known) and the agent-facing server descriptors.
+type mcpWiring struct {
+	sidecarUpstreams []sidecar.MCPUpstream
+	agentServers     []agents.MCPServerInfo
+}
+
+// buildMCPWiring assigns each exposed server a sidecar loopback port
+// (FirstListenPort + index, matching the aggregator's stable
+// alphabetical ordering) and produces both the sidecar upstream
+// list and the agent-facing server list. Agent-facing URLs are
+// sandbox-local loopback; the sidecar's host-side upstream URL is
+// built later (it needs the per-sandbox egress gateway IP).
+func (r *Runner) buildMCPWiring() mcpWiring {
+	var w mcpWiring
+	for i, name := range r.cfg.MCPServers {
+		port := proxymcp.FirstListenPort + i
+		w.sidecarUpstreams = append(w.sidecarUpstreams, sidecar.MCPUpstream{
+			Name:       name,
+			ListenPort: port,
+			Path:       "/" + name + "/mcp",
+		})
+		w.agentServers = append(w.agentServers, agents.MCPServerInfo{
+			Name:  name,
+			URL:   fmt.Sprintf("http://127.0.0.1:%d/mcp", port),
+			Tools: toolInfos(r.cfg.MCPToolCatalogue[name]),
+		})
+	}
+	return w
+}
+
+func toolInfos(tools []mcp.Tool) []agents.MCPToolInfo {
+	out := make([]agents.MCPToolInfo, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, agents.MCPToolInfo{Name: t.Name, Description: t.Description})
+	}
+	return out
 }
 
 // usageSnapshot is the subset of the proxy's usage.json that the

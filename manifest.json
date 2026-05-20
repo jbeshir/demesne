@@ -4,7 +4,7 @@
   "display_name": "Demesne",
   "version": "0.1.0",
   "description": "Run heterogeneous AI agents and shell commands in disposable OpenSandbox containers.",
-  "long_description": "Demesne is an MCP server that exposes sandboxed command execution backed by [OpenSandbox](https://github.com/alibaba/OpenSandbox).\n\n**Tools:**\n\n- **sandbox_script** — single-shot: run one shell command in a fresh sandbox and tear it down.\n- **sandbox_create / sandbox_exec / sandbox_upload / sandbox_download / sandbox_destroy** — persistent sandboxes: spin one up, run multiple commands, move files in and out, then explicitly destroy. Active sandboxes are kept alive by sandbox_exec; idle ones expire after 24h.\n- **sandbox_agent** — run an AI coding agent (currently the Claude Code CLI) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to a host-side vendor API proxy, so the agent can reach the model API but nothing else (unless the caller also opts in to 'package-managers' egress).\n- **sandbox_research** — like sandbox_agent but for long-running research: no input mounts, unrestricted outbound internet.\n\nAll sandboxes are built from a whitelisted image (anaconda, python, node, or — for agents — a demesne-built provider-specific image). Caller-supplied host paths are mounted read-only at /in/<basename>. A writable /out mount is created automatically and its host path is returned so the caller can read produced artifacts; agents also get a writable /workspace as their cwd. Outbound network access is restricted by default — 'package-managers' allows npm/PyPI/conda registries, 'none' denies all egress, 'open' (sandbox_research only) allows everything.\n\nA sandbox runs exactly one vendor proxy, which parses the upstream API's usage events and writes a usage.json to the run's /out directory. The reported cost_usd is the *indicative* spend the run incurred through that proxy — for example, Claude Code OAuth tokens typically authorise against a Claude Console subscription rather than per-request billing, so the user is not charged per request.",
+  "long_description": "Demesne is an MCP server that exposes sandboxed command execution backed by [OpenSandbox](https://github.com/alibaba/OpenSandbox).\n\n**Tools:**\n\n- **sandbox_script** — single-shot: run one shell command in a fresh sandbox and tear it down.\n- **sandbox_create / sandbox_exec / sandbox_upload / sandbox_download / sandbox_destroy** — persistent sandboxes: spin one up, run multiple commands, move files in and out, then explicitly destroy. Active sandboxes are kept alive by sandbox_exec; idle ones expire after 24h.\n- **sandbox_agent** — run an AI coding agent (currently the Claude Code CLI) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to a host-side vendor API proxy, so the agent can reach the model API but nothing else (unless the caller also opts in to 'package-managers' egress).\n- **sandbox_research** — like sandbox_agent but for long-running research: no input mounts, unrestricted outbound internet.\n\nAll sandboxes are built from a whitelisted image (anaconda, python, node, or — for agents — a demesne-built provider-specific image). Caller-supplied host paths are mounted read-only at /in/<basename>. A writable /out mount is created automatically and its host path is returned so the caller can read produced artifacts; agents also get a writable /workspace as their cwd. Outbound network access is restricted by default — 'package-managers' allows npm/PyPI/conda registries, 'none' denies all egress, 'open' (sandbox_research only) allows everything.\n\nA sandbox runs exactly one vendor proxy, which parses the upstream API's usage events and writes a usage.json to the run's /out directory. The reported cost_usd is the *indicative* spend the run incurred through that proxy — for example, Claude Code OAuth tokens typically authorise against a Claude Console subscription rather than per-request billing, so the user is not charged per request.\n\nHost MCP tools: demesne can re-expose a curated, read-only subset of the stdio MCP servers already configured in your Claude Code config (~/.claude.json) to sandboxed agents. Each server is reached through a per-sandbox tunnel under its native tool names; which tools are exposed is governed by a per-server allowlist (built-in read-only defaults, overridable via a JSON file).",
   "author": {
     "name": "John Beshir",
     "url": "https://github.com/jbeshir"
@@ -26,7 +26,8 @@
         "OPEN_SANDBOX_DOMAIN": "${user_config.opensandbox_domain}",
         "OPEN_SANDBOX_PROTOCOL": "${user_config.opensandbox_protocol}",
         "OPEN_SANDBOX_API_KEY": "${user_config.opensandbox_api_key}",
-        "DEMESNE_CLAUDE_CODE_OAUTH_TOKEN": "${user_config.claude_code_oauth_token}"
+        "DEMESNE_CLAUDE_CODE_OAUTH_TOKEN": "${user_config.claude_code_oauth_token}",
+        "DEMESNE_MCP_ALLOWLIST": "${user_config.mcp_allowlist_path}"
       },
       "platform_overrides": {
         "darwin": {
@@ -77,6 +78,13 @@
       "title": "Claude Code OAuth token",
       "description": "Long-lived OAuth token for Claude Code, produced by `claude setup-token`. Required to run sandbox_agent or sandbox_research; other tools work without it.",
       "sensitive": true,
+      "required": false
+    },
+    "mcp_allowlist_path": {
+      "type": "string",
+      "title": "Host MCP tool allowlist",
+      "description": "Path to a JSON file listing which read-only tools from your host MCP servers to expose to sandboxed agents. Defaults to ~/.config/demesne/mcp-allowlist.json, auto-seeded with demesne's built-in read-only defaults on first run.",
+      "default": "",
       "required": false
     }
   },

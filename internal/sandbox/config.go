@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/jbeshir/demesne/internal/mcpproxy"
 )
 
-// Config holds all environment-derived settings the sandbox runner needs.
+// Config holds the settings the sandbox runner needs. Most are
+// environment-derived (see LoadConfigFromEnv); the MCP fields are
+// populated by main after the host MCP aggregator starts.
 type Config struct {
 	// AllowedPaths is the colon-separated list of host paths under which
 	// callers are permitted to mount files or directories.
@@ -31,6 +35,21 @@ type Config struct {
 	// injected into agent containers as CLAUDE_CODE_OAUTH_TOKEN. Required
 	// only when sandbox_agent is invoked.
 	ClaudeCodeOAuthToken string
+
+	// MCPServers are the host MCP aggregator's exposed server names
+	// (sorted). Empty when no host MCP servers are available. Populated
+	// by main after the aggregator starts, not from env.
+	MCPServers []string
+
+	// MCPSocketPath is the host filesystem path of the aggregator's
+	// unix socket. The runner bind-mounts it into each sandbox sidecar,
+	// where the MCP tunnel forwards to it.
+	MCPSocketPath string
+
+	// MCPToolCatalogue maps each exposed server to its allowlisted tool
+	// list, used to populate the agent's CLAUDE.md and MCP config.
+	// Populated alongside MCPServers.
+	MCPToolCatalogue mcpproxy.ToolCatalogue
 }
 
 // LoadConfigFromEnv reads required configuration from environment variables.

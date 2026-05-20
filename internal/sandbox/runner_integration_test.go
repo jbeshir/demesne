@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
-	// Side-effect: register the claude-code agent and the anthropic proxy.
+	// Side-effect: register the claude-code agent and the anthropic + mcp proxies.
 	_ "github.com/jbeshir/demesne/internal/agents/anthropic"
+	"github.com/jbeshir/demesne/internal/mcpproxy"
 	_ "github.com/jbeshir/demesne/internal/proxies/anthropic"
+	_ "github.com/jbeshir/demesne/internal/proxies/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -270,4 +272,63 @@ func TestRunner_Integration_Research(t *testing.T) {
 		"expected the agent to fetch example.com and report its <title>")
 	assert.Greater(t, res.CostUSD, 0.0, "research run should report non-zero cost")
 	assert.FileExists(t, filepath.Join(res.OutputPath, "usage.json"))
+}
+
+// TestRunner_Integration_AgentWithMCP proves the host-MCP-proxy path
+// end-to-end: a real aggregator (pointed at the host ~/.claude.json)
+// exposes the workflowy server's read-only tools, the runner wires
+// them into a fresh agent sandbox, and the agent reaches them through
+// the per-sandbox MCP tunnel. The sidecar detects the egress
+// sidecar's network gateway to reach the aggregator.
+//
+// Requires a host workflowy MCP server in ~/.claude.json (the default
+// allowlist exposes its read tools).
+func TestRunner_Integration_AgentWithMCP(t *testing.T) {
+	oauthToken := os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN")
+	require.NotEmpty(t, oauthToken,
+		"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for MCP integration tests")
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	hostConfig := filepath.Join(home, ".claude.json")
+	require.FileExists(t, hostConfig, "host MCP config is required for this test")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	agg, err := mcpproxy.NewAggregator(mcpproxy.Config{
+		HostMCPConfigPath: hostConfig,
+		SocketPath:        filepath.Join(t.TempDir(), "aggregator.sock"),
+	})
+	require.NoError(t, err)
+	require.NoError(t, agg.Start(ctx))
+	t.Cleanup(func() {
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		_ = agg.Shutdown(shutCtx)
+	})
+
+	cat := agg.Catalogue()
+	require.Contains(t, cat, "workflowy",
+		"host must have a workflowy MCP server configured for this test")
+
+	runner := agentIntegrationRunner(t, oauthToken)
+	runner.cfg.MCPServers = agg.Servers()
+	runner.cfg.MCPSocketPath = agg.SocketPath()
+	runner.cfg.MCPToolCatalogue = cat
+
+	res, err := runner.Agent(ctx, AgentRequest{
+		Prompt: "Call the workflowy `search_nodes` tool with the query \"demesne\". " +
+			"Then reply with exactly DONE and nothing else.",
+		Model:  "haiku",
+		Egress: EgressNone,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q", res.Stdout)
+
+	// The generated config must reflect the wired-in server.
+	mcpCfg, err := os.ReadFile(filepath.Join(res.WorkspacePath, ".demesne-mcp.json")) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err)
+	assert.Contains(t, string(mcpCfg), "workflowy")
+	assert.Contains(t, string(mcpCfg), "127.0.0.1:8089")
 }

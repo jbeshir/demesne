@@ -4,7 +4,7 @@ A Go [Model Context Protocol](https://modelcontextprotocol.io/) server that lets
 
 ## Status
 
-Milestones 1–4 shipped: `sandbox_script` (single-shot), the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`), `sandbox_agent` — an AI coding agent (currently the Claude Code CLI) in a fresh sandbox with outbound HTTPS funnelled through a host-side per-vendor API proxy, and `sandbox_research` — a long-running research variant with no input mounts and unrestricted outbound internet. The proxy parses each agent-model API response for usage events and writes `usage.json` to the run's `/out` directory; the reported `cost_usd` is indicative. Future milestones will add an MCP proxy for exposing host MCP servers inside sandboxes. See [ROADMAP.md](ROADMAP.md).
+Milestones 1–5 shipped: `sandbox_script` (single-shot), the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`), `sandbox_agent` — an AI coding agent (currently the Claude Code CLI) in a fresh sandbox with outbound HTTPS funnelled through a host-side per-vendor API proxy, and `sandbox_research` — a long-running research variant with no input mounts and unrestricted outbound internet. The proxy parses each agent-model API response for usage events and writes `usage.json` to the run's `/out` directory; the reported `cost_usd` is indicative. M5 added the **host MCP proxy**: demesne re-exposes a curated, read-only subset of the stdio MCP servers in your Claude Code config to sandboxed agents, reached through a per-sandbox tunnel under their native tool names. See [ROADMAP.md](ROADMAP.md).
 
 ## Key concepts
 
@@ -16,6 +16,7 @@ Milestones 1–4 shipped: `sandbox_script` (single-shot), the persistent-sandbox
 - **Mounts** — caller-supplied host files and directories are mounted **read-only** at `/in/<basename>`. A writable `/out` mount is provisioned automatically; its host path is returned so the caller can read produced artifacts. `sandbox_agent` adds a writable `/workspace` mount as the agent's working directory, and a read-only context file at `/in/<context-file>` (filename comes from the agent provider — `CLAUDE.md` for claude-code) generated from the prompt + inputs. `sandbox_research` is the same but never has any other `/in/<basename>` mounts. `sandbox_upload` and `sandbox_download` move individual files in and out at runtime via the SDK (not through `/out`).
 - **Per-sandbox proxy sidecar** — for `sandbox_agent` and `sandbox_research`, demesne starts a sidecar container that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs exactly one vendor proxy — the one matching the agent vendor (today: the anthropic proxy on `127.0.0.1:8088`). The agent only ever connects to 127.0.0.1; the proxy bypasses OpenSandbox's egress filter via `SO_MARK` (it has `CAP_NET_ADMIN`; the agent does not), so the agent has no path to the real vendor API and must go through the proxy. The real OAuth token transits the vendor proxy unchanged.
 - **Indicative cost reporting** — the sandbox's vendor proxy parses upstream API responses for `usage` blocks (both streaming SSE and JSON bodies), accumulates token counts per model family, and computes USD cost from an embedded pricing table. Snapshots are rewritten atomically to `usage.json` after every request and surfaced in the MCP response as `cost_usd`. The value is **indicative** — for example, Claude Code OAuth tokens typically authorise against a Claude Console subscription rather than per-request API billing, so the figure is useful for budgeting but not what the user is actually charged.
+- **Host MCP tools** — for `sandbox_agent` and `sandbox_research`, demesne can re-expose the stdio MCP servers already configured in your Claude Code config (`~/.claude.json`). At startup demesne discovers those servers, spawns them lazily on demand, and serves one HTTP MCP endpoint per server on host loopback (the in-process *aggregator*). Each sandbox's sidecar runs one tunnel listener per server (ports `8089`, `8090`, …) sharing a single outbound connection to the host. The agent sees each server in its own `--mcp-config` entry under the upstream's **native tool names** (no synthetic prefix). Only tools on the read-only allowlist are ever exposed — `tools/list` itself is filtered at the aggregator. There is no auth between the agent, the tunnel, and the aggregator: the sandbox edge is the trust boundary, and the aggregator listens only on a host-reachable interface. The allowlist is built-in read-only defaults per known server, overridable per-server via a JSON file (auto-seeded at `~/.config/demesne/mcp-allowlist.json`).
 - **AllowedPaths** — env-configured whitelist (`DEMESNE_ALLOWED_PATHS`) of host paths under which inputs may be mounted or uploaded. Both the candidate path and the allowlist entries are symlink-resolved before the containment check, so symlink escapes are rejected.
 - **Sandbox ID** — handle returned by `sandbox_create` (the OpenSandbox-issued UUID). Passed to `sandbox_exec` / `sandbox_upload` / `sandbox_download` / `sandbox_destroy`. The host output directory for a persistent sandbox is returned as `output_dir` in the create response; treat it as opaque.
 
@@ -266,6 +267,45 @@ The agent run is one-shot. The sandbox is destroyed once the
 provider's CLI exits; the `output_dir`, `workspace_dir`, generated
 context file, and `usage.json` remain on the host.
 
+### Host MCP tools
+
+When host MCP servers are configured, the agent also reaches them
+through the sidecar. At startup demesne's in-process **aggregator**
+reads `~/.claude.json`, and for each stdio server with allowlisted
+tools it serves an MCP-over-HTTP endpoint at `/<server>/mcp` on a
+**unix socket** (upstream subprocesses spawn lazily on first use).
+The runner bind-mounts that socket into each sandbox sidecar, which
+runs one loopback HTTP listener per server forwarding over the
+shared socket; the agent is pointed at the listeners with
+`--mcp-config --strict-mcp-config`, so it sees each server under its
+native tool names and nothing else. A unix socket (rather than a
+host TCP port) is what makes this work under rootless podman, where
+the sandbox network namespace can't reach a host-process port — a
+bind-mounted socket is just a file and crosses the boundary
+regardless.
+
+```mermaid
+flowchart TD
+    Agent["Agent<br/>(claude --mcp-config)"]
+    Tunnel["sidecar MCP tunnel<br/>(127.0.0.1:8089+, one per server)"]
+    Agg["demesne aggregator<br/>(allowlist + /server/mcp)"]
+    Host["Host MCP servers<br/>(workflowy, alignment, …)"]
+
+    Agent -->|"HTTP, native tool names"| Tunnel
+    Tunnel -->|"bind-mounted unix socket"| Agg
+    Agg -->|"stdio (lazy spawn)"| Host
+```
+
+Only allowlisted tools are exposed: the aggregator builds each
+server's tool set from the read-only defaults (or the override
+file) intersected with what the upstream advertises, so a
+non-allowlisted tool never appears in `tools/list` and can't be
+called. There is no auth between agent, tunnel, and aggregator — the
+sandbox edge is the trust boundary. To change what's exposed, edit
+`~/.config/demesne/mcp-allowlist.json` (per server: `"default"`,
+`"*"`, an explicit list of tool names, or `[]` to disable) and
+restart demesne.
+
 ### Getting an OAuth token (claude-code provider)
 
 `claude setup-token` on the host generates a long-lived token tied to
@@ -286,6 +326,9 @@ providers register their own OAuth env var alongside this one.
 | `OPEN_SANDBOX_PROTOCOL`   | no       | `http`                | `http` or `https`.                                                                                                |
 | `OPEN_SANDBOX_API_KEY`    | yes      |                       | API key for the OpenSandbox lifecycle server.                                                                     |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no | | Long-lived Claude Code OAuth token, generated by running `claude setup-token` on the host. Required by `sandbox_agent` and `sandbox_research`; other tools work without it. |
+| `DEMESNE_HOST_MCP_CONFIG` | no | `~/.claude.json` | Path to the Claude Code MCP config demesne reads to discover host stdio MCP servers. |
+| `DEMESNE_MCP_ALLOWLIST`  | no | `~/.config/demesne/mcp-allowlist.json` | Path to the per-server tool allowlist override file (auto-seeded with built-in read-only defaults on first run). |
+| `DEMESNE_MCP_SOCKET`     | no | `/tmp/demesne-mcp/aggregator.sock` | Host path of the MCP aggregator's unix socket. The runner bind-mounts it into each sandbox sidecar; a socket (not a host TCP port) is what lets the sandbox reach the aggregator under rootless podman. |
 
 ## Run a local OpenSandbox
 
