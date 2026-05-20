@@ -29,12 +29,22 @@ func run() error {
 		return err
 	}
 
+	// The runner must exist before the aggregator: the aggregator
+	// mounts the runner's own demesne MCP server (the in-sandbox
+	// child-spawning tools) as an extra server.
+	runner := sandbox.NewRunner(cfg)
+	demesneName, demesneTools, demesneHandler := runner.ChildMCPServer()
+
 	// The host MCP aggregator is optional: if it can't start (no host
 	// config, bad allowlist, …) demesne still serves every other tool,
 	// agents just get no host MCP tools. Its bindings/catalogue feed
-	// into the runner config; these are not env-derived, so they're
-	// populated here in setup rather than in LoadConfigFromEnv.
-	agg, err := startAggregator()
+	// back into the runner via SetMCPWiring; these are not env-derived,
+	// so they're populated here in setup rather than in LoadConfigFromEnv.
+	agg, err := startAggregator(mcpproxy.ExtraServer{
+		Name:    demesneName,
+		Tools:   demesneTools,
+		Handler: demesneHandler,
+	})
 	if err != nil {
 		log.Printf("demesne: host MCP proxy disabled: %v", err)
 	} else if agg != nil {
@@ -45,21 +55,20 @@ func run() error {
 				log.Printf("demesne: aggregator shutdown: %v", err)
 			}
 		}()
-		cfg.MCPServers = agg.Servers()
-		cfg.MCPSocketPath = agg.SocketPath()
-		cfg.MCPToolCatalogue = agg.Catalogue()
+		runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
 	}
 
-	runner := sandbox.NewRunner(cfg)
 	srv := server.NewServer(runner)
 	return srv.Run()
 }
 
 // startAggregator builds and starts the host MCP aggregator from
-// env-configured paths. Returns (nil, nil) when no host MCP config
-// is present so demesne starts cleanly without host tools. All env
-// reads happen here in setup, not inside the mcpproxy package.
-func startAggregator() (*mcpproxy.Aggregator, error) {
+// env-configured paths, mounting the given extra in-process servers
+// (demesne's own child-spawning tools) alongside the discovered stdio
+// upstreams. The demesne server alone is enough to bring the
+// aggregator up even when no host stdio servers are configured. All
+// env reads happen here in setup, not inside the mcpproxy package.
+func startAggregator(extra ...mcpproxy.ExtraServer) (*mcpproxy.Aggregator, error) {
 	hostConfig := envOr("DEMESNE_HOST_MCP_CONFIG", defaultHostMCPConfig())
 	allowlist := envOr("DEMESNE_MCP_ALLOWLIST", defaultAllowlistPath())
 
@@ -70,7 +79,8 @@ func startAggregator() (*mcpproxy.Aggregator, error) {
 		// The aggregator listens on a unix socket; the runner
 		// bind-mounts it into each sidecar. A socket (not a host TCP
 		// port) is what works under rootless podman.
-		SocketPath: envOr("DEMESNE_MCP_SOCKET", defaultSocketPath()),
+		SocketPath:   envOr("DEMESNE_MCP_SOCKET", defaultSocketPath()),
+		ExtraServers: extra,
 	})
 	if err != nil {
 		return nil, err

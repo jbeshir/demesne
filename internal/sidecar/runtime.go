@@ -61,11 +61,14 @@ type ProxyConfig struct {
 
 // MCPUpstream is one host MCP server to tunnel: its name, the
 // loopback port the agent reaches it at inside the sidecar, and the
-// HTTP path it's served at on the aggregator socket.
+// HTTP path it's served at on the aggregator socket. ParentJobID, when
+// set (the demesne self-server), is injected as the trusted
+// parent-identity header on forwarded requests.
 type MCPUpstream struct {
-	Name       string
-	ListenPort int
-	Path       string
+	Name        string
+	ListenPort  int
+	Path        string
+	ParentJobID string
 }
 
 // Handle is a running demesne sidecar container attached to an
@@ -131,9 +134,10 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 		bindings := make([]proxymcp.Binding, 0, len(cfg.MCPUpstreams))
 		for _, u := range cfg.MCPUpstreams {
 			bindings = append(bindings, proxymcp.Binding{
-				Name:       u.Name,
-				ListenPort: u.ListenPort,
-				Path:       u.Path,
+				Name:        u.Name,
+				ListenPort:  u.ListenPort,
+				Path:        u.Path,
+				ParentJobID: u.ParentJobID,
 			})
 		}
 		raw, err := json.Marshal(bindings)

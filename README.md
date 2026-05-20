@@ -4,7 +4,7 @@ A Go [Model Context Protocol](https://modelcontextprotocol.io/) server that lets
 
 ## Status
 
-Milestones 1–5 shipped: `sandbox_script` (single-shot), the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`), `sandbox_agent` — an AI coding agent (currently the Claude Code CLI) in a fresh sandbox with outbound HTTPS funnelled through a host-side per-vendor API proxy, and `sandbox_research` — a long-running research variant with no input mounts and unrestricted outbound internet. The proxy parses each agent-model API response for usage events and writes `usage.json` to the run's `/out` directory; the reported `cost_usd` is indicative. M5 added the **host MCP proxy**: demesne re-exposes a curated, read-only subset of the stdio MCP servers in your Claude Code config to sandboxed agents, reached through a per-sandbox tunnel under their native tool names. See [ROADMAP.md](ROADMAP.md).
+Milestones 1–6 shipped: `sandbox_script` (single-shot), the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`), `sandbox_agent` — an AI coding agent (currently the Claude Code CLI) in a fresh sandbox with outbound HTTPS funnelled through a host-side per-vendor API proxy, and `sandbox_research` — a long-running research variant with no input mounts and unrestricted outbound internet. The proxy parses each agent-model API response for usage events and writes `usage.json` to the run's `/out` directory; the reported `cost_usd` is indicative. M5 added the **host MCP proxy**: demesne re-exposes a curated, read-only subset of the stdio MCP servers in your Claude Code config to sandboxed agents, reached through a per-sandbox tunnel under their native tool names. M6 added **child sandboxes**: demesne re-exposes its *own* tools to agents as an in-process `demesne` MCP server on that same proxy, so an agent can spawn child sandboxes that inherit its inputs and shared `/workspace` and nest their output under `/out/child/<name>`; a per-job `results.json` rolls up the tree's cost. See [ROADMAP.md](ROADMAP.md).
 
 ## Key concepts
 
@@ -13,7 +13,8 @@ Milestones 1–5 shipped: `sandbox_script` (single-shot), the persistent-sandbox
 - **Sandbox** — a container instance. `sandbox_script` creates one, runs a command, kills it. `sandbox_create` returns a long-lived handle; commands run against it via `sandbox_exec` until `sandbox_destroy`. Persistent sandboxes have a 24h TTL that's refreshed by each `sandbox_exec` call.
 - **Image whitelist** — three accepted names for shell tools: `node` (`node:22`), `python` (`python:3.12`), and `anaconda` (`continuumio/anaconda3:latest`, the default). `sandbox_agent` and `sandbox_research` use the agent provider's own image, built locally from an embedded Dockerfile (today: `demesne-claude-code:<hash>` for the claude-code provider).
 - **Egress modes** — `none` denies all outbound; `package-managers` (default for `sandbox_script` / `sandbox_create`) allows registry.npmjs.org, pypi.org, files.pythonhosted.org, repo.anaconda.com, and conda.anaconda.org; `open` allows everything and is only reachable through `sandbox_research`. `sandbox_agent` rejects `open` — combining read-only `/in` mounts with unrestricted outbound is the data-exfiltration shape the surface keeps off. Image and egress are fixed at create time.
-- **Mounts** — caller-supplied host files and directories are mounted **read-only** at `/in/<basename>`. A writable `/out` mount is provisioned automatically; its host path is returned so the caller can read produced artifacts. `sandbox_agent` adds a writable `/workspace` mount as the agent's working directory, and a read-only context file at `/in/<context-file>` (filename comes from the agent provider — `CLAUDE.md` for claude-code) generated from the prompt + inputs. `sandbox_research` is the same but never has any other `/in/<basename>` mounts. `sandbox_upload` and `sandbox_download` move individual files in and out at runtime via the SDK (not through `/out`).
+- **Mounts** — caller-supplied host files and directories are mounted **read-only** at `/in/<basename>`. A writable `/out` mount is provisioned automatically; its host path is returned so the caller can read produced artifacts. `sandbox_agent` adds a writable `/workspace` mount and runs the agent from a private subdirectory of it; the generated context file (`CLAUDE.md` for claude-code) and MCP config are mounted read-only under `/in/.agent` (kept off `/workspace` so sibling/child agents sharing the mount can't clobber each other's control files). `sandbox_research` is the same but never has any other `/in/<basename>` mounts. `sandbox_upload` and `sandbox_download` move individual files in and out at runtime via the SDK (not through `/out`).
+- **Child sandboxes** — for `sandbox_agent` and `sandbox_research`, demesne re-exposes its own tools to the agent as an in-process `demesne` MCP server mounted on the host MCP proxy (so it rides the same per-sandbox tunnel). The agent can spawn child sandboxes (`sandbox_script` / `agent` / `research` / `create` / `exec` / `destroy`; no `upload`/`download`). Children take no mount params: they inherit the parent's read-only `/in` and shared writable `/workspace`, and their `/out` is `/out/child/<name>` (visible to the parent and ancestors; descendants nest deeper). Names are required and unique per parent. Identity is conveyed by a trusted header the sidecar tunnel injects (the agent can't forge it), so there's no auth — consistent with the sandbox-edge trust boundary. There is no recursion depth cap. Each agent run also writes `<out>/results.json` with `own_usage_usd` and a `total_usage_usd` that sums the whole descendant tree.
 - **Per-sandbox proxy sidecar** — for `sandbox_agent` and `sandbox_research`, demesne starts a sidecar container that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs exactly one vendor proxy — the one matching the agent vendor (today: the anthropic proxy on `127.0.0.1:8088`). The agent only ever connects to 127.0.0.1; the proxy bypasses OpenSandbox's egress filter via `SO_MARK` (it has `CAP_NET_ADMIN`; the agent does not), so the agent has no path to the real vendor API and must go through the proxy. The real OAuth token transits the vendor proxy unchanged.
 - **Indicative cost reporting** — the sandbox's vendor proxy parses upstream API responses for `usage` blocks (both streaming SSE and JSON bodies), accumulates token counts per model family, and computes USD cost from an embedded pricing table. Snapshots are rewritten atomically to `usage.json` after every request and surfaced in the MCP response as `cost_usd`. The value is **indicative** — for example, Claude Code OAuth tokens typically authorise against a Claude Console subscription rather than per-request API billing, so the figure is useful for budgeting but not what the user is actually charged.
 - **Host MCP tools** — for `sandbox_agent` and `sandbox_research`, demesne can re-expose the stdio MCP servers already configured in your Claude Code config (`~/.claude.json`). At startup demesne discovers those servers, spawns them lazily on demand, and serves one HTTP MCP endpoint per server on host loopback (the in-process *aggregator*). Each sandbox's sidecar runs one tunnel listener per server (ports `8089`, `8090`, …) sharing a single outbound connection to the host. The agent sees each server in its own `--mcp-config` entry under the upstream's **native tool names** (no synthetic prefix). Only tools on the read-only allowlist are ever exposed — `tools/list` itself is filtered at the aggregator. There is no auth between the agent, the tunnel, and the aggregator: the sandbox edge is the trust boundary, and the aggregator listens only on a host-reachable interface. The allowlist is built-in read-only defaults per known server, overridable per-server via a JSON file (auto-seeded at `~/.config/demesne/mcp-allowlist.json`).
@@ -305,6 +306,49 @@ sandbox edge is the trust boundary. To change what's exposed, edit
 `~/.config/demesne/mcp-allowlist.json` (per server: `"default"`,
 `"*"`, an explicit list of tool names, or `[]` to disable) and
 restart demesne.
+
+### Child sandboxes
+
+demesne re-exposes its *own* tools to the agent the same way: an
+in-process `demesne` MCP server is mounted on the aggregator
+alongside the discovered upstreams (via its `ExtraServers` hook), so
+it rides the same socket + tunnel. The agent can spawn child
+sandboxes — `sandbox_script` / `agent` / `research` / `create` /
+`exec` / `destroy` (no `upload`/`download`) — none of which take
+mount params. Every child inherits the parent's read-only `/in` and
+shared writable `/workspace`, and writes to `/out/child/<name>`;
+grandchildren nest deeper, so the whole descendant tree materialises
+under the root run's `/out`. Names are required and unique per parent.
+
+The host process does the actual spawning (a sibling sandbox, not
+podman-in-podman). Because the `demesne` server is per-caller while
+external upstreams are context-free, the sidecar tunnel injects a
+trusted `X-Demesne-Parent: <jobID>` header on the demesne binding
+only — stripping any client-supplied value first, so the agent (which
+reaches only the loopback listener) can't forge it. The runner keeps a
+jobID → spawning-context registry it populates for every agent run;
+the demesne handlers resolve the header against it. No auth is needed:
+identity is structural, matching the sandbox-edge trust boundary.
+There is no recursion depth cap.
+
+```mermaid
+flowchart TD
+    Parent["Parent agent<br/>(in sandbox, depth N)"]
+    Tunnel["sidecar MCP tunnel<br/>(injects X-Demesne-Parent)"]
+    Demesne["demesne self-server<br/>(on the aggregator)"]
+    Runner["host Runner<br/>(jobID → context registry)"]
+    Child["Child sandbox<br/>/out = /out/child/&lt;name&gt;"]
+
+    Parent -->|"demesne MCP call"| Tunnel
+    Tunnel -->|"unix socket + parent header"| Demesne
+    Demesne -->|"resolve parent, spawn"| Runner
+    Runner -->|"inherit /in, share /workspace"| Child
+    Child -.->|"can spawn its own children"| Parent
+```
+
+Each agent run also writes `<out>/results.json` with `own_usage_usd`
+and `total_usage_usd` (the latter sums every descendant's
+`results.json`, so the root carries the whole tree's indicative cost).
 
 ### Getting an OAuth token (claude-code provider)
 

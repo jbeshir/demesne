@@ -104,6 +104,52 @@ func TestServer_ForwardsToUpstream(t *testing.T) {
 	assert.JSONEq(t, `{"jsonrpc":"2.0"}`, gotBody)
 }
 
+func TestServer_InjectsParentHeader(t *testing.T) {
+	var gotHeader string
+	sock := startUnixUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get(ParentHeader)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	port := freePort(t)
+	b := Binding{Name: "demesne", ListenPort: port, Path: "/demesne/mcp", ParentJobID: "job-123"}
+	srv := NewServer(sock, []Binding{b})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = srv.Start(ctx) }()
+	waitListening(t, port)
+
+	// Client supplies its own (spoofed) header; the tunnel must overwrite it.
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, localURL(port), strings.NewReader("{}"))
+	require.NoError(t, err)
+	req.Header.Set(ParentHeader, "spoofed")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Equal(t, "job-123", gotHeader)
+}
+
+func TestServer_NoParentHeaderWhenUnset(t *testing.T) {
+	var present bool
+	sock := startUnixUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, present = r.Header[ParentHeader]
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	port, cancel := startTunnel(t, sock, "/x/mcp") // no ParentJobID
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, localURL(port), strings.NewReader("{}"))
+	require.NoError(t, err)
+	req.Header.Set(ParentHeader, "spoofed")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.False(t, present, "client-supplied parent header must be stripped when binding has none")
+}
+
 func TestServer_RejectsBadMethod(t *testing.T) {
 	sock := startUnixUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

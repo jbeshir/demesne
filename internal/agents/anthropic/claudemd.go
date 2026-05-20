@@ -34,12 +34,20 @@ func generateContext(
 	b.WriteString("You are running inside a demesne-managed sandbox.\n\n")
 	b.WriteString("- `IS_SANDBOX=1` is set; long-running side effects and prompts for " +
 		"user input have no recipient.\n")
-	b.WriteString("- `/workspace` is your working directory and the only writable " +
-		"scratch area. Copy any input you need to mutate into `/workspace` " +
-		"first; do not try to modify `/in`.\n")
+	b.WriteString("- Your working directory is a private subdirectory of `/workspace`. " +
+		"`/workspace` itself is shared writable scratch — if you spawn child " +
+		"agents (see below) they share the same `/workspace`, so coordinate via " +
+		"absolute `/workspace/...` paths. Copy any input you need to mutate into " +
+		"`/workspace` first; do not try to modify `/in`.\n")
 	b.WriteString("- `/out` is writable but **output only** — write your final " +
 		"artefacts (results, reports, generated files) here. The caller reads " +
 		"this back from the host after you exit.\n")
+	if hasDemesneServer(mcpServers) {
+		b.WriteString("- You can spawn **child sandboxes** via the `demesne` MCP server's " +
+			"tools (e.g. `sandbox_agent`, `sandbox_research`, `sandbox_script`). " +
+			"Children inherit your `/in` and shared `/workspace`; each child's " +
+			"output lands at `/out/child/<name>`, which you can read back.\n")
+	}
 	if len(inputs) > 0 {
 		b.WriteString("- Read-only inputs under `/in/`:\n")
 		for _, in := range inputs {
@@ -91,6 +99,17 @@ func writeHostTools(b *strings.Builder, mcpServers []agents.MCPServerInfo) {
 			}
 		}
 	}
+}
+
+// hasDemesneServer reports whether the demesne self-server (the
+// child-spawning tools) is among the wired-in MCP servers.
+func hasDemesneServer(mcpServers []agents.MCPServerInfo) bool {
+	for _, s := range mcpServers {
+		if s.Name == "demesne" {
+			return true
+		}
+	}
+	return false
 }
 
 // egressDescription returns the human-readable sentence describing

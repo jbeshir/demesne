@@ -48,13 +48,26 @@ const BindingsEnv = "DEMESNE_MCP_BINDINGS"
 // is set.
 const SocketPathEnv = "DEMESNE_MCP_SOCKET"
 
+// ParentHeader is the trusted header the tunnel injects to identify
+// the calling sandbox to the host's in-process demesne MCP server.
+// The agent can't forge it: the agent only reaches the sidecar's
+// loopback listener, and the tunnel strips any client-supplied value
+// before setting the binding's own. Only the demesne binding carries
+// it; external upstreams ignore it.
+const ParentHeader = "X-Demesne-Parent"
+
 // Binding describes one upstream's tunnel: the loopback port the
 // agent connects to inside the sidecar, and the HTTP path on the
 // aggregator socket that serves this upstream (e.g. /workflowy/mcp).
+//
+// ParentJobID, when set, is injected as the ParentHeader on every
+// forwarded request so the host's demesne server can resolve which
+// sandbox is calling. Empty for external upstreams.
 type Binding struct {
-	Name       string `json:"name"`
-	ListenPort int    `json:"listen_port"`
-	Path       string `json:"path"`
+	Name        string `json:"name"`
+	ListenPort  int    `json:"listen_port"`
+	Path        string `json:"path"`
+	ParentJobID string `json:"parent_job_id,omitempty"`
 }
 
 // ParseBindings decodes the BindingsEnv JSON. An empty string
@@ -180,6 +193,13 @@ func (s *Server) handlerFor(b Binding) http.Handler {
 			r.Out.Host = "demesne-mcp"
 			r.Out.URL.Path = b.Path
 			r.Out.URL.RawQuery = r.In.URL.RawQuery
+			// Strip any client-supplied identity header, then set the
+			// trusted value. The agent can't forge it — it only reaches
+			// this loopback listener, never the socket directly.
+			r.Out.Header.Del(ParentHeader)
+			if b.ParentJobID != "" {
+				r.Out.Header.Set(ParentHeader, b.ParentJobID)
+			}
 		},
 		Transport:     s.transport,
 		ErrorLog:      log.New(log.Writer(), "mcp-tunnel: ", log.LstdFlags),

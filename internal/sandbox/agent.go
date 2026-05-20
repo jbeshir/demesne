@@ -22,17 +22,24 @@ import (
 	"github.com/jbeshir/demesne/internal/sidecar"
 )
 
-// agentPaths captures the host paths created for an agent run.
-type agentPaths struct {
+// sandboxLayout captures the host paths and mounts for one agent run,
+// abstracting over root (host-invoked) and child (in-sandbox-spawned)
+// runs so runAgent has a single code path. inputVolumes are the
+// /in/<basename> mounts; workspaceHost backs /workspace (fresh for a
+// root, the parent's shared dir for a child); outHost backs /out
+// (OutputRoot/<jobID>/out for a root, <parentOut>/child/<name> for a
+// child); configDir backs the read-only agents.AgentConfigDir mount
+// (context file + MCP config). resultsHost is bind-mounted into the
+// sidecar only, so the agent can't tamper with usage.json.
+type sandboxLayout struct {
 	jobID         string
-	outHost       string
+	inputVolumes  []opensandbox.Volume
 	workspaceHost string
-	contextHost   string
-	// resultsHost is bind-mounted into the proxy sidecar (only) at
-	// sidecar.SidecarResultsDir; the agent-vendor proxy writes
-	// usage.json there. The agent container has no access to it, so
-	// the agent can't tamper with usage records.
-	resultsHost string
+	outHost       string
+	configDir     string
+	resultsHost   string
+	depth         int
+	childName     string // empty for a root run
 }
 
 // agentPrep collects everything Agent resolves before touching the
@@ -47,7 +54,8 @@ type agentPrep struct {
 // internalAgentSpec is the internal request shape runAgent takes.
 // Both the public Agent and Research entry points translate their
 // public requests into this struct and set the tool metadata label
-// before handing off.
+// before handing off. child is nil for host-invoked runs and set for
+// in-sandbox-spawned children (which inherit inputs + workspace).
 type internalAgentSpec struct {
 	agentName   string
 	model       string
@@ -57,6 +65,7 @@ type internalAgentSpec struct {
 	directories []string
 	egress      EgressMode
 	tool        string
+	child       *childSpawn
 }
 
 // agentRunResult is runAgent's return shape. The public adapters
@@ -68,6 +77,7 @@ type agentRunResult struct {
 	Stdout        string
 	ExitCode      int
 	CostUSD       float64
+	TotalUsageUSD float64
 }
 
 // Agent runs an agent (e.g. claude-code) inside a fresh sandbox against
@@ -126,9 +136,27 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		return agentRunResult{}, fmt.Errorf("generate agent token: %w", err)
 	}
 
-	wiring := r.buildMCPWiring()
+	layout, err := r.buildLayout(spec, prep.agent.ContextFileName())
+	if err != nil {
+		return agentRunResult{}, err
+	}
 
-	sb, paths, err := r.createAgentSandbox(ctx, spec, prep, wiring.agentServers)
+	// Register this run so its own in-sandbox demesne tools can spawn
+	// children that inherit our inputs + workspace and nest under our
+	// /out. Deregister on the way out.
+	r.registerChild(layout.jobID, &childContext{
+		inputVolumes:  layout.inputVolumes,
+		inputs:        prep.inputs,
+		workspaceHost: layout.workspaceHost,
+		outHost:       layout.outHost,
+		depth:         layout.depth,
+		usedNames:     map[string]bool{},
+	})
+	defer r.deregisterChild(layout.jobID)
+
+	wiring := r.buildMCPWiring(layout.jobID)
+
+	sb, err := r.createSandbox(ctx, spec, prep, layout, wiring.agentServers)
 	if err != nil {
 		return agentRunResult{}, err
 	}
@@ -137,7 +165,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 	side, err := sidecar.Start(ctx, sb.ID(), sidecarImage, sidecar.ProxyConfig{
 		AgentToken:    agentToken,
 		UpstreamToken: r.cfg.ClaudeCodeOAuthToken,
-		ResultsHost:   paths.resultsHost,
+		ResultsHost:   layout.resultsHost,
 		MCPUpstreams:  wiring.sidecarUpstreams,
 		MCPSocketHost: r.cfg.MCPSocketPath,
 	})
@@ -150,8 +178,17 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		}
 	}()
 
-	setup := fmt.Sprintf("ln -sf /in/%s ./%s",
-		prep.agent.ContextFileName(), prep.agent.ContextFileName())
+	ctxName := prep.agent.ContextFileName()
+	// Each agent runs from a private subdirectory of the (possibly
+	// shared) /workspace so the context-file symlink and working tree
+	// never collide between siblings. OpenSandbox validates Cwd exists
+	// before running, so we can't point Cwd at a not-yet-created dir —
+	// instead run from /workspace and mkdir+cd into the private subdir
+	// inside the command. The context file lives in the read-only
+	// config-dir mount; symlinking it into cwd is how the CLI finds it.
+	sub := agentCwdSubdir(layout.jobID)
+	setup := fmt.Sprintf("mkdir -p %s && cd %s && ln -sf %s/%s ./%s",
+		sub, sub, agents.AgentConfigDir, ctxName, ctxName)
 	command := setup + " && " + shellQuote(prep.agent.Command(spec.prompt, prep.model))
 
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
@@ -169,19 +206,31 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		exitCode = *exec.ExitCode
 	}
 
-	usage := readUsageSnapshot(paths.resultsHost)
+	usage := readUsageSnapshot(layout.resultsHost)
 	// Copy the usage record into /out so it's surfaced alongside the
 	// agent's artefacts when the host inspects the output dir later.
-	copyUsageToOut(paths.resultsHost, paths.outHost)
+	copyUsageToOut(layout.resultsHost, layout.outHost)
+
+	// Roll up own + descendant usage into results.json at /out.
+	total := writeResults(layout, spec.tool, exitCode, usage.CostUSD)
 
 	return agentRunResult{
-		JobID:         paths.jobID,
-		OutputPath:    paths.outHost,
-		WorkspacePath: paths.workspaceHost,
+		JobID:         layout.jobID,
+		OutputPath:    layout.outHost,
+		WorkspacePath: layout.workspaceHost,
 		Stdout:        exec.Text(),
 		ExitCode:      exitCode,
 		CostUSD:       usage.CostUSD,
+		TotalUsageUSD: total,
 	}, nil
+}
+
+// agentCwdSubdir is the private per-run working directory relative to
+// the /workspace mount root. Agents collaborate via absolute
+// /workspace paths while keeping their own working tree and
+// context-file symlink isolated under this subdir.
+func agentCwdSubdir(jobID string) string {
+	return ".demesne/" + jobID
 }
 
 // prepareAgent validates the request, looks up the provider, resolves
@@ -205,9 +254,16 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 	if err != nil {
 		return agentPrep{}, err
 	}
-	inputs, err := r.describeInputs(spec.files, spec.directories)
-	if err != nil {
-		return agentPrep{}, err
+	// Children inherit the parent's inputs (no Files/Directories of
+	// their own); describe those for the context file instead.
+	var inputs []agents.InputInfo
+	if spec.child != nil {
+		inputs = spec.child.parent.inputs
+	} else {
+		inputs, err = r.describeInputs(spec.files, spec.directories)
+		if err != nil {
+			return agentPrep{}, err
+		}
 	}
 	tag, err := agent.EnsureImage(ctx)
 	if err != nil {
@@ -216,36 +272,100 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 	return agentPrep{agent: agent, model: model, inputs: inputs, tag: tag}, nil
 }
 
-// createAgentSandbox builds the per-job host directories, writes the
-// generated context file, and creates the sandbox. The host paths are
-// returned so the caller can include them in AgentResult.
-func (r *Runner) createAgentSandbox(
+// buildLayout produces the host paths + mounts for an agent run,
+// dispatching to the root or child builder.
+func (r *Runner) buildLayout(spec internalAgentSpec, contextFileName string) (sandboxLayout, error) {
+	if spec.child != nil {
+		return r.buildChildLayout(spec.child, contextFileName)
+	}
+	return r.buildRootLayout(spec.files, spec.directories, contextFileName)
+}
+
+// buildRootLayout creates the host dirs for a host-invoked agent run:
+// a fresh workspace, /out, config dir, and sidecar-results dir under
+// OutputRoot/<jobID>, with caller-supplied inputs resolved into /in.
+func (r *Runner) buildRootLayout(files, directories []string, _ string) (sandboxLayout, error) {
+	inputVolumes, err := r.resolveMounts(files, directories)
+	if err != nil {
+		return sandboxLayout{}, err
+	}
+	jobID := uuid.NewString()
+	jobDir := filepath.Join(r.cfg.OutputRoot, jobID)
+	l := sandboxLayout{
+		jobID:         jobID,
+		inputVolumes:  inputVolumes,
+		workspaceHost: filepath.Join(jobDir, "workspace"),
+		outHost:       filepath.Join(jobDir, "out"),
+		configDir:     filepath.Join(jobDir, "config"),
+		resultsHost:   filepath.Join(jobDir, "sidecar-results"),
+		depth:         0,
+	}
+	return l, mkLayoutDirs(l.workspaceHost, l.outHost, l.configDir, l.resultsHost)
+}
+
+// buildChildLayout creates the host dirs for an in-sandbox-spawned
+// child: it inherits the parent's /in mounts and shared /workspace,
+// nests its /out at <parentOut>/child/<name>, and keeps its own
+// (private) config + sidecar-results dirs under OutputRoot/<jobID>.
+// Reserving the name (unique per parent) is a side effect.
+func (r *Runner) buildChildLayout(c *childSpawn, _ string) (sandboxLayout, error) {
+	if err := c.parent.reserveName(c.name); err != nil {
+		return sandboxLayout{}, err
+	}
+	jobID := uuid.NewString()
+	privDir := filepath.Join(r.cfg.OutputRoot, jobID)
+	l := sandboxLayout{
+		jobID:         jobID,
+		inputVolumes:  c.parent.inputVolumes,
+		workspaceHost: c.parent.workspaceHost,
+		outHost:       filepath.Join(c.parent.outHost, "child", c.name),
+		configDir:     filepath.Join(privDir, "config"),
+		resultsHost:   filepath.Join(privDir, "sidecar-results"),
+		depth:         c.parent.depth + 1,
+		childName:     c.name,
+	}
+	// workspaceHost already exists (shared); only create our own dirs.
+	return l, mkLayoutDirs(l.outHost, l.configDir, l.resultsHost)
+}
+
+// mkLayoutDirs creates the given host directories. Paths are composed
+// from r.cfg.OutputRoot, a uuid, and constant suffixes; gosec G703
+// fires under -tags=integration but default lint is clean.
+func mkLayoutDirs(dirs ...string) error {
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o750); err != nil { //nolint:gosec,nolintlint
+			return fmt.Errorf("create %s: %w", d, err)
+		}
+	}
+	return nil
+}
+
+// createSandbox writes the generated context file + agent config into
+// the run's config dir and creates the sandbox from the layout's
+// mounts.
+func (r *Runner) createSandbox(
 	ctx context.Context,
 	spec internalAgentSpec,
 	prep agentPrep,
+	layout sandboxLayout,
 	mcpServers []agents.MCPServerInfo,
-) (*opensandbox.Sandbox, agentPaths, error) {
+) (*opensandbox.Sandbox, error) {
 	policy, err := BuildNetworkPolicy(spec.egress, proxies.EgressHosts())
 	if err != nil {
-		return nil, agentPaths{}, err
+		return nil, err
 	}
-	mounts, err := r.resolveMounts(spec.files, spec.directories)
-	if err != nil {
-		return nil, agentPaths{}, err
-	}
-	paths, err := r.createAgentPaths(prep.agent.ContextFileName())
-	if err != nil {
-		return nil, agentPaths{}, err
-	}
+	ctxName := prep.agent.ContextFileName()
 	body := prep.agent.GenerateContext(spec.preamble, spec.prompt, string(spec.egress), prep.inputs, mcpServers)
-	if err := os.WriteFile(paths.contextHost, []byte(body), 0o600); err != nil {
-		return nil, agentPaths{}, fmt.Errorf("write %s: %w", paths.contextHost, err)
+	contextHost := filepath.Join(layout.configDir, ctxName)
+	if err := os.WriteFile(contextHost, []byte(body), 0o600); err != nil {
+		return nil, fmt.Errorf("write %s: %w", contextHost, err)
 	}
-	if err := prep.agent.WriteAgentConfig(paths.workspaceHost, agents.AgentConfig{MCPServers: mcpServers}); err != nil {
-		return nil, agentPaths{}, fmt.Errorf("write agent config: %w", err)
+	if err := prep.agent.WriteAgentConfig(layout.configDir, agents.AgentConfig{MCPServers: mcpServers}); err != nil {
+		return nil, fmt.Errorf("write agent config: %w", err)
 	}
 
-	mounts = append(mounts, agentVolumes(paths, prep.agent.ContextFileName())...)
+	mounts := append([]opensandbox.Volume{}, layout.inputVolumes...)
+	mounts = append(mounts, agentVolumes(layout)...)
 
 	timeoutSec := oneShotSandboxTTLSeconds
 	sb, err := opensandbox.CreateSandbox(ctx, r.connectionConfig(), opensandbox.SandboxCreateOptions{
@@ -254,59 +374,38 @@ func (r *Runner) createAgentSandbox(
 		NetworkPolicy:  policy,
 		TimeoutSeconds: &timeoutSec,
 		Metadata: map[string]string{
-			metadataDemesneJob:  paths.jobID,
+			metadataDemesneJob:  layout.jobID,
 			metadataDemesneTool: spec.tool,
 		},
 	})
 	if err != nil {
-		return nil, agentPaths{}, fmt.Errorf("create sandbox: %w", err)
+		return nil, fmt.Errorf("create sandbox: %w", err)
 	}
-	return sb, paths, nil
+	return sb, nil
 }
 
-// createAgentPaths mints the per-job UUID and creates the four
-// writable host directories used by the agent layout. resultsHost is
-// the sidecar-only path the proxy writes usage.json to.
-func (r *Runner) createAgentPaths(contextFileName string) (agentPaths, error) {
-	jobID := uuid.NewString()
-	jobDir := filepath.Join(r.cfg.OutputRoot, jobID)
-	p := agentPaths{
-		jobID:         jobID,
-		outHost:       filepath.Join(jobDir, "out"),
-		workspaceHost: filepath.Join(jobDir, "workspace"),
-		contextHost:   filepath.Join(jobDir, "context", contextFileName),
-		resultsHost:   filepath.Join(jobDir, "sidecar-results"),
-	}
-	for _, d := range []string{p.outHost, p.workspaceHost, filepath.Dir(p.contextHost), p.resultsHost} {
-		// d is composed from r.cfg.OutputRoot, a uuid, and a constant suffix.
-		// gosec G703 fires under -tags=integration; default lint is clean.
-		if err := os.MkdirAll(d, 0o750); err != nil { //nolint:gosec,nolintlint
-			return agentPaths{}, fmt.Errorf("create %s: %w", d, err)
-		}
-	}
-	return p, nil
-}
-
-// agentVolumes is the set of writable + read-only volumes specific to
-// an agent run — the context file, /workspace, and /out. The
-// sidecar-results dir is mounted only into the sidecar (see
-// sidecar.Start), not into the agent.
-func agentVolumes(p agentPaths, contextFileName string) []opensandbox.Volume {
+// agentVolumes is the set of mounts specific to an agent run: the
+// read-only config dir (context file + MCP config) at
+// agents.AgentConfigDir, the writable /workspace, and the writable
+// /out. The sidecar-results dir is mounted only into the sidecar (see
+// sidecar.Start), not into the agent. Inherited /in inputs are
+// prepended by createSandbox.
+func agentVolumes(l sandboxLayout) []opensandbox.Volume {
 	return []opensandbox.Volume{
 		{
-			Name:      "context",
-			Host:      &opensandbox.Host{Path: p.contextHost},
-			MountPath: "/in/" + contextFileName,
+			Name:      "agent-config",
+			Host:      &opensandbox.Host{Path: l.configDir},
+			MountPath: agents.AgentConfigDir,
 			ReadOnly:  true,
 		},
 		{
 			Name:      "workspace",
-			Host:      &opensandbox.Host{Path: p.workspaceHost},
+			Host:      &opensandbox.Host{Path: l.workspaceHost},
 			MountPath: "/workspace",
 		},
 		{
 			Name:      "out",
-			Host:      &opensandbox.Host{Path: p.outHost},
+			Host:      &opensandbox.Host{Path: l.outHost},
 			MountPath: "/out",
 		},
 	}
@@ -411,17 +510,22 @@ type mcpWiring struct {
 // (FirstListenPort + index, matching the aggregator's stable
 // alphabetical ordering) and produces both the sidecar upstream
 // list and the agent-facing server list. Agent-facing URLs are
-// sandbox-local loopback; the sidecar's host-side upstream URL is
-// built later (it needs the per-sandbox egress gateway IP).
-func (r *Runner) buildMCPWiring() mcpWiring {
+// sandbox-local loopback. The demesne self-server's binding carries
+// this run's jobID as its ParentJobID so the tunnel injects the
+// trusted parent-identity header on calls to it.
+func (r *Runner) buildMCPWiring(jobID string) mcpWiring {
 	var w mcpWiring
 	for i, name := range r.cfg.MCPServers {
 		port := proxymcp.FirstListenPort + i
-		w.sidecarUpstreams = append(w.sidecarUpstreams, sidecar.MCPUpstream{
+		up := sidecar.MCPUpstream{
 			Name:       name,
 			ListenPort: port,
 			Path:       "/" + name + "/mcp",
-		})
+		}
+		if name == DemesneServerName {
+			up.ParentJobID = jobID
+		}
+		w.sidecarUpstreams = append(w.sidecarUpstreams, up)
 		w.agentServers = append(w.agentServers, agents.MCPServerInfo{
 			Name:  name,
 			URL:   fmt.Sprintf("http://127.0.0.1:%d/mcp", port),

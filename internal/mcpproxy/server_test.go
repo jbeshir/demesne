@@ -132,6 +132,42 @@ func TestAggregator_RoundTrip(t *testing.T) {
 	assert.Equal(t, "found:demesne", textContent.Text)
 }
 
+func TestAggregator_ExtraServer(t *testing.T) {
+	// No stdio upstreams; an extra in-process server alone must bring
+	// the aggregator up and appear in Servers()/Catalogue().
+	cfgPath := filepath.Join(t.TempDir(), "claude.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"mcpServers":{}}`), 0o600))
+	socketPath := filepath.Join(t.TempDir(), "agg.sock")
+
+	extraSrv := server.NewMCPServer("demesne", "0")
+	extraSrv.AddTool(mcp.Tool{Name: "sandbox_script", Description: "spawn"},
+		func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return mcp.NewToolResultText("ok"), nil
+		})
+
+	agg, err := NewAggregator(Config{
+		HostMCPConfigPath: cfgPath,
+		SocketPath:        socketPath,
+		ExtraServers: []ExtraServer{{
+			Name:    "demesne",
+			Tools:   []mcp.Tool{{Name: "sandbox_script", Description: "spawn"}},
+			Handler: server.NewStreamableHTTPServer(extraSrv),
+		}},
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, agg.Start(ctx))
+	defer func() { _ = agg.Shutdown(context.Background()) }()
+
+	require.Equal(t, []string{"demesne"}, agg.Servers())
+	cat := agg.Catalogue()
+	require.Contains(t, cat, "demesne")
+	require.Len(t, cat["demesne"], 1)
+	assert.Equal(t, "sandbox_script", cat["demesne"][0].Name)
+}
+
 func TestAggregator_DoubleStart(t *testing.T) {
 	cfgPath := writeStubConfig(t)
 	agg, err := NewAggregator(Config{

@@ -36,8 +36,8 @@ func (claudeCodeAgent) GenerateContext(
 	return generateContext(preamble, prompt, egress, inputs, mcpServers)
 }
 
-func (claudeCodeAgent) WriteAgentConfig(workspaceDir string, cfg agents.AgentConfig) error {
-	return writeMCPConfig(workspaceDir, cfg.MCPServers)
+func (claudeCodeAgent) WriteAgentConfig(configDir string, cfg agents.AgentConfig) error {
+	return writeMCPConfig(configDir, cfg.MCPServers)
 }
 
 func (claudeCodeAgent) ContextFileName() string { return "CLAUDE.md" }
