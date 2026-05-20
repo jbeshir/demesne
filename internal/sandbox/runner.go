@@ -6,10 +6,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	opensandbox "github.com/alibaba/OpenSandbox/sdks/sandbox/go"
 	"github.com/google/uuid"
+
+	"github.com/jbeshir/demesne/internal/mcpproxy"
 )
 
 // commandTimeout caps how long a single sandbox command may run. Set
@@ -40,16 +43,41 @@ const (
 // sandbox_exec, etc.) — methods live in sibling files in this package.
 type Runner struct {
 	cfg Config
+
+	// children maps a running agent sandbox's jobID to the context its
+	// in-sandbox demesne tools spawn children from (inherited inputs,
+	// shared workspace, output dir, depth). Populated for every agent
+	// run; the demesne MCP server looks an entry up by the trusted
+	// parent-identity header. See childserver.go / children.go.
+	childMu  sync.Mutex
+	children map[string]*childContext
 }
 
 // NewRunner constructs a Runner against the given configuration.
 func NewRunner(cfg Config) *Runner {
-	return &Runner{cfg: cfg}
+	return &Runner{cfg: cfg, children: map[string]*childContext{}}
+}
+
+// SetMCPWiring records the host MCP aggregator's exposed servers,
+// socket path, and tool catalogue. Called by main after the
+// aggregator starts (the runner must exist first, because the
+// aggregator mounts the runner's own demesne server). Not env-derived.
+func (r *Runner) SetMCPWiring(servers []string, socketPath string, catalogue mcpproxy.ToolCatalogue) {
+	r.cfg.MCPServers = servers
+	r.cfg.MCPSocketPath = socketPath
+	r.cfg.MCPToolCatalogue = catalogue
 }
 
 // RunScript executes one sandbox_script invocation end-to-end: create a
 // fresh sandbox, run a single command, return stdout, tear the sandbox down.
 func (r *Runner) RunScript(ctx context.Context, req ScriptRequest) (ScriptResult, error) {
+	return r.runScript(ctx, req, nil)
+}
+
+// runScript backs RunScript and the in-sandbox child sandbox_script.
+// When child is set, the sandbox inherits the parent's /in and
+// /workspace and writes to /out/child/<name>.
+func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childSpawn) (ScriptResult, error) {
 	sb, outputHost, jobID, err := r.prepareSandbox(ctx, sandboxPrepOptions{
 		Image:          req.Image,
 		Egress:         req.Egress,
@@ -57,6 +85,7 @@ func (r *Runner) RunScript(ctx context.Context, req ScriptRequest) (ScriptResult
 		Directories:    req.Directories,
 		Tool:           "sandbox_script",
 		TimeoutSeconds: oneShotSandboxTTLSeconds,
+		Child:          child,
 	})
 	if err != nil {
 		return ScriptResult{}, err
@@ -124,6 +153,10 @@ type sandboxPrepOptions struct {
 	// is 600s which is too short for long-running agent or research
 	// runs; callers must set this explicitly.
 	TimeoutSeconds int
+	// Child, when set, makes this a child sandbox: it inherits the
+	// parent's /in mounts and shared /workspace, and its /out is
+	// <parentOut>/child/<name>. Files/Directories are ignored.
+	Child *childSpawn
 }
 
 // prepareSandbox validates inputs, mints the per-job UUID + host /out dir,
@@ -152,21 +185,18 @@ func (r *Runner) prepareSandbox(
 	if err != nil {
 		return nil, "", "", err
 	}
-	mounts, err := r.resolveMounts(opts.Files, opts.Directories)
+
+	jobID := uuid.NewString()
+	var mounts []opensandbox.Volume
+	var outputHost string
+	if opts.Child != nil {
+		mounts, outputHost, err = r.childMounts(opts.Child)
+	} else {
+		mounts, outputHost, err = r.rootMounts(jobID, opts.Files, opts.Directories)
+	}
 	if err != nil {
 		return nil, "", "", err
 	}
-
-	jobID := uuid.NewString()
-	outputHost := filepath.Join(r.cfg.OutputRoot, jobID)
-	if err := os.MkdirAll(outputHost, 0o750); err != nil {
-		return nil, "", "", fmt.Errorf("create output dir: %w", err)
-	}
-	mounts = append(mounts, opensandbox.Volume{
-		Name:      "out",
-		Host:      &opensandbox.Host{Path: outputHost},
-		MountPath: "/out",
-	})
 
 	if opts.TimeoutSeconds <= 0 {
 		return nil, "", "", fmt.Errorf("sandboxPrepOptions: TimeoutSeconds must be set for %s", opts.Tool)
@@ -186,6 +216,56 @@ func (r *Runner) prepareSandbox(
 		return nil, "", "", fmt.Errorf("create sandbox: %w", err)
 	}
 	return sb, outputHost, jobID, nil
+}
+
+// rootMounts builds the volume set for a host-invoked sandbox:
+// caller-supplied /in mounts plus a fresh /out under OutputRoot/jobID.
+func (r *Runner) rootMounts(
+	jobID string,
+	files, directories []string,
+) ([]opensandbox.Volume, string, error) {
+	mounts, err := r.resolveMounts(files, directories)
+	if err != nil {
+		return nil, "", err
+	}
+	outputHost := filepath.Join(r.cfg.OutputRoot, jobID)
+	if err := os.MkdirAll(outputHost, 0o750); err != nil {
+		return nil, "", fmt.Errorf("create output dir: %w", err)
+	}
+	mounts = append(mounts, opensandbox.Volume{
+		Name:      "out",
+		Host:      &opensandbox.Host{Path: outputHost},
+		MountPath: "/out",
+	})
+	return mounts, outputHost, nil
+}
+
+// childMounts builds the volume set for an in-sandbox-spawned child:
+// the parent's inherited /in mounts, the shared /workspace, and a
+// /out at <parentOut>/child/<name>. Reserves the name (unique per
+// parent) as a side effect.
+func (r *Runner) childMounts(c *childSpawn) ([]opensandbox.Volume, string, error) {
+	if err := c.parent.reserveName(c.name); err != nil {
+		return nil, "", err
+	}
+	outputHost := filepath.Join(c.parent.outHost, "child", c.name)
+	if err := os.MkdirAll(outputHost, 0o750); err != nil {
+		return nil, "", fmt.Errorf("create child output dir: %w", err)
+	}
+	mounts := append([]opensandbox.Volume{}, c.parent.inputVolumes...)
+	mounts = append(mounts,
+		opensandbox.Volume{
+			Name:      "workspace",
+			Host:      &opensandbox.Host{Path: c.parent.workspaceHost},
+			MountPath: "/workspace",
+		},
+		opensandbox.Volume{
+			Name:      "out",
+			Host:      &opensandbox.Host{Path: outputHost},
+			MountPath: "/out",
+		},
+	)
+	return mounts, outputHost, nil
 }
 
 // killSandbox tears the sandbox down even when the request context has

@@ -223,7 +223,7 @@ func TestRunner_Integration_Agent(t *testing.T) {
 	for _, p := range []string{res.OutputPath, res.WorkspacePath} {
 		assert.DirExists(t, p)
 	}
-	claudemd := filepath.Join(filepath.Dir(res.OutputPath), "claudemd", "CLAUDE.md")
+	claudemd := filepath.Join(filepath.Dir(res.OutputPath), "config", "CLAUDE.md")
 	body, err := os.ReadFile(claudemd) //nolint:gosec // path under t.TempDir()
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "## Task")
@@ -313,9 +313,7 @@ func TestRunner_Integration_AgentWithMCP(t *testing.T) {
 		"host must have a workflowy MCP server configured for this test")
 
 	runner := agentIntegrationRunner(t, oauthToken)
-	runner.cfg.MCPServers = agg.Servers()
-	runner.cfg.MCPSocketPath = agg.SocketPath()
-	runner.cfg.MCPToolCatalogue = cat
+	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), cat)
 
 	res, err := runner.Agent(ctx, AgentRequest{
 		Prompt: "Call the workflowy `search_nodes` tool with the query \"demesne\". " +
@@ -326,9 +324,70 @@ func TestRunner_Integration_AgentWithMCP(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode, "stdout=%q", res.Stdout)
 
-	// The generated config must reflect the wired-in server.
-	mcpCfg, err := os.ReadFile(filepath.Join(res.WorkspacePath, ".demesne-mcp.json")) //nolint:gosec // path under t.TempDir()
+	// The generated config (now in the read-only config dir, not the
+	// shared workspace) must reflect the wired-in server.
+	mcpCfg, err := os.ReadFile( //nolint:gosec // path under t.TempDir()
+		filepath.Join(filepath.Dir(res.WorkspacePath), "config", ".demesne-mcp.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(mcpCfg), "workflowy")
-	assert.Contains(t, string(mcpCfg), "127.0.0.1:8089")
+	assert.Contains(t, string(mcpCfg), "http://127.0.0.1:")
+}
+
+// TestRunner_Integration_ChildSandbox proves the M6 in-sandbox demesne
+// server end-to-end: an agent calls the demesne `sandbox_script` tool
+// to spawn a named child, the child's output lands at
+// /out/child/<name> (visible to the parent on the host), and the
+// parent's results.json rolls up.
+//
+// Points discovery at an empty MCP config so the only exposed server
+// is demesne (deterministic), making the wiring independent of the
+// host's ~/.claude.json.
+func TestRunner_Integration_ChildSandbox(t *testing.T) {
+	oauthToken := os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN")
+	require.NotEmpty(t, oauthToken,
+		"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for child-sandbox integration tests")
+
+	emptyConfig := filepath.Join(t.TempDir(), "claude.json")
+	require.NoError(t, os.WriteFile(emptyConfig, []byte(`{"mcpServers":{}}`), 0o600))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	runner := agentIntegrationRunner(t, oauthToken)
+	name, tools, handler := runner.ChildMCPServer()
+	agg, err := mcpproxy.NewAggregator(mcpproxy.Config{
+		HostMCPConfigPath: emptyConfig,
+		SocketPath:        filepath.Join(t.TempDir(), "aggregator.sock"),
+		ExtraServers:      []mcpproxy.ExtraServer{{Name: name, Tools: tools, Handler: handler}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, agg.Start(ctx))
+	t.Cleanup(func() {
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		_ = agg.Shutdown(shutCtx)
+	})
+	require.Equal(t, []string{"demesne"}, agg.Servers())
+	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
+
+	res, err := runner.Agent(ctx, AgentRequest{
+		Prompt: "Use the demesne MCP server's `sandbox_script` tool to spawn a child " +
+			"named \"probe\" that runs the command: echo hello-from-child > /out/result.txt. " +
+			"Then reply with exactly DONE and nothing else.",
+		Model:  "sonnet",
+		Egress: EgressNone,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q", res.Stdout)
+
+	// The child's output is nested under the parent's /out.
+	childFile := filepath.Join(res.OutputPath, "child", "probe", "result.txt")
+	body, err := os.ReadFile(childFile) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err, "child output should exist at /out/child/probe")
+	assert.Contains(t, string(body), "hello-from-child")
+
+	// The parent's results.json exists and rolls up (>= own usage).
+	results := filepath.Join(res.OutputPath, "results.json")
+	assert.FileExists(t, results)
+	assert.GreaterOrEqual(t, res.TotalUsageUSD, res.CostUSD)
 }

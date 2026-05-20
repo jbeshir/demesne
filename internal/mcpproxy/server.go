@@ -33,6 +33,23 @@ type Config struct {
 	// podman where the sandbox network namespace can't reach a
 	// host-process TCP port. Required.
 	SocketPath string
+	// ExtraServers are in-process MCP servers mounted alongside the
+	// discovered stdio upstreams (e.g. demesne's own child-spawning
+	// tools). Each is mounted at /{name}/mcp and appears in Servers()
+	// and Catalogue() like any other server, so the runner wires it
+	// into every sandbox through the same sidecar tunnel. Unlike the
+	// stdio upstreams, an extra server's handler is supplied directly.
+	ExtraServers []ExtraServer
+}
+
+// ExtraServer is an in-process MCP server mounted on the aggregator
+// in addition to the discovered stdio upstreams. Tools is the
+// catalogue surfaced to agents (CLAUDE.md + agent MCP config);
+// Handler serves the MCP endpoint.
+type ExtraServer struct {
+	Name    string
+	Tools   []mcp.Tool
+	Handler http.Handler
 }
 
 // ToolCatalogue lists the tools exposed to sandboxed agents,
@@ -51,6 +68,7 @@ type Aggregator struct {
 	servers    []string
 	catalogue  ToolCatalogue
 	socketPath string
+	extra      []ExtraServer
 }
 
 // NewAggregator validates cfg, discovers upstreams, and resolves
@@ -89,6 +107,7 @@ func NewAggregator(cfg Config) (*Aggregator, error) {
 		allow:      allow,
 		catalogue:  ToolCatalogue{},
 		socketPath: cfg.SocketPath,
+		extra:      cfg.ExtraServers,
 	}, nil
 }
 
@@ -124,6 +143,11 @@ func (a *Aggregator) Start(ctx context.Context) error {
 		path := "/" + spec.Name + "/mcp"
 		mux.Handle(path, server.NewStreamableHTTPServer(srv))
 		a.catalogue[spec.Name] = exposed
+	}
+
+	for _, e := range a.extra {
+		mux.Handle("/"+e.Name+"/mcp", e.Handler)
+		a.catalogue[e.Name] = e.Tools
 	}
 
 	if len(a.catalogue) == 0 {

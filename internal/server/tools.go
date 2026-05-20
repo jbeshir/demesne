@@ -235,7 +235,7 @@ func (s *Server) handleSandboxAgent(
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return mcp.NewToolResultText(formatAgentRunResult(
-		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.Stdout,
+		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.TotalUsageUSD, res.Stdout,
 	)), nil
 }
 
@@ -265,22 +265,23 @@ func (s *Server) handleSandboxResearch(
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return mcp.NewToolResultText(formatAgentRunResult(
-		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.Stdout,
+		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.TotalUsageUSD, res.Stdout,
 	)), nil
 }
 
 // formatAgentRunResult is the shared output formatter for sandbox_agent
 // and sandbox_research. Both surface the same set of fields; keeping a
 // single formatter ensures the result text doesn't drift between them.
+// total_usage_usd adds the spend of any child sandboxes the run spawned.
 func formatAgentRunResult(
 	exitCode int,
 	outputPath, jobID string,
-	costUSD float64,
+	costUSD, totalUsageUSD float64,
 	stdout string,
 ) string {
 	return fmt.Sprintf(
-		"exit_code: %d\noutput_dir: %s\njob_id: %s\ncost_usd: %.4f\n---\n%s",
-		exitCode, outputPath, jobID, costUSD, stdout,
+		"exit_code: %d\noutput_dir: %s\njob_id: %s\ncost_usd: %.4f\ntotal_usage_usd: %.4f\n---\n%s",
+		exitCode, outputPath, jobID, costUSD, totalUsageUSD, stdout,
 	)
 }
 

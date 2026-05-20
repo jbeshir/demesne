@@ -22,7 +22,7 @@ file disagrees with that node, the node wins — update this file to match.
 | **M3** — `sandbox_agent`           | **Done**    | `2c9fe6ee-bc4e-0e9b-6faa-fa97a50939f2`                         |
 | **M4** — `sandbox_research`        | **Done**    | `780688b1-ba47-c04f-f754-278ea4cab2f3`                         |
 | **M5** — MCP proxy                 | **Done**    | `1bad3a63-e185-9ffb-be8e-6d739af75ce4`                         |
-| M6 — demesne-in-sandbox           | Not started | `86f18069-38d6-3e93-7170-0a557b9d70b8`                         |
+| **M6** — demesne-in-sandbox        | **Done**    | `86f18069-38d6-3e93-7170-0a557b9d70b8`                         |
 | Cross-cutting additions            | Not started | `b3dceb25-b74a-98e1-508e-bb9c7d976029`                         |
 | Quality gates (descriptions/tests) | Ongoing     | `e9fa65f6`, `974e9a09`, `f23b4cd2`                             |
 
@@ -212,25 +212,55 @@ agent is pointed at them via `--mcp-config --strict-mcp-config`.
 **Out of scope (deferred):** HTTP/SSE upstream servers, write
 tools, per-sandbox MCP quotas, MCP resources/prompts.
 
-## M6 — demesne-in-sandbox (child sandboxes)
+## M6 — demesne-in-sandbox (child sandboxes) (done)
 
-**Goal:** let an agent inside a sandbox call demesne again to spawn child
-sandboxes.
+Shipped: an agent inside a sandbox can call demesne again to spawn
+child sandboxes. demesne's own tools are re-exposed as an in-process
+`demesne` MCP server mounted on the M5 aggregator (alongside the
+discovered stdio upstreams), so the agent reaches them through the
+same sidecar tunnel + unix socket. Per-job `results.json` rolls up
+own + descendant cost.
 
-**Adjustments to the in-sandbox flavour:**
-- No `files`/`directories` params on `sandbox_*` tools. Children inherit
-  the parent's inputs.
-- Children get names + descriptions; names are unique within a parent.
-- Child output paths are `{parent-output}/child/{name}`.
+**Decisions taken / divergences from the original sketch:**
+- **Routed through the existing MCP proxy.** Rather than a new
+  socket/component, the aggregator gained an `ExtraServers` hook; the
+  runner registers its own `demesne` server there. It appears in
+  `Servers()`/`Catalogue()` like any upstream, so `buildMCPWiring`,
+  the sidecar tunnel, `--mcp-config`, and the CLAUDE.md host-tools
+  listing all pick it up unchanged.
+- **No auth; identity via a trusted tunnel header.** The `demesne`
+  server is per-caller (each call spawns into the calling sandbox's
+  own subtree), but external upstreams are context-free. The sidecar
+  tunnel injects `X-Demesne-Parent: <jobID>` only on the demesne
+  binding (stripping any client-supplied value first — the agent
+  reaches only the loopback listener, never the socket). mcp-go's
+  `WithHTTPContextFunc` lifts it into the tool handler ctx; the runner
+  resolves it against a jobID→context registry it populates for every
+  agent run. Consistent with the sandbox-edge trust boundary.
+- **Tool scope:** spawners (`sandbox_script`/`agent`/`research`) plus
+  the persistent family (`sandbox_create`/`exec`/`destroy`).
+  `upload`/`download` are deliberately not exposed in-sandbox. No tool
+  takes mount params; every child inherits the parent's read-only
+  `/in` and shared writable `/workspace`, and writes to
+  `/out/child/<name>`. Names are required and unique per parent.
+- **No recursion depth cap.** Runs are subscription-billed; the bound
+  is the session window, not a configured depth.
+- **Shared-/workspace collision fix.** Because siblings share the
+  `/workspace` mount, per-agent control files moved off it: the
+  generated context file + MCP config now live in a read-only config
+  dir mounted at `/in/.agent`, and each agent runs from a private cwd
+  `/workspace/.demesne/<jobID>`. This was forced by Claude Code
+  walking ancestor dirs for `CLAUDE.md` — a shared `/workspace/CLAUDE.md`
+  would leak into descendants. `--strict-mcp-config` suppresses any
+  ancestor `.mcp.json`.
+- **results.json (cross-cutting) landed here.** Each run writes
+  `own_usage_usd` + `total_usage_usd` (summed over `/out/child/*`
+  descendant results) to `<out>/results.json`. Children finish before
+  the parent's call returns, so the roll-up is bottom-up.
 
-**Key decisions:**
-- How demesne-in-sandbox authenticates to the host demesne (mounted unix
-  socket? token in env?).
-- Recursion depth limits.
-- Cost accounting roll-up (lands with the cross-cutting `results.json` work).
-
-**Out of scope:** non-tree topologies, sharing children across unrelated
-parents.
+**Out of scope (deferred):** non-tree topologies, sharing children
+across unrelated parents, per-sandbox MCP quotas, streaming/incremental
+`/out` writes, depth/fan-out caps.
 
 ## Cross-cutting additions
 
@@ -239,8 +269,9 @@ These land alongside the milestones that need them, not as a separate phase.
 - **Streaming output to `/out`** — agents write incremental output to their
   output directory while running; demesne extracts the final state into
   `results.json` on termination. Affects M3+.
-- **`results.json`** — per-job summary including `own_usage_usd` and
-  `total_usage_usd` (the latter rolls up child sandboxes). Affects M3+.
+- **`results.json`** — **shipped in M6.** Per-job summary at
+  `<out>/results.json` with `own_usage_usd` and `total_usage_usd` (the
+  latter rolls up descendant child sandboxes).
 - **Stderr logs** — each agent's stderr captured to a file in the output
   directory.
 - **`/workspace` mount** — writable temp workspace at `/workspace`, stored at

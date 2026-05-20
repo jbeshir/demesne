@@ -42,10 +42,19 @@ type MCPServerInfo struct {
 }
 
 // AgentConfig carries the data WriteAgentConfig needs to emit the
-// agent CLI's MCP configuration into the workspace.
+// agent CLI's MCP configuration into the config directory.
 type AgentConfig struct {
 	MCPServers []MCPServerInfo
 }
+
+// AgentConfigDir is the in-sandbox mount point for an agent run's
+// read-only control files (the generated context file and the MCP
+// config). The runner bind-mounts each run's private config dir here.
+// It lives under /in (not /workspace) so that sibling agents sharing
+// a /workspace mount can't clobber each other's control files, and so
+// the context file isn't picked up as an ancestor CLAUDE.md by a
+// nested working directory.
+const AgentConfigDir = "/in/.agent"
 
 // Agent is the provider abstraction for sandbox_agent. Each vendor's
 // subpackage supplies one or more implementations.
@@ -70,10 +79,12 @@ type Agent interface {
 	GenerateContext(preamble, prompt, egress string, inputs []InputInfo, mcpServers []MCPServerInfo) string
 
 	// WriteAgentConfig writes whatever CLI configuration the agent needs
-	// into workspaceDir before the sandbox starts (e.g. an mcp.json
-	// pointing at the per-sandbox MCP tunnel). It is always called, even
-	// when cfg has no MCP servers, so providers can no-op cleanly.
-	WriteAgentConfig(workspaceDir string, cfg AgentConfig) error
+	// into configDir before the sandbox starts (e.g. an mcp.json
+	// pointing at the per-sandbox MCP tunnel). configDir is bind-mounted
+	// read-only at AgentConfigDir inside the sandbox. It is always
+	// called, even when cfg has no MCP servers, so providers can no-op
+	// cleanly.
+	WriteAgentConfig(configDir string, cfg AgentConfig) error
 
 	// ContextFileName is the basename of the context file under the
 	// sandbox cwd (e.g. "CLAUDE.md").

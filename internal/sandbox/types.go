@@ -100,6 +100,9 @@ type AgentResult struct {
 	// CostUSD is the indicative cumulative API spend (USD) the run
 	// incurred through its vendor proxy.
 	CostUSD float64
+	// TotalUsageUSD adds CostUSD plus the spend of every descendant
+	// sandbox this run spawned (see results.json).
+	TotalUsageUSD float64
 }
 
 // ResearchRequest captures the inputs to sandbox_research. It mirrors
@@ -120,4 +123,5 @@ type ResearchResult struct {
 	Stdout        string
 	ExitCode      int
 	CostUSD       float64
+	TotalUsageUSD float64
 }
