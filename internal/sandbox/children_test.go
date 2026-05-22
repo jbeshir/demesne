@@ -79,12 +79,12 @@ func TestBuildChildLayout_IsolatedVsInherited(t *testing.T) {
 	assert.DirExists(t, iso.workspaceHost)
 	assert.Equal(t, filepath.Join(parentOut, "child", "research1"), iso.outHost)
 
-	// Inherited (agent/script): shares /in, /workspace, and previous-jobs
-	// — and sees research1's output (recorded when it was built).
+	// Inherited (agent/script): shares /in, /workspace, and previous-jobs.
+	// (Siblings are recorded after a successful create, not in
+	// buildChildLayout, so only the pre-seeded "earlier" is visible here.)
 	inh, err := r.buildChildLayout(&childSpawn{name: "impl1", parent: parent}, "CLAUDE.md")
 	require.NoError(t, err)
 	assert.Equal(t, parent.inputVolumes, inh.inputVolumes)
 	assert.Equal(t, parent.workspaceHost, inh.workspaceHost)
 	assert.Contains(t, inh.previousJobs, "earlier")
-	assert.Contains(t, inh.previousJobs, "research1")
 }

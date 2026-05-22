@@ -5,12 +5,59 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
+
+// keepaliveInterval is how often a child-spawning handler emits a
+// progress notification while the child runs. It must be comfortably
+// below any client-side idle timeout on the nested streamable-HTTP MCP
+// connection (observed safe at 30s+).
+const keepaliveInterval = 15 * time.Second
+
+// keepaliveProgressID labels the keepalive progress notifications. It's
+// an opaque MCP progress identifier, not a credential.
+const keepaliveProgressID = "demesne-keepalive"
+
+// keepAlive holds the nested MCP connection open while a child runs. A
+// child-spawning handler blocks for the child's whole lifecycle and
+// sends nothing over MCP (the child's output streams to /out, a host
+// mount), so the held-open streamable-HTTP POST goes idle and the
+// agent-side client tears it down — cancelling the call and killing the
+// child. Emitting a periodic progress notification (mcp-go writes it
+// onto the held-open POST; the sidecar tunnel forwards it) keeps the
+// stream warm. Returns a stop func; no-ops when not served over the
+// streamable-HTTP transport (e.g. unit tests).
+func keepAlive(ctx context.Context) func() {
+	srv := server.ServerFromContext(ctx)
+	if srv == nil {
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(keepaliveInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = srv.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
+					"progressToken": keepaliveProgressID,
+					"progress":      0,
+					"message":       "demesne: child sandbox still running",
+				})
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return func() { close(done) }
+}
 
 // DemesneServerName is the name the in-process demesne self-server is
 // mounted under on the host MCP aggregator (and thus the MCP server
@@ -113,6 +160,7 @@ func (r *Runner) parentFor(ctx context.Context) (*childContext, error) {
 }
 
 func (r *Runner) handleChildScript(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	defer keepAlive(ctx)()
 	parent, name, errResult := r.childSpawnParams(ctx, req)
 	if errResult != nil {
 		return errResult, nil
@@ -136,6 +184,7 @@ func (r *Runner) handleChildScript(ctx context.Context, req mcp.CallToolRequest)
 }
 
 func (r *Runner) handleChildAgent(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	defer keepAlive(ctx)()
 	parent, name, errResult := r.childSpawnParams(ctx, req)
 	if errResult != nil {
 		return errResult, nil
@@ -166,6 +215,7 @@ func (r *Runner) handleChildAgent(ctx context.Context, req mcp.CallToolRequest) 
 }
 
 func (r *Runner) handleChildResearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	defer keepAlive(ctx)()
 	parent, name, errResult := r.childSpawnParams(ctx, req)
 	if errResult != nil {
 		return errResult, nil
@@ -194,6 +244,7 @@ func (r *Runner) handleChildResearch(ctx context.Context, req mcp.CallToolReques
 }
 
 func (r *Runner) handleChildCreate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	defer keepAlive(ctx)()
 	parent, name, errResult := r.childSpawnParams(ctx, req)
 	if errResult != nil {
 		return errResult, nil
@@ -211,6 +262,7 @@ func (r *Runner) handleChildCreate(ctx context.Context, req mcp.CallToolRequest)
 }
 
 func (r *Runner) handleChildExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	defer keepAlive(ctx)()
 	sandboxID, err := req.RequireString("sandbox_id")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil

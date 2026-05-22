@@ -125,28 +125,29 @@ func previousJobVolumes(siblings map[string]string) []opensandbox.Volume {
 	return volumes
 }
 
-// validateChildName restricts names to a single safe path segment so
-// the child output dir <parentOut>/child/<name> can't escape the
-// parent's tree.
+// validateChildName restricts names to a lowercase DNS-1123-style label
+// (lowercase letters, digits, and interior hyphens). The name is both a
+// path segment (<parentOut>/child/<name>) and part of an OpenSandbox
+// volume name (prevjob-<name>), which must be a valid DNS-1123 label —
+// uppercase, '_', '.', or leading/trailing hyphens would produce an
+// invalid volume name and break the spawn (and, via previous-jobs, every
+// later sibling). Capped so prevjob-<name> stays within the 63-char limit.
 func validateChildName(name string) error {
 	if name == "" {
 		return errors.New("name is required")
 	}
-	if len(name) > 64 {
-		return errors.New("name must be at most 64 characters")
+	if len(name) > 40 {
+		return errors.New("name must be at most 40 characters")
 	}
-	for _, r := range name {
+	for i, r := range name {
 		switch {
-		case r >= 'a' && r <= 'z',
-			r >= 'A' && r <= 'Z',
-			r >= '0' && r <= '9',
-			r == '-', r == '_', r == '.':
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+		case r == '-' && i > 0 && i < len(name)-1:
+			// interior hyphen only — not first or last
 		default:
-			return fmt.Errorf("invalid child name %q: only [A-Za-z0-9._-] are allowed", name)
+			return fmt.Errorf(
+				"invalid child name %q: use lowercase letters, digits, and interior hyphens only", name)
 		}
-	}
-	if name == "." || name == ".." {
-		return fmt.Errorf("invalid child name %q", name)
 	}
 	return nil
 }
