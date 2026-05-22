@@ -165,6 +165,11 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 	if err != nil {
 		return agentRunResult{}, err
 	}
+	// Record this child as a sibling only after a successful create, so a
+	// failed spawn never poisons later siblings' /in/previous-jobs mounts.
+	if spec.child != nil {
+		spec.child.parent.recordSibling(spec.child.name, layout.outHost)
+	}
 	defer killSandbox(ctx, sb)
 
 	side, err := sidecar.Start(ctx, sb.ID(), sidecarImage, sidecar.ProxyConfig{
@@ -397,10 +402,6 @@ func (r *Runner) buildChildLayout(c *childSpawn, _ string) (sandboxLayout, error
 	if err := mkLayoutDirs(dirs...); err != nil {
 		return sandboxLayout{}, err
 	}
-	// Record once our output dir exists, so the next sibling (spawned
-	// after this run returns) can mount it under /in/previous-jobs —
-	// research output included.
-	c.parent.recordSibling(c.name, l.outHost)
 	return l, nil
 }
 

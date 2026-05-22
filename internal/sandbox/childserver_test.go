@@ -13,11 +13,16 @@ import (
 )
 
 func TestValidateChildName(t *testing.T) {
-	valid := []string{"a", "probe-1", "my_child.v2", "ABC"}
+	valid := []string{"a", "probe-1", "phase01", "ab-cd-3"}
 	for _, n := range valid {
 		require.NoError(t, validateChildName(n), n)
 	}
-	bad := []string{"", "..", ".", "a/b", "a b", "a:b", "../escape"}
+	// Uppercase, '_', '.', and leading/trailing hyphens are rejected:
+	// they'd make an invalid prevjob-<name> volume name.
+	bad := []string{
+		"", "..", ".", "a/b", "a b", "a:b", "../escape",
+		"my_child.v2", "ABC", "-x", "x-", "a_b", "a.b",
+	}
 	for _, n := range bad {
 		require.Error(t, validateChildName(n), n)
 	}

@@ -232,6 +232,11 @@ func (r *Runner) prepareSandbox(
 	if err != nil {
 		return nil, "", "", fmt.Errorf("create sandbox: %w", err)
 	}
+	// Record this child as a sibling only after a successful create, so a
+	// failed spawn never poisons later siblings' /in/previous-jobs mounts.
+	if opts.Child != nil {
+		opts.Child.parent.recordSibling(opts.Child.name, outputHost)
+	}
 	return sb, outputHost, jobID, nil
 }
 
@@ -284,9 +289,6 @@ func (r *Runner) childMounts(c *childSpawn) ([]opensandbox.Volume, string, error
 			MountPath: "/out",
 		},
 	)
-	// Record once our output dir exists, so the next sibling can mount
-	// it under /in/previous-jobs.
-	c.parent.recordSibling(c.name, outputHost)
 	return mounts, outputHost, nil
 }
 
