@@ -310,12 +310,16 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 	if err != nil {
 		return agentPrep{}, err
 	}
-	// Children inherit the parent's inputs (no Files/Directories of
-	// their own); describe those for the context file instead.
+	// Non-isolated children inherit the parent's inputs (no
+	// Files/Directories of their own); isolated (research) children
+	// inherit none; root runs describe their caller-supplied inputs.
 	var inputs []agents.InputInfo
-	if spec.child != nil {
-		inputs = spec.child.parent.inputs
-	} else {
+	switch {
+	case spec.child != nil:
+		if !spec.child.isolated {
+			inputs = spec.child.parent.inputs
+		}
+	default:
 		inputs, err = r.describeInputs(spec.files, spec.directories)
 		if err != nil {
 			return agentPrep{}, err
@@ -360,34 +364,42 @@ func (r *Runner) buildRootLayout(files, directories []string, _ string) (sandbox
 }
 
 // buildChildLayout creates the host dirs for an in-sandbox-spawned
-// child: it inherits the parent's /in mounts and shared /workspace,
-// nests its /out at <parentOut>/child/<name>, and keeps its own
-// (private) config + sidecar-results dirs under OutputRoot/<jobID>.
-// Reserving the name (unique per parent) is a side effect.
+// child. A normal child inherits the parent's /in mounts, shared
+// /workspace, and /in/previous-jobs; an isolated (research) child gets
+// none of those and a fresh private /workspace instead. Both nest /out
+// at <parentOut>/child/<name> and keep their own private config +
+// sidecar-results dirs under OutputRoot/<jobID>. Reserving the name
+// (unique per parent) is a side effect.
 func (r *Runner) buildChildLayout(c *childSpawn, _ string) (sandboxLayout, error) {
 	if err := c.parent.reserveName(c.name); err != nil {
 		return sandboxLayout{}, err
 	}
-	prior := c.parent.priorSiblings()
 	jobID := uuid.NewString()
 	privDir := filepath.Join(r.cfg.OutputRoot, jobID)
 	l := sandboxLayout{
-		jobID:         jobID,
-		inputVolumes:  c.parent.inputVolumes,
-		workspaceHost: c.parent.workspaceHost,
-		outHost:       filepath.Join(c.parent.outHost, "child", c.name),
-		configDir:     filepath.Join(privDir, "config"),
-		resultsHost:   filepath.Join(privDir, "sidecar-results"),
-		depth:         c.parent.depth + 1,
-		childName:     c.name,
-		previousJobs:  prior,
+		jobID:       jobID,
+		outHost:     filepath.Join(c.parent.outHost, "child", c.name),
+		configDir:   filepath.Join(privDir, "config"),
+		resultsHost: filepath.Join(privDir, "sidecar-results"),
+		depth:       c.parent.depth + 1,
+		childName:   c.name,
 	}
-	// workspaceHost already exists (shared); only create our own dirs.
-	if err := mkLayoutDirs(l.outHost, l.configDir, l.resultsHost); err != nil {
+	dirs := []string{l.outHost, l.configDir, l.resultsHost}
+	if c.isolated {
+		// Fresh private workspace; no inherited inputs or previous-jobs.
+		l.workspaceHost = filepath.Join(privDir, "workspace")
+		dirs = append(dirs, l.workspaceHost)
+	} else {
+		l.inputVolumes = c.parent.inputVolumes
+		l.workspaceHost = c.parent.workspaceHost // shared, already exists
+		l.previousJobs = c.parent.priorSiblings()
+	}
+	if err := mkLayoutDirs(dirs...); err != nil {
 		return sandboxLayout{}, err
 	}
 	// Record once our output dir exists, so the next sibling (spawned
-	// after this run returns) can mount it under /in/previous-jobs.
+	// after this run returns) can mount it under /in/previous-jobs —
+	// research output included.
 	c.parent.recordSibling(c.name, l.outHost)
 	return l, nil
 }
