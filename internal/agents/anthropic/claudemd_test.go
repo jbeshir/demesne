@@ -9,14 +9,15 @@ import (
 
 func TestGenerateContext(t *testing.T) {
 	tests := []struct {
-		name       string
-		preamble   string
-		prompt     string
-		egress     string
-		inputs     []agents.InputInfo
-		mcpServers []agents.MCPServerInfo
-		want       []string
-		notWant    []string
+		name         string
+		preamble     string
+		prompt       string
+		egress       string
+		inputs       []agents.InputInfo
+		mcpServers   []agents.MCPServerInfo
+		previousJobs []string
+		want         []string
+		notWant      []string
 	}{
 		{
 			name:    "no preamble no inputs",
@@ -98,6 +99,22 @@ func TestGenerateContext(t *testing.T) {
 			notWant: []string{"Available host tools"},
 		},
 		{
+			name:    "no previous jobs omits the note",
+			prompt:  "do the thing",
+			egress:  "none",
+			notWant: []string{"/in/previous-jobs"},
+		},
+		{
+			name:         "previous jobs note listed when present",
+			prompt:       "build on earlier work",
+			egress:       "none",
+			previousJobs: []string{"phase01", "phase02"},
+			want: []string{
+				"`/in/previous-jobs/<name>`",
+				"read earlier siblings' results",
+			},
+		},
+		{
 			name:   "host tools listed under native names",
 			prompt: "look something up",
 			egress: "none",
@@ -123,7 +140,7 @@ func TestGenerateContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := generateContext(tt.preamble, tt.prompt, tt.egress, tt.inputs, tt.mcpServers)
+			got := generateContext(tt.preamble, tt.prompt, tt.egress, tt.inputs, tt.mcpServers, tt.previousJobs)
 			for _, s := range tt.want {
 				assert.Contains(t, got, s)
 			}

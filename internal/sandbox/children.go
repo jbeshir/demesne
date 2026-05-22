@@ -3,6 +3,7 @@ package sandbox
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 
 	opensandbox "github.com/alibaba/OpenSandbox/sdks/sandbox/go"
@@ -24,6 +25,11 @@ type childContext struct {
 
 	mu        sync.Mutex
 	usedNames map[string]bool
+	// siblingOutputs records each spawned child's name -> outHost so a
+	// later sibling can mount earlier ones' /out read-only under
+	// /in/previous-jobs/<name>. Recorded once a child's output dir
+	// exists; siblings spawn sequentially within a parent turn.
+	siblingOutputs map[string]string
 }
 
 // childSpawn identifies a child being created: its name and the parent
@@ -51,6 +57,69 @@ func (c *childContext) reserveName(name string) error {
 	}
 	c.usedNames[name] = true
 	return nil
+}
+
+// priorSiblings returns a snapshot of the siblings recorded so far as a
+// name -> outHost map. The copy is safe for the caller to iterate while
+// later spawns mutate the original.
+func (c *childContext) priorSiblings() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]string, len(c.siblingOutputs))
+	for name, host := range c.siblingOutputs {
+		out[name] = host
+	}
+	return out
+}
+
+// recordSibling records a spawned child's name -> outHost so subsequent
+// siblings can mount its /out under /in/previous-jobs/<name>.
+func (c *childContext) recordSibling(name, outHost string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.siblingOutputs == nil {
+		c.siblingOutputs = map[string]string{}
+	}
+	c.siblingOutputs[name] = outHost
+}
+
+// previousJobNames returns the completed siblings' names, sorted, for
+// the context-file note. Returns nil for the empty case.
+func previousJobNames(siblings map[string]string) []string {
+	if len(siblings) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(siblings))
+	for name := range siblings {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// previousJobVolumes turns a name -> outHost map of completed siblings
+// into read-only mounts at /in/previous-jobs/<name>. Volume names are
+// prefixed so they never collide with inherited /in input volumes.
+// Returns nil for the empty case.
+func previousJobVolumes(siblings map[string]string) []opensandbox.Volume {
+	if len(siblings) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(siblings))
+	for name := range siblings {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	volumes := make([]opensandbox.Volume, 0, len(names))
+	for _, name := range names {
+		volumes = append(volumes, opensandbox.Volume{
+			Name:      "prevjob-" + name,
+			Host:      &opensandbox.Host{Path: siblings[name]},
+			MountPath: "/in/previous-jobs/" + name,
+			ReadOnly:  true,
+		})
+	}
+	return volumes
 }
 
 // validateChildName restricts names to a single safe path segment so

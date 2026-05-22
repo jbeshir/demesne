@@ -32,8 +32,9 @@ func (claudeCodeAgent) GenerateContext(
 	preamble, prompt, egress string,
 	inputs []agents.InputInfo,
 	mcpServers []agents.MCPServerInfo,
+	previousJobs []string,
 ) string {
-	return generateContext(preamble, prompt, egress, inputs, mcpServers)
+	return generateContext(preamble, prompt, egress, inputs, mcpServers, previousJobs)
 }
 
 func (claudeCodeAgent) WriteAgentConfig(configDir string, cfg agents.AgentConfig) error {
@@ -51,7 +52,14 @@ func (claudeCodeAgent) Command(prompt, model string) []string {
 		"claude",
 		"-p", prompt,
 		"--model", model,
-		"--output-format", "text",
+		// stream-json emits the full NDJSON event stream (messages, tool
+		// calls, the final result) on stdout. The runner redirects that
+		// to /out so the structured transcript streams to the host live;
+		// ResultText parses the final answer back out. --verbose is
+		// mandatory: `--print --output-format=stream-json requires
+		// --verbose`.
+		"--output-format", "stream-json",
+		"--verbose",
 		"--dangerously-skip-permissions",
 		// WriteAgentConfig always writes this file (empty mcpServers
 		// when no host servers are wired in); --strict-mcp-config makes

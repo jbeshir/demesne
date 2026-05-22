@@ -248,11 +248,13 @@ func (r *Runner) childMounts(c *childSpawn) ([]opensandbox.Volume, string, error
 	if err := c.parent.reserveName(c.name); err != nil {
 		return nil, "", err
 	}
+	prior := c.parent.priorSiblings()
 	outputHost := filepath.Join(c.parent.outHost, "child", c.name)
 	if err := os.MkdirAll(outputHost, 0o750); err != nil {
 		return nil, "", fmt.Errorf("create child output dir: %w", err)
 	}
 	mounts := append([]opensandbox.Volume{}, c.parent.inputVolumes...)
+	mounts = append(mounts, previousJobVolumes(prior)...)
 	mounts = append(mounts,
 		opensandbox.Volume{
 			Name:      "workspace",
@@ -265,6 +267,9 @@ func (r *Runner) childMounts(c *childSpawn) ([]opensandbox.Volume, string, error
 			MountPath: "/out",
 		},
 	)
+	// Record once our output dir exists, so the next sibling can mount
+	// it under /in/previous-jobs.
+	c.parent.recordSibling(c.name, outputHost)
 	return mounts, outputHost, nil
 }
 

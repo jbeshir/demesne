@@ -40,6 +40,10 @@ type sandboxLayout struct {
 	resultsHost   string
 	depth         int
 	childName     string // empty for a root run
+	// previousJobs maps each completed sibling's name to its outHost,
+	// mounted read-only at /in/previous-jobs/<name>. Empty for a root
+	// run and for the first child of a parent.
+	previousJobs map[string]string
 }
 
 // agentPrep collects everything Agent resolves before touching the
@@ -187,9 +191,15 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 	// inside the command. The context file lives in the read-only
 	// config-dir mount; symlinking it into cwd is how the CLI finds it.
 	sub := agentCwdSubdir(layout.jobID)
+	// Redirect the agent's stdout to /out/<transcript> and stderr to
+	// /out/<stderr> inside the sandbox. /out is a host bind-mount, so the
+	// structured transcript streams to the host live (partial output
+	// survives an interrupted run) without any SDK streaming handlers.
 	setup := fmt.Sprintf("mkdir -p %s && cd %s && ln -sf %s/%s ./%s",
 		sub, sub, agents.AgentConfigDir, ctxName, ctxName)
-	command := setup + " && " + shellQuote(prep.agent.Command(spec.prompt, prep.model))
+	command := fmt.Sprintf("%s && %s > /out/%s 2> /out/%s",
+		setup, shellQuote(prep.agent.Command(spec.prompt, prep.model)),
+		agentTranscriptBasename, agentStderrBasename)
 
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
 		Command: command,
@@ -206,6 +216,10 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		exitCode = *exec.ExitCode
 	}
 
+	// The agent's stdout went to the transcript file (not the SDK
+	// stream), so recover the final answer from it for the MCP result.
+	stdout := prep.agent.ResultText(readAgentTranscript(layout.outHost))
+
 	usage := readUsageSnapshot(layout.resultsHost)
 	// Copy the usage record into /out so it's surfaced alongside the
 	// agent's artefacts when the host inspects the output dir later.
@@ -218,11 +232,30 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		JobID:         layout.jobID,
 		OutputPath:    layout.outHost,
 		WorkspacePath: layout.workspaceHost,
-		Stdout:        exec.Text(),
+		Stdout:        stdout,
 		ExitCode:      exitCode,
 		CostUSD:       usage.CostUSD,
 		TotalUsageUSD: total,
 	}, nil
+}
+
+// Agent stdout/stderr are redirected to these files under /out; /out is
+// a host bind-mount so they stream to the host as the agent runs.
+const (
+	agentTranscriptBasename = "transcript.jsonl"
+	agentStderrBasename     = "stderr.log"
+)
+
+// readAgentTranscript reads the agent's redirected stdout transcript
+// from the host /out dir. Missing/unreadable yields nil so ResultText
+// returns an empty string. The path is runner-composed under
+// cfg.OutputRoot; gosec G304 false-positive.
+func readAgentTranscript(outHost string) []byte {
+	data, err := os.ReadFile(filepath.Join(outHost, agentTranscriptBasename)) //nolint:gosec
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 // agentCwdSubdir is the private per-run working directory relative to
@@ -312,6 +345,7 @@ func (r *Runner) buildChildLayout(c *childSpawn, _ string) (sandboxLayout, error
 	if err := c.parent.reserveName(c.name); err != nil {
 		return sandboxLayout{}, err
 	}
+	prior := c.parent.priorSiblings()
 	jobID := uuid.NewString()
 	privDir := filepath.Join(r.cfg.OutputRoot, jobID)
 	l := sandboxLayout{
@@ -323,9 +357,16 @@ func (r *Runner) buildChildLayout(c *childSpawn, _ string) (sandboxLayout, error
 		resultsHost:   filepath.Join(privDir, "sidecar-results"),
 		depth:         c.parent.depth + 1,
 		childName:     c.name,
+		previousJobs:  prior,
 	}
 	// workspaceHost already exists (shared); only create our own dirs.
-	return l, mkLayoutDirs(l.outHost, l.configDir, l.resultsHost)
+	if err := mkLayoutDirs(l.outHost, l.configDir, l.resultsHost); err != nil {
+		return sandboxLayout{}, err
+	}
+	// Record once our output dir exists, so the next sibling (spawned
+	// after this run returns) can mount it under /in/previous-jobs.
+	c.parent.recordSibling(c.name, l.outHost)
+	return l, nil
 }
 
 // mkLayoutDirs creates the given host directories. Paths are composed
@@ -355,7 +396,10 @@ func (r *Runner) createSandbox(
 		return nil, err
 	}
 	ctxName := prep.agent.ContextFileName()
-	body := prep.agent.GenerateContext(spec.preamble, spec.prompt, string(spec.egress), prep.inputs, mcpServers)
+	body := prep.agent.GenerateContext(
+		spec.preamble, spec.prompt, string(spec.egress), prep.inputs, mcpServers,
+		previousJobNames(layout.previousJobs),
+	)
 	contextHost := filepath.Join(layout.configDir, ctxName)
 	if err := os.WriteFile(contextHost, []byte(body), 0o600); err != nil {
 		return nil, fmt.Errorf("write %s: %w", contextHost, err)
@@ -365,6 +409,7 @@ func (r *Runner) createSandbox(
 	}
 
 	mounts := append([]opensandbox.Volume{}, layout.inputVolumes...)
+	mounts = append(mounts, previousJobVolumes(layout.previousJobs)...)
 	mounts = append(mounts, agentVolumes(layout)...)
 
 	timeoutSec := oneShotSandboxTTLSeconds
