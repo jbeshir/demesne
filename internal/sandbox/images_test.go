@@ -17,6 +17,7 @@ func TestResolveImage(t *testing.T) {
 		{name: "anaconda", want: "continuumio/anaconda3:latest"},
 		{name: "python", want: "python:3.12"},
 		{name: "node", want: "node:22"},
+		{name: "go", want: "golang:1"},
 		{name: "ubuntu", wantErr: true},
 		{name: "Anaconda", wantErr: true},
 	}

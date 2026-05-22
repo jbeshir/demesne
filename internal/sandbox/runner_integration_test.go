@@ -61,6 +61,38 @@ func TestRunner_Integration_OutputMount(t *testing.T) {
 	assert.Contains(t, string(contents), "hello")
 }
 
+// TestRunner_Integration_GoModuleProxy proves the Go image + sidecar Go
+// module proxy: a script with image=go and egress=none fetches an
+// external dependency (only reachable via the sidecar's GOPROXY) and
+// builds + runs it. If GOPROXY weren't wired through the sidecar, `go
+// mod tidy` would fail under egress=none.
+func TestRunner_Integration_GoModuleProxy(t *testing.T) {
+	runner := integrationRunner(t)
+
+	cmd := `set -e
+cd /tmp && mkdir -p probe && cd probe
+go mod init example.com/probe
+cat > main.go <<'EOF'
+package main
+import ("fmt"; "github.com/google/uuid")
+func main() { fmt.Println("uuid:", uuid.New().String()) }
+EOF
+go mod tidy
+go build -o probe .
+./probe
+echo BUILD_OK`
+
+	res, err := runner.RunScript(context.Background(), ScriptRequest{
+		Command: cmd,
+		Image:   "go",
+		Egress:  EgressNone,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q", res.Stdout)
+	assert.Contains(t, res.Stdout, "uuid:", "external dep fetched + built")
+	assert.Contains(t, res.Stdout, "BUILD_OK")
+}
+
 // TestRunner_Integration_EgressNoneBlocksAll verifies that egress="none"
 // denies both DNS lookups and raw-IP egress. The raw-IP assertion requires
 // OpenSandbox to be configured with `[egress] mode = "dns+nft"`; with the

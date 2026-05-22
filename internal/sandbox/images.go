@@ -11,6 +11,9 @@ var Images = map[string]string{
 	"node":     "node:22",
 	"python":   "python:3.12",
 	"anaconda": "continuumio/anaconda3:latest",
+	// golang:1 tracks the latest stable Go 1.x; the default bookworm
+	// variant is batteries-included (Go toolchain + git + gcc + make).
+	"go": "golang:1",
 }
 
 // ResolveImage returns the container image URI for a friendly name.
@@ -21,7 +24,7 @@ func ResolveImage(name string) (string, error) {
 	}
 	uri, ok := Images[name]
 	if !ok {
-		return "", fmt.Errorf("image %q is not in the whitelist (node, python, anaconda)", name)
+		return "", fmt.Errorf("image %q is not in the whitelist (node, python, anaconda, go)", name)
 	}
 	return uri, nil
 }

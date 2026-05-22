@@ -10,11 +10,38 @@
 package proxies
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"net/http"
 	"sort"
 	"sync"
 	"syscall"
+	"time"
 )
+
+// BypassTransport returns an http.Transport whose outbound sockets —
+// both the TLS dial and Go-resolver DNS — carry the egress-bypass
+// SO_MARK via BypassDialerControl, so a proxy can reach its upstream
+// without that upstream being in the sandbox egress allowlist. Shared
+// by every proxy that forwards over HTTP.
+func BypassTransport() *http.Transport {
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   BypassDialerControl,
+		Resolver: &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				d := &net.Dialer{Control: BypassDialerControl}
+				return d.DialContext(ctx, network, address)
+			},
+		},
+	}
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.DialContext = dialer.DialContext
+	return t
+}
 
 // BypassDialerControl is a net.Dialer.Control hook every proxy uses on
 // its outbound sockets. It applies SO_MARK so the OpenSandbox egress
