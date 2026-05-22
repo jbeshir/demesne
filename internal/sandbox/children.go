@@ -34,10 +34,13 @@ type childContext struct {
 
 // childSpawn identifies a child being created: its name and the parent
 // context it derives from. Passed through sandboxPrepOptions /
-// internalAgentSpec.
+// internalAgentSpec. isolated requests a research-style child with no
+// inherited /in inputs, no /in/previous-jobs, and a fresh private
+// /workspace (only its /out/child/<name> links back to the parent).
 type childSpawn struct {
-	name   string
-	parent *childContext
+	name     string
+	parent   *childContext
+	isolated bool
 }
 
 // reserveName validates name and records it, failing if another child

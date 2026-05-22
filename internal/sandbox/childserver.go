@@ -181,7 +181,10 @@ func (r *Runner) handleChildResearch(ctx context.Context, req mcp.CallToolReques
 		preamble:  req.GetString("preamble", ""),
 		egress:    EgressOpen,
 		tool:      "sandbox_research",
-		child:     &childSpawn{name: name, parent: parent},
+		// Research is isolated like the host tool: no inherited /in or
+		// shared /workspace, just a fresh sandbox with open egress —
+		// inputs + open egress is the exfil shape we keep off the surface.
+		child: &childSpawn{name: name, parent: parent, isolated: true},
 	}
 	res, err := r.runAgent(ctx, spec)
 	if err != nil {
