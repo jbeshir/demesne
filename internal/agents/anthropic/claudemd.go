@@ -23,6 +23,7 @@ func generateContext(
 	preamble, prompt, egress string,
 	inputs []agents.InputInfo,
 	mcpServers []agents.MCPServerInfo,
+	previousJobs []string,
 ) string {
 	var b strings.Builder
 	if preamble != "" {
@@ -63,6 +64,10 @@ func generateContext(
 		}
 	} else {
 		b.WriteString("- No caller-supplied inputs were mounted under `/in/`.\n")
+	}
+	if len(previousJobs) > 0 {
+		b.WriteString("- Completed sibling jobs' outputs are mounted read-only under " +
+			"`/in/previous-jobs/<name>` — read earlier siblings' results there.\n")
 	}
 	b.WriteString("- " + egressDescription(egress) + "\n")
 	if egress == "open" {

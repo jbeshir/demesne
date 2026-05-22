@@ -75,8 +75,15 @@ type Agent interface {
 	// "open") so the provider can tell the model exactly what's
 	// reachable. Empty egress is treated as "none". mcpServers lists the
 	// host MCP servers wired into this run (empty when none); the
-	// provider documents them in the context file.
-	GenerateContext(preamble, prompt, egress string, inputs []InputInfo, mcpServers []MCPServerInfo) string
+	// provider documents them in the context file. previousJobs names
+	// completed sibling jobs whose /out is mounted read-only under
+	// /in/previous-jobs/<name> (empty when none).
+	GenerateContext(
+		preamble, prompt, egress string,
+		inputs []InputInfo,
+		mcpServers []MCPServerInfo,
+		previousJobs []string,
+	) string
 
 	// WriteAgentConfig writes whatever CLI configuration the agent needs
 	// into configDir before the sandbox starts (e.g. an mcp.json
@@ -89,6 +96,14 @@ type Agent interface {
 	// ContextFileName is the basename of the context file under the
 	// sandbox cwd (e.g. "CLAUDE.md").
 	ContextFileName() string
+
+	// ResultText extracts the human-facing result text from the bytes
+	// the agent wrote to its transcript output (the runner redirects the
+	// agent's stdout to /out and reads it back). The runner uses this to
+	// populate the MCP result's stdout. For agents that stream structured
+	// events (e.g. claude-code's stream-json), this parses out the final
+	// answer; empty input yields an empty string.
+	ResultText(transcript []byte) string
 
 	// ResolveModel validates and normalises a caller-supplied model name
 	// against the vendor's whitelist. Empty input must resolve to a
