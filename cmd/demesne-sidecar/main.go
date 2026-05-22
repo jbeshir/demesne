@@ -19,6 +19,7 @@ import (
 	"syscall"
 
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
+	proxygo "github.com/jbeshir/demesne/internal/proxies/goproxy"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
 
@@ -28,33 +29,44 @@ func main() {
 	}
 }
 
+// starter is the common Start contract of every sidecar proxy.
+type starter interface {
+	Start(context.Context) error
+}
+
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// The Go module proxy runs in every sandbox. The Anthropic proxy
+	// and MCP tunnel are agent-mode only; their builders return nil when
+	// their config env vars are absent (a plain script/create sandbox).
+	starters := []starter{proxygo.NewProxyServer(proxygo.BindAddr())}
 
 	anth, err := buildAnthropicProxy()
 	if err != nil {
 		return err
 	}
+	if anth != nil {
+		starters = append(starters, anth)
+	}
 	mcpSrv, err := buildMCPProxy()
 	if err != nil {
 		return err
 	}
+	if mcpSrv != nil {
+		starters = append(starters, mcpSrv)
+	}
 
-	// Both proxies serve under the same shutdown context; the first
-	// non-context error wins and cancels the other.
-	errCh := make(chan error, 2)
+	// All proxies serve under one shutdown context; the first
+	// non-context error wins and cancels the rest.
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go func() {
-		log.Printf("starting proxy %q on %s", proxyanthropic.Name, proxyanthropic.BindAddr())
-		errCh <- anth.Start(runCtx)
-	}()
-	go func() {
-		errCh <- mcpSrv.Start(runCtx)
-	}()
-
-	for range 2 {
+	errCh := make(chan error, len(starters))
+	for _, s := range starters {
+		go func(s starter) { errCh <- s.Start(runCtx) }(s)
+	}
+	for range starters {
 		if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
 			cancel()
 			return err
@@ -63,12 +75,15 @@ func run() error {
 	return nil
 }
 
-// buildMCPProxy wires the MCP tunnel from its env vars. An
-// unset/empty DEMESNE_MCP_BINDINGS yields a tunnel with no listeners
-// that simply blocks until shutdown — the sandbox just has no host
-// MCP tools.
+// buildMCPProxy wires the MCP tunnel from its env vars. Returns nil
+// when DEMESNE_MCP_BINDINGS is unset/empty (no host MCP tools wired
+// in, e.g. a plain script sandbox).
 func buildMCPProxy() (*proxymcp.Server, error) {
-	bindings, err := proxymcp.ParseBindings(os.Getenv(proxymcp.BindingsEnv))
+	raw := os.Getenv(proxymcp.BindingsEnv)
+	if raw == "" {
+		return nil, nil
+	}
+	bindings, err := proxymcp.ParseBindings(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -76,15 +91,16 @@ func buildMCPProxy() (*proxymcp.Server, error) {
 }
 
 // buildAnthropicProxy wires the Anthropic proxy from its env vars.
-// Tokens and the usage path are required at the sidecar level.
+// Returns nil when the auth token is absent (not an agent run); when
+// it is present, the upstream token is required too.
 func buildAnthropicProxy() (*proxyanthropic.ProxyServer, error) {
 	auth := os.Getenv(proxyanthropic.AuthTokenEnv)
 	if auth == "" {
-		return nil, errors.New(proxyanthropic.AuthTokenEnv + " must be set on the anthropic proxy sidecar")
+		return nil, nil
 	}
 	upstream := os.Getenv(proxyanthropic.UpstreamTokenEnv)
 	if upstream == "" {
-		return nil, errors.New(proxyanthropic.UpstreamTokenEnv + " must be set on the anthropic proxy sidecar")
+		return nil, errors.New(proxyanthropic.UpstreamTokenEnv + " must be set when " + proxyanthropic.AuthTokenEnv + " is")
 	}
 	usagePath := os.Getenv(proxyanthropic.UsagePathEnv)
 	if err := proxyanthropic.EnsureUsageDir(usagePath); err != nil {

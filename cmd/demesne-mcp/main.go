@@ -12,6 +12,7 @@ import (
 	_ "github.com/jbeshir/demesne/internal/agents/anthropic"
 	"github.com/jbeshir/demesne/internal/mcpproxy"
 	_ "github.com/jbeshir/demesne/internal/proxies/anthropic"
+	_ "github.com/jbeshir/demesne/internal/proxies/goproxy"
 	_ "github.com/jbeshir/demesne/internal/proxies/mcp"
 	"github.com/jbeshir/demesne/internal/sandbox"
 	"github.com/jbeshir/demesne/internal/server"

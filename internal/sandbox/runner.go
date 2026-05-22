@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jbeshir/demesne/internal/mcpproxy"
+	"github.com/jbeshir/demesne/internal/proxies"
 )
 
 // commandTimeout caps how long a single sandbox command may run. Set
@@ -91,6 +92,16 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 		return ScriptResult{}, err
 	}
 	defer killSandbox(ctx, sb)
+
+	side, err := r.startGoproxySidecar(ctx, sb.ID())
+	if err != nil {
+		return ScriptResult{}, fmt.Errorf("start sidecar: %w", err)
+	}
+	defer func() {
+		if err := side.Stop(context.WithoutCancel(ctx)); err != nil {
+			log.Printf("sandbox_script: sidecar cleanup failed: %v", err)
+		}
+	}()
 
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
 		Command: req.Command,
@@ -181,7 +192,12 @@ func (r *Runner) prepareSandbox(
 		imageURI = resolved
 	}
 
-	policy, err := BuildNetworkPolicy(opts.Egress, opts.ExtraEgressAllow)
+	// Every sandbox gets the registered proxies' egress hosts (e.g. the
+	// Go checksum DB) on top of any caller-supplied extras, matching the
+	// agent path. Go module downloads still go through the sidecar proxy
+	// (SO_MARK), not this allowlist.
+	extraAllow := append(append([]string{}, opts.ExtraEgressAllow...), proxies.EgressHosts()...)
+	policy, err := BuildNetworkPolicy(opts.Egress, extraAllow)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -207,6 +223,7 @@ func (r *Runner) prepareSandbox(
 		Volumes:        mounts,
 		NetworkPolicy:  policy,
 		TimeoutSeconds: &timeoutSec,
+		Env:            sandboxEnv(),
 		Metadata: map[string]string{
 			metadataDemesneJob:  jobID,
 			metadataDemesneTool: opts.Tool,

@@ -101,7 +101,7 @@ type ProxyServer struct {
 // tracker accumulates usage (cost reported indicatively); pass nil to
 // disable tracking.
 func NewProxyServer(bindAddr, agentToken, upstreamToken string, tracker *Tracker) *ProxyServer {
-	return newProxyServer(bindAddr, APIBase, bypassTransport(), agentToken, upstreamToken, tracker)
+	return newProxyServer(bindAddr, APIBase, proxies.BypassTransport(), agentToken, upstreamToken, tracker)
 }
 
 // NewProxyServerTo is the test-only constructor: forwards to the given
@@ -190,27 +190,6 @@ func deny(w http.ResponseWriter, r *http.Request, code int, reason string) {
 	log.Printf("anthropic proxy: deny method=%q path=%q reason=%s code=%d",
 		r.Method, r.URL.Path, reason, code)
 	http.Error(w, reason, code)
-}
-
-// bypassTransport returns an http.Transport whose outbound sockets
-// (both TLS and DNS) carry the shared egress-bypass SO_MARK. See
-// internal/proxies/sockmark_linux.go for the rationale.
-func bypassTransport() *http.Transport {
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-		Control:   proxies.BypassDialerControl,
-		Resolver: &net.Resolver{
-			PreferGo: true,
-			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				d := &net.Dialer{Control: proxies.BypassDialerControl}
-				return d.DialContext(ctx, network, address)
-			},
-		},
-	}
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.DialContext = dialer.DialContext
-	return t
 }
 
 // Start binds and serves until ctx is cancelled, then gracefully

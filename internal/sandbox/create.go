@@ -1,6 +1,9 @@
 package sandbox
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Create provisions a persistent sandbox and returns its handle. The caller
 // is responsible for eventually calling Destroy — no defer Kill here.
@@ -23,6 +26,14 @@ func (r *Runner) create(ctx context.Context, req CreateRequest, child *childSpaw
 	})
 	if err != nil {
 		return CreateResult{}, err
+	}
+	// Persistent sandboxes keep their sidecar (the Go module proxy) for
+	// the life of the sandbox; it's reaped via the shared egress-sidecar
+	// PID namespace when the sandbox is destroyed. No host-side handle to
+	// track. If it can't start, tear down the orphan sandbox.
+	if _, err := r.startGoproxySidecar(ctx, sb.ID()); err != nil {
+		killSandbox(ctx, sb)
+		return CreateResult{}, fmt.Errorf("start sidecar: %w", err)
 	}
 	return CreateResult{
 		SandboxID:  sb.ID(),

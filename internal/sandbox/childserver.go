@@ -267,7 +267,7 @@ const childNameDescription = "Unique name for this child within the current sand
 	"Its output appears at /out/child/<name> (visible to you and your ancestors). " +
 	"Allowed characters: letters, digits, '.', '_', '-'."
 
-const childImageDescription = "Container image: 'node', 'python', or 'anaconda' (default)."
+const childImageDescription = "Container image: 'node', 'python', 'go', or 'anaconda' (default)."
 
 const childEgressDescription = "Outbound policy: 'package-managers' (default) or 'none'."
 

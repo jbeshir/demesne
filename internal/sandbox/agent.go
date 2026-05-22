@@ -18,6 +18,7 @@ import (
 
 	"github.com/jbeshir/demesne/internal/agents"
 	"github.com/jbeshir/demesne/internal/proxies"
+	proxygo "github.com/jbeshir/demesne/internal/proxies/goproxy"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 	"github.com/jbeshir/demesne/internal/sidecar"
 )
@@ -266,6 +267,28 @@ func agentCwdSubdir(jobID string) string {
 	return ".demesne/" + jobID
 }
 
+// sandboxEnv is the environment injected into every sandbox at create
+// time: GOPROXY points at the sidecar's Go module proxy so `go` fetches
+// modules via 127.0.0.1 (the SO_MARK bypass reaches the real proxy)
+// even under egress=none. The /sumdb/ path is proxied too, so checksum
+// verification works unchanged.
+func sandboxEnv() map[string]string {
+	return map[string]string{"GOPROXY": proxygo.ProxyURL()}
+}
+
+// startGoproxySidecar builds (if needed) and starts a sidecar carrying
+// only the Go module proxy — used by the script and persistent-sandbox
+// paths so every sandbox can fetch Go modules via 127.0.0.1. Agent runs
+// start their own sidecar (with the Anthropic proxy + MCP tunnel) which
+// runs the Go proxy too.
+func (r *Runner) startGoproxySidecar(ctx context.Context, sandboxID string) (*sidecar.Handle, error) {
+	img, err := sidecar.EnsureImage(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("build sidecar image: %w", err)
+	}
+	return sidecar.Start(ctx, sandboxID, img, sidecar.ProxyConfig{})
+}
+
 // prepareAgent validates the request, looks up the provider, resolves
 // the model, describes inputs, and ensures the provider's image is
 // built. No sandbox-runtime calls happen here.
@@ -418,6 +441,7 @@ func (r *Runner) createSandbox(
 		Volumes:        mounts,
 		NetworkPolicy:  policy,
 		TimeoutSeconds: &timeoutSec,
+		Env:            sandboxEnv(),
 		Metadata: map[string]string{
 			metadataDemesneJob:  layout.jobID,
 			metadataDemesneTool: spec.tool,

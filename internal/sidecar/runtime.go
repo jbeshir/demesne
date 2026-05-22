@@ -87,14 +87,12 @@ type Handle struct {
 // OpenSandbox-issued UUID. cfg carries the per-sandbox auth values
 // and host results path the agent-vendor proxy needs.
 func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*Handle, error) {
-	if cfg.AgentToken == "" {
-		return nil, errors.New("sidecar.Start: AgentToken is required")
-	}
-	if cfg.UpstreamToken == "" {
-		return nil, errors.New("sidecar.Start: UpstreamToken is required")
-	}
-	if cfg.ResultsHost == "" {
-		return nil, errors.New("sidecar.Start: ResultsHost is required")
+	// The Go module proxy runs in every sidecar with no config. The
+	// Anthropic proxy is agent-mode only: its three values arrive
+	// together or not at all.
+	agentMode := cfg.AgentToken != ""
+	if agentMode && (cfg.UpstreamToken == "" || cfg.ResultsHost == "") {
+		return nil, errors.New("sidecar.Start: UpstreamToken and ResultsHost are required when AgentToken is set")
 	}
 	egressID, err := findEgressSidecar(ctx, sandboxID)
 	if err != nil {
@@ -115,10 +113,16 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 		// which is how they bypass the egress sidecar's daddr filter
 		// without their upstream hosts being in the allowlist.
 		"--cap-add", "NET_ADMIN",
-		"-v", cfg.ResultsHost + ":" + SidecarResultsDir,
-		"-e", proxyanthropic.AuthTokenEnv + "=" + cfg.AgentToken,
-		"-e", proxyanthropic.UpstreamTokenEnv + "=" + cfg.UpstreamToken,
-		"-e", proxyanthropic.UsagePathEnv + "=" + SidecarUsageFile,
+	}
+	// Anthropic proxy env + results mount only for agent runs; the
+	// sidecar binary skips that proxy when these are absent.
+	if agentMode {
+		args = append(args,
+			"-v", cfg.ResultsHost+":"+SidecarResultsDir,
+			"-e", proxyanthropic.AuthTokenEnv+"="+cfg.AgentToken,
+			"-e", proxyanthropic.UpstreamTokenEnv+"="+cfg.UpstreamToken,
+			"-e", proxyanthropic.UsagePathEnv+"="+SidecarUsageFile,
+		)
 	}
 	// The MCP tunnel is optional. It reaches the host aggregator over a
 	// bind-mounted unix socket — a filesystem hop that works under

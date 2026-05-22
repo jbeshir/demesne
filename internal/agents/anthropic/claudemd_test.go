@@ -99,10 +99,23 @@ func TestGenerateContext(t *testing.T) {
 			notWant: []string{"Available host tools"},
 		},
 		{
-			name:    "no previous jobs omits the note",
-			prompt:  "do the thing",
-			egress:  "none",
-			notWant: []string{"/in/previous-jobs"},
+			name:   "no previous jobs omits the note",
+			prompt: "do the thing",
+			egress: "none",
+			// The orchestration section always mentions /in/previous-jobs,
+			// so key on the conditional note's distinctive phrasing.
+			notWant: []string{"read earlier siblings' results"},
+		},
+		{
+			name:   "orchestration guidance always present",
+			prompt: "do the thing",
+			egress: "none",
+			want: []string{
+				"## Orchestrating child agents",
+				"Validate with real builds/tests",
+				"including `.git`",
+				"Plan and enforce the handoff",
+			},
 		},
 		{
 			name:         "previous jobs note listed when present",

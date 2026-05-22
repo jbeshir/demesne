@@ -43,12 +43,6 @@ func generateContext(
 	b.WriteString("- `/out` is writable but **output only** — write your final " +
 		"artefacts (results, reports, generated files) here. The caller reads " +
 		"this back from the host after you exit.\n")
-	if hasDemesneServer(mcpServers) {
-		b.WriteString("- You can spawn **child sandboxes** via the `demesne` MCP server's " +
-			"tools (e.g. `sandbox_agent`, `sandbox_research`, `sandbox_script`). " +
-			"Children inherit your `/in` and shared `/workspace`; each child's " +
-			"output lands at `/out/child/<name>`, which you can read back.\n")
-	}
 	if len(inputs) > 0 {
 		b.WriteString("- Read-only inputs under `/in/`:\n")
 		for _, in := range inputs {
@@ -77,6 +71,7 @@ func generateContext(
 	}
 
 	writeHostTools(&b, mcpServers)
+	writeOrchestration(&b)
 
 	b.WriteString("\n## Task\n\n")
 	b.WriteString(strings.TrimSpace(prompt))
@@ -106,15 +101,30 @@ func writeHostTools(b *strings.Builder, mcpServers []agents.MCPServerInfo) {
 	}
 }
 
-// hasDemesneServer reports whether the demesne self-server (the
-// child-spawning tools) is among the wired-in MCP servers.
-func hasDemesneServer(mcpServers []agents.MCPServerInfo) bool {
-	for _, s := range mcpServers {
-		if s.Name == "demesne" {
-			return true
-		}
-	}
-	return false
+// writeOrchestration appends guidance for agents that spawn child
+// sandboxes via the demesne MCP server. Every agent run has that
+// server wired in, so this is always emitted.
+func writeOrchestration(b *strings.Builder) {
+	b.WriteString("\n## Orchestrating child agents\n\n")
+	b.WriteString("You can spawn child sandboxes via the `demesne` MCP server " +
+		"(`sandbox_agent`, `sandbox_research`, `sandbox_script`, and " +
+		"`sandbox_create`/`sandbox_exec`/`sandbox_destroy`). Children inherit your " +
+		"`/in` and share your `/workspace`; each child's output is at " +
+		"`/out/child/<name>`, and completed siblings' outputs are mounted read-only " +
+		"at `/in/previous-jobs/<name>`.\n\n")
+	b.WriteString("- **Validate with real builds/tests.** To compile, test, or lint " +
+		"code, spawn a `sandbox_script` child — or a persistent " +
+		"`sandbox_create`+`sandbox_exec` sandbox for repeated runs — with the " +
+		"appropriate image (`node`, `python`, `go`, or `anaconda`), run it against " +
+		"the shared `/workspace`, read the result, and iterate. Go modules resolve " +
+		"automatically via `GOPROXY` (no egress change needed); for npm/PyPI/conda " +
+		"set `egress: package-managers`.\n")
+	b.WriteString("- **Preserve a baseline for review.** If you copy a repo from " +
+		"`/in` into `/workspace` to edit it, copy it whole — including `.git` — so " +
+		"review phases can `git diff` your changes against the original.\n")
+	b.WriteString("- **Plan and enforce the handoff.** Before implementing in phases, " +
+		"decide what each phase produces, where, and in what format — appropriate to " +
+		"your task — and follow that contract strictly across every phase.\n")
 }
 
 // egressDescription returns the human-readable sentence describing
