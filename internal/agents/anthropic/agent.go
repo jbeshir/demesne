@@ -38,7 +38,10 @@ func (claudeCodeAgent) GenerateContext(
 }
 
 func (claudeCodeAgent) WriteAgentConfig(configDir string, cfg agents.AgentConfig) error {
-	return writeMCPConfig(configDir, cfg.MCPServers)
+	if err := writeMCPConfig(configDir, cfg.MCPServers); err != nil {
+		return err
+	}
+	return writeRetryScript(configDir)
 }
 
 func (claudeCodeAgent) ContextFileName() string { return "CLAUDE.md" }
@@ -49,7 +52,10 @@ func (claudeCodeAgent) ResolveModel(name string) (string, error) {
 
 func (claudeCodeAgent) Command(prompt, model string) []string {
 	return []string{
-		"claude",
+		// sh retryScriptPath claude: the wrapper relaunches claude on quota
+		// exhaustion; everything after "claude" is the argv it runs (and
+		// re-runs with --resume on a rate-limit reset). $1=claude.
+		"sh", retryScriptPath, "claude",
 		"-p", prompt,
 		"--model", model,
 		// stream-json emits the full NDJSON event stream (messages, tool
