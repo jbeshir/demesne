@@ -83,10 +83,9 @@ type ModelReport struct {
 	CostUSD                  float64 `json:"cost_usd"`
 }
 
-// Snapshot returns the current state. Safe for callers outside the
-// tracker (e.g. the host runner reading after sandbox exit if it
-// holds a reference — production reads come from usage.json).
-func (t *Tracker) Snapshot() Snapshot {
+// snapshot returns the current state. Called only by in-package tests;
+// production reads come from usage.json written by persistLocked.
+func (t *Tracker) snapshot() Snapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.snapshotLocked()
@@ -148,6 +147,8 @@ func EnsureUsageDir(usagePath string) error {
 	return os.MkdirAll(dir, 0o750)
 }
 
+const contentTypeEventStream = "text/event-stream"
+
 // wrapResponseBody returns a ReadCloser that tees the upstream body
 // through a usage parser. The parser folds any usage it finds into the
 // tracker when the body is closed.
@@ -156,7 +157,7 @@ func EnsureUsageDir(usagePath string) error {
 // parsed line-by-line as SSE; non-streaming responses are buffered and
 // parsed as a single JSON document at close.
 func wrapResponseBody(upstream io.ReadCloser, contentType string, t *Tracker) io.ReadCloser {
-	if strings.HasPrefix(contentType, "text/event-stream") {
+	if strings.HasPrefix(contentType, contentTypeEventStream) {
 		return &sseInterceptor{
 			upstream: upstream,
 			tracker:  t,

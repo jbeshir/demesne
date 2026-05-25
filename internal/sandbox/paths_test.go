@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const errNotWithin = "not within"
+
 func TestValidateMountPath(t *testing.T) {
 	root := t.TempDir()
 	allowed := filepath.Join(root, "allowed")
@@ -36,12 +38,12 @@ func TestValidateMountPath(t *testing.T) {
 		{name: "exact match", host: allowed},
 		{name: "nested file", host: nestedFile},
 		{name: "symlink within allowed", host: innerSymlink},
-		{name: "symlink escapes allowed", host: escapeSymlink, wantErr: "not within"},
-		{name: "outside allowed", host: outside, wantErr: "not within"},
-		{name: "sibling-prefix not allowed", host: sibling, wantErr: "not within"},
+		{name: "symlink escapes allowed", host: escapeSymlink, wantErr: errNotWithin},
+		{name: "outside allowed", host: outside, wantErr: errNotWithin},
+		{name: "sibling-prefix not allowed", host: sibling, wantErr: errNotWithin},
 		{name: "relative path rejected", host: "relative/path", wantErr: "absolute"},
 		{name: "empty rejected", host: "", wantErr: "empty"},
-		{name: "dotdot rejected", host: filepath.Join(allowed, "..", "outside"), wantErr: "not within"},
+		{name: "dotdot rejected", host: filepath.Join(allowed, "..", "outside"), wantErr: errNotWithin},
 		{name: "missing path rejected", host: filepath.Join(allowed, "does-not-exist"), wantErr: "resolve"},
 	}
 

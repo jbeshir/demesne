@@ -13,8 +13,8 @@ func TestResolveImage(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "", want: "continuumio/anaconda3:latest"},
-		{name: "anaconda", want: "continuumio/anaconda3:latest"},
+		{name: "", want: imageAnaconda},
+		{name: "anaconda", want: imageAnaconda},
 		{name: "python", want: "python:3.12"},
 		{name: "node", want: "node:22"},
 		{name: "go", want: "golang:1"},

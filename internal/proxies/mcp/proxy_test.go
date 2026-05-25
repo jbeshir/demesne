@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testWorkflowyPath = "/workflowy/mcp"
+
 func postJSON(t *testing.T, url, body string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(body))
@@ -32,7 +34,7 @@ func TestParseBindings(t *testing.T) {
 		require.Len(t, got, 1)
 		assert.Equal(t, "workflowy", got[0].Name)
 		assert.Equal(t, 8089, got[0].ListenPort)
-		assert.Equal(t, "/workflowy/mcp", got[0].Path)
+		assert.Equal(t, testWorkflowyPath, got[0].Path)
 	})
 	t.Run("empty string yields nil", func(t *testing.T) {
 		got, err := ParseBindings("")
@@ -90,7 +92,7 @@ func TestServer_ForwardsToUpstream(t *testing.T) {
 		_, _ = w.Write([]byte("pong"))
 	}))
 
-	port, cancel := startTunnel(t, sock, "/workflowy/mcp")
+	port, cancel := startTunnel(t, sock, testWorkflowyPath)
 	defer cancel()
 
 	resp := postJSON(t, localURL(port), `{"jsonrpc":"2.0"}`)
@@ -99,7 +101,7 @@ func TestServer_ForwardsToUpstream(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "pong", string(body))
-	assert.Equal(t, "/workflowy/mcp", gotPath)
+	assert.Equal(t, testWorkflowyPath, gotPath)
 	assert.Equal(t, http.MethodPost, gotMethod)
 	assert.JSONEq(t, `{"jsonrpc":"2.0"}`, gotBody)
 }

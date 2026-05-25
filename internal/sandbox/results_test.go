@@ -23,8 +23,8 @@ func writeChildResults(t *testing.T, outHost, name string, total float64) {
 
 func TestWriteResults_RollsUpChildren(t *testing.T) {
 	out := t.TempDir()
-	writeChildResults(t, out, "alpha", 0.20)
-	writeChildResults(t, out, "beta", 0.05)
+	writeChildResults(t, out, testChildAlpha, 0.20)
+	writeChildResults(t, out, testChildBeta, 0.05)
 
 	layout := sandboxLayout{jobID: "job-1", outHost: out}
 	total := writeResults(layout, "sandbox_agent", 0, 0.10)
@@ -37,7 +37,7 @@ func TestWriteResults_RollsUpChildren(t *testing.T) {
 	assert.Equal(t, "sandbox_agent", r.Tool)
 	assert.InDelta(t, 0.10, r.OwnUsageUSD, 1e-9)
 	assert.InDelta(t, 0.35, r.TotalUsageUSD, 1e-9)
-	assert.Equal(t, []string{"alpha", "beta"}, r.Children)
+	assert.Equal(t, []string{testChildAlpha, testChildBeta}, r.Children)
 }
 
 func TestWriteResults_NoChildren(t *testing.T) {

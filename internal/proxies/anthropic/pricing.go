@@ -15,6 +15,8 @@ type Pricing struct {
 	CacheReadPerMTok  float64
 }
 
+const claudeSonnet46 = "claude-sonnet-4-6"
+
 // modelPricing is the per-family pricing table. Lookups are by longest
 // prefix match against the model ID Anthropic returns in API responses,
 // so dated IDs like "claude-opus-4-7-20251201" resolve to the
@@ -35,7 +37,7 @@ var modelPricing = map[string]Pricing{
 		CacheWritePerMTok: 18.75,
 		CacheReadPerMTok:  1.5,
 	},
-	"claude-sonnet-4-6": {
+	claudeSonnet46: {
 		InputPerMTok:      3.0,
 		OutputPerMTok:     15.0,
 		CacheWritePerMTok: 3.75,

@@ -16,8 +16,9 @@ import (
 const imageRepo = "demesne-claude-code"
 
 var (
-	imageBuildMu sync.Mutex
-	imageTagOnce string
+	imageBuildMu  sync.Mutex
+	imageTagOnce  sync.Once
+	imageTagValue string
 )
 
 // ensureImage builds the claude-code image if it isn't already present in
@@ -56,12 +57,11 @@ func ensureImage(ctx context.Context) (string, error) {
 }
 
 func imageTag() string {
-	if imageTagOnce != "" {
-		return imageTagOnce
-	}
-	sum := sha256.Sum256(dockerfileBytes)
-	imageTagOnce = hex.EncodeToString(sum[:])[:12]
-	return imageTagOnce
+	imageTagOnce.Do(func() {
+		sum := sha256.Sum256(dockerfileBytes)
+		imageTagValue = hex.EncodeToString(sum[:])[:12]
+	})
+	return imageTagValue
 }
 
 func imagePresent(ctx context.Context, ref string) bool {

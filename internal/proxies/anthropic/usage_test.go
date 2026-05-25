@@ -14,10 +14,10 @@ import (
 
 func TestTracker_AddAccumulates(t *testing.T) {
 	tr := NewTracker("")
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200})
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 50, OutputTokens: 25})
-	snap := tr.Snapshot()
-	model := snap.PerModel["claude-sonnet-4-6"]
+	tr.Add(claudeSonnet46, TokenCounts{InputTokens: 100, OutputTokens: 200})
+	tr.Add(claudeSonnet46, TokenCounts{InputTokens: 50, OutputTokens: 25})
+	snap := tr.snapshot()
+	model := snap.PerModel[claudeSonnet46]
 	assert.Equal(t, int64(150), model.InputTokens)
 	assert.Equal(t, int64(225), model.OutputTokens)
 	// 150 input @ $3/MTok + 225 output @ $15/MTok = 0.00045 + 0.003375 = 0.003825
@@ -28,13 +28,13 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "usage.json")
 	tr := NewTracker(path)
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200})
+	tr.Add(claudeSonnet46, TokenCounts{InputTokens: 100, OutputTokens: 200})
 
 	data, err := os.ReadFile(path) //nolint:gosec // path is under t.TempDir()
 	require.NoError(t, err)
 	var snap Snapshot
 	require.NoError(t, json.Unmarshal(data, &snap))
-	assert.Equal(t, int64(100), snap.PerModel["claude-sonnet-4-6"].InputTokens)
+	assert.Equal(t, int64(100), snap.PerModel[claudeSonnet46].InputTokens)
 
 	// .tmp must not survive the rename.
 	_, err = os.Stat(path + ".tmp")
@@ -59,12 +59,12 @@ func TestSSEInterceptor_AccumulatesFromStartAndDelta(t *testing.T) {
 
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, "text/event-stream", tr)
+	w := wrapResponseBody(r, contentTypeEventStream, tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	m := tr.Snapshot().PerModel["claude-sonnet-4-6-20260101"]
+	m := tr.snapshot().PerModel["claude-sonnet-4-6-20260101"]
 	assert.Equal(t, int64(42), m.InputTokens)
 	assert.Equal(t, int64(99), m.OutputTokens, "message_delta output supersedes message_start")
 	assert.Equal(t, int64(7), m.CacheCreationInputTokens)
@@ -82,17 +82,17 @@ data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}
 	// Feed one byte at a time to exercise the buffer.
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: byteByByteReader(body)}
-	w := wrapResponseBody(r, "text/event-stream", tr)
+	w := wrapResponseBody(r, contentTypeEventStream, tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
-	m := tr.Snapshot().PerModel["claude-haiku-4-5"]
+	m := tr.snapshot().PerModel["claude-haiku-4-5"]
 	assert.Equal(t, int64(10), m.InputTokens)
 	assert.Equal(t, int64(5), m.OutputTokens)
 }
 
 func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
-	body := `{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":13,"output_tokens":7}}`
+	body := `{"id":"msg_1","type":"message","role":"assistant","model":"` + claudeSonnet46 + `","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":13,"output_tokens":7}}`
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
 	w := wrapResponseBody(r, "application/json", tr)
@@ -100,7 +100,7 @@ func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 	assert.Equal(t, body, string(out), "non-streaming body must pass through unchanged")
-	m := tr.Snapshot().PerModel["claude-sonnet-4-6"]
+	m := tr.snapshot().PerModel[claudeSonnet46]
 	assert.Equal(t, int64(13), m.InputTokens)
 	assert.Equal(t, int64(7), m.OutputTokens)
 }
@@ -109,11 +109,11 @@ func TestSSEInterceptor_IgnoresGarbage(t *testing.T) {
 	body := "data: not-json-at-all\n\nfoo: bar\n\ndata: {\"type\":\"unknown\"}\n\n"
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, "text/event-stream", tr)
+	w := wrapResponseBody(r, contentTypeEventStream, tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
-	assert.InDelta(t, 0.0, tr.Snapshot().CostUSD, 1e-9)
+	assert.InDelta(t, 0.0, tr.snapshot().CostUSD, 1e-9)
 }
 
 type nopReadCloser struct{ io.Reader }

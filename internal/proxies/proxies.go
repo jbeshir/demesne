@@ -59,11 +59,10 @@ func BypassDialerControl(_, _ string, c syscall.RawConn) error {
 
 // Proxy is the registry-side contract every demesne proxy implements.
 // It's discovery metadata only — the sandbox runner uses EgressHosts to
-// build the per-sandbox egress allowlist, and the sidecar binary uses
-// ListenAddr (via the concrete package) for logging. Construction and
-// serving of each proxy live in the sidecar's main, which reads
-// per-proxy config from env vars and invokes each package's exported
-// constructor directly.
+// build the per-sandbox egress allowlist. Construction and serving of
+// each proxy live in the sidecar's main, which reads per-proxy config
+// from env vars and invokes each package's exported constructor
+// directly; logging uses the bound listener's Addr().
 type Proxy interface {
 	// Name is a short identifier used in logs and metrics ("anthropic",
 	// "mcp", "go-mod"). Must be unique within the registry.
@@ -74,10 +73,6 @@ type Proxy interface {
 	// itself only talks to 127.0.0.1, so it never appears in egress
 	// traffic directly.
 	EgressHosts() []string
-
-	// ListenAddr is the 127.0.0.1:<port> the proxy binds inside the
-	// sidecar. The agent reaches the proxy at this address.
-	ListenAddr() string
 }
 
 var (

@@ -8,6 +8,24 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+const (
+	paramSandboxID    = "sandbox_id"
+	paramCommand      = "command"
+	paramImage        = "image"
+	paramEgress       = "egress"
+	paramFiles        = "files"
+	paramDirectories  = "directories"
+	paramPrompt       = "prompt"
+	paramAgent        = "agent"
+	paramModel        = "model"
+	paramPreamble     = "preamble"
+	paramSrc          = "src"
+	paramDst          = "dst"
+	typeKey           = "type"
+	typeString        = "string"
+	sandboxHandleDesc = "Sandbox handle returned by sandbox_create."
+)
+
 // Runner is the dependency the server uses to drive sandbox lifecycle
 // operations. Defined here as an interface so tests can inject a fake.
 type Runner interface {
@@ -49,46 +67,46 @@ func (s *Server) Run() error {
 func (s *Server) registerTools() {
 	s.mcpServer.AddTool(mcp.NewTool("sandbox_script",
 		mcp.WithDescription(scriptToolDescription),
-		mcp.WithString("command",
+		mcp.WithString(paramCommand,
 			mcp.Required(),
 			mcp.Description(
 				"Shell command to run inside the sandbox. "+
 					"Executed with /bin/sh -c. Working directory is /out.",
 			),
 		),
-		mcp.WithString("image", mcp.Description(imageParamDescription)),
-		mcp.WithString("egress", mcp.Description(egressParamDescription)),
-		mcp.WithArray("files",
+		mcp.WithString(paramImage, mcp.Description(imageParamDescription)),
+		mcp.WithString(paramEgress, mcp.Description(egressParamDescription)),
+		mcp.WithArray(paramFiles,
 			mcp.Description(filesParamDescription),
-			mcp.Items(map[string]any{"type": "string"}),
+			mcp.Items(map[string]any{typeKey: typeString}),
 		),
-		mcp.WithArray("directories",
+		mcp.WithArray(paramDirectories,
 			mcp.Description(directoriesParamDescription),
-			mcp.Items(map[string]any{"type": "string"}),
+			mcp.Items(map[string]any{typeKey: typeString}),
 		),
 	), s.handleSandboxScript)
 
 	s.mcpServer.AddTool(mcp.NewTool("sandbox_create",
 		mcp.WithDescription(createToolDescription),
-		mcp.WithString("image", mcp.Description(imageParamDescription)),
-		mcp.WithString("egress", mcp.Description(egressParamDescription)),
-		mcp.WithArray("files",
+		mcp.WithString(paramImage, mcp.Description(imageParamDescription)),
+		mcp.WithString(paramEgress, mcp.Description(egressParamDescription)),
+		mcp.WithArray(paramFiles,
 			mcp.Description(filesParamDescription),
-			mcp.Items(map[string]any{"type": "string"}),
+			mcp.Items(map[string]any{typeKey: typeString}),
 		),
-		mcp.WithArray("directories",
+		mcp.WithArray(paramDirectories,
 			mcp.Description(directoriesParamDescription),
-			mcp.Items(map[string]any{"type": "string"}),
+			mcp.Items(map[string]any{typeKey: typeString}),
 		),
 	), s.handleSandboxCreate)
 
 	s.mcpServer.AddTool(mcp.NewTool("sandbox_exec",
 		mcp.WithDescription(execToolDescription),
-		mcp.WithString("sandbox_id",
+		mcp.WithString(paramSandboxID,
 			mcp.Required(),
-			mcp.Description("Sandbox handle returned by sandbox_create."),
+			mcp.Description(sandboxHandleDesc),
 		),
-		mcp.WithString("command",
+		mcp.WithString(paramCommand,
 			mcp.Required(),
 			mcp.Description(
 				"Shell command to run inside the sandbox. "+
@@ -99,18 +117,18 @@ func (s *Server) registerTools() {
 
 	s.mcpServer.AddTool(mcp.NewTool("sandbox_upload",
 		mcp.WithDescription(uploadToolDescription),
-		mcp.WithString("sandbox_id",
+		mcp.WithString(paramSandboxID,
 			mcp.Required(),
-			mcp.Description("Sandbox handle returned by sandbox_create."),
+			mcp.Description(sandboxHandleDesc),
 		),
-		mcp.WithString("src",
+		mcp.WithString(paramSrc,
 			mcp.Required(),
 			mcp.Description(
 				"Host file path to upload. Must be absolute and inside "+
 					"DEMESNE_ALLOWED_PATHS. Symlinks are resolved before the check.",
 			),
 		),
-		mcp.WithString("dst",
+		mcp.WithString(paramDst,
 			mcp.Required(),
 			mcp.Description(
 				"Destination path inside the sandbox. Must be absolute. "+
@@ -121,11 +139,11 @@ func (s *Server) registerTools() {
 
 	s.mcpServer.AddTool(mcp.NewTool("sandbox_download",
 		mcp.WithDescription(downloadToolDescription),
-		mcp.WithString("sandbox_id",
+		mcp.WithString(paramSandboxID,
 			mcp.Required(),
-			mcp.Description("Sandbox handle returned by sandbox_create."),
+			mcp.Description(sandboxHandleDesc),
 		),
-		mcp.WithString("src",
+		mcp.WithString(paramSrc,
 			mcp.Required(),
 			mcp.Description("Absolute path inside the sandbox to download."),
 		),
@@ -133,38 +151,38 @@ func (s *Server) registerTools() {
 
 	s.mcpServer.AddTool(mcp.NewTool("sandbox_destroy",
 		mcp.WithDescription(destroyToolDescription),
-		mcp.WithString("sandbox_id",
+		mcp.WithString(paramSandboxID,
 			mcp.Required(),
-			mcp.Description("Sandbox handle returned by sandbox_create."),
+			mcp.Description(sandboxHandleDesc),
 		),
 	), s.handleSandboxDestroy)
 
 	s.mcpServer.AddTool(mcp.NewTool("sandbox_agent",
 		mcp.WithDescription(agentToolDescription),
-		mcp.WithString("prompt",
+		mcp.WithString(paramPrompt,
 			mcp.Required(),
 			mcp.Description("Task for the agent. Free-form text."),
 		),
-		mcp.WithString("agent",
+		mcp.WithString(paramAgent,
 			mcp.Description(
 				"Agent provider. Defaults to 'claude-code' (the only registered "+
 					"provider in this build).",
 			),
 		),
-		mcp.WithString("model",
+		mcp.WithString(paramModel,
 			mcp.Description(
 				"Model for the agent. One of 'opus', 'sonnet' (default), or "+
 					"'haiku'. Specific to the claude-code provider.",
 			),
 		),
-		mcp.WithString("preamble",
+		mcp.WithString(paramPreamble,
 			mcp.Description(
 				"Optional prose prepended verbatim to the generated agent "+
 					"context file (e.g. CLAUDE.md for claude-code) before the "+
 					"auto-generated environment section.",
 			),
 		),
-		mcp.WithString("egress",
+		mcp.WithString(paramEgress,
 			mcp.Description(
 				"Additional outbound network policy on top of the agent's "+
 					"backend proxy (which is always reachable). 'none' (default) "+
@@ -174,35 +192,35 @@ func (s *Server) registerTools() {
 					"input mounts).",
 			),
 		),
-		mcp.WithArray("files",
+		mcp.WithArray(paramFiles,
 			mcp.Description(filesParamDescription),
-			mcp.Items(map[string]any{"type": "string"}),
+			mcp.Items(map[string]any{typeKey: typeString}),
 		),
-		mcp.WithArray("directories",
+		mcp.WithArray(paramDirectories,
 			mcp.Description(directoriesParamDescription),
-			mcp.Items(map[string]any{"type": "string"}),
+			mcp.Items(map[string]any{typeKey: typeString}),
 		),
 	), s.handleSandboxAgent)
 
 	s.mcpServer.AddTool(mcp.NewTool("sandbox_research",
 		mcp.WithDescription(researchToolDescription),
-		mcp.WithString("prompt",
+		mcp.WithString(paramPrompt,
 			mcp.Required(),
 			mcp.Description("Research task for the agent. Free-form text."),
 		),
-		mcp.WithString("agent",
+		mcp.WithString(paramAgent,
 			mcp.Description(
 				"Agent provider. Defaults to 'claude-code' (the only registered "+
 					"provider in this build).",
 			),
 		),
-		mcp.WithString("model",
+		mcp.WithString(paramModel,
 			mcp.Description(
 				"Model for the agent. One of 'opus', 'sonnet' (default), or "+
 					"'haiku'. Specific to the claude-code provider.",
 			),
 		),
-		mcp.WithString("preamble",
+		mcp.WithString(paramPreamble,
 			mcp.Description(
 				"Optional prose prepended verbatim to the generated agent "+
 					"context file (e.g. CLAUDE.md for claude-code) before the "+

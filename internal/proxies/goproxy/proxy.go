@@ -38,6 +38,8 @@ const listenAddr = "127.0.0.1:" + listenPort
 // Name is the registered name for the Go module proxy.
 const Name = "go-mod"
 
+const tcpNetwork = "tcp"
+
 // SumDBHost is the Go checksum database. Module *downloads* go through
 // this proxy (SO_MARK bypass, so the upstream needs no allowlist
 // entry), but `go` contacts the checksum database directly —
@@ -64,7 +66,6 @@ type registration struct{}
 
 func (registration) Name() string          { return Name }
 func (registration) EgressHosts() []string { return []string{SumDBHost} }
-func (registration) ListenAddr() string    { return listenAddr }
 
 // ProxyServer is a reverse proxy for proxy.golang.org.
 type ProxyServer struct {
@@ -125,7 +126,7 @@ func methodGate(next http.Handler) http.Handler {
 // down. Returns nil on clean shutdown.
 func (p *ProxyServer) Start(ctx context.Context) error {
 	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, "tcp", p.bindAddr)
+	ln, err := lc.Listen(ctx, tcpNetwork, p.bindAddr)
 	if err != nil {
 		return err
 	}
@@ -144,9 +145,4 @@ func (p *ProxyServer) Start(ctx context.Context) error {
 		return err
 	}
 	return nil
-}
-
-// Shutdown gracefully stops the proxy.
-func (p *ProxyServer) Shutdown(ctx context.Context) error {
-	return p.server.Shutdown(ctx)
 }

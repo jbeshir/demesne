@@ -17,6 +17,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/jbeshir/demesne/internal/agents"
+	"github.com/jbeshir/demesne/internal/mcpproxy"
 	"github.com/jbeshir/demesne/internal/proxies"
 	proxygo "github.com/jbeshir/demesne/internal/proxies/goproxy"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
@@ -109,7 +110,7 @@ func (r *Runner) Agent(ctx context.Context, req AgentRequest) (AgentResult, erro
 		files:       req.Files,
 		directories: req.Directories,
 		egress:      egressOrDefault(req.Egress, EgressNone),
-		tool:        "sandbox_agent",
+		tool:        toolSandboxAgent,
 	}
 	res, err := r.runAgent(ctx, spec)
 	if err != nil {
@@ -141,7 +142,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		return agentRunResult{}, fmt.Errorf("generate agent token: %w", err)
 	}
 
-	layout, err := r.buildLayout(spec, prep.agent.ContextFileName())
+	layout, err := r.buildLayout(spec)
 	if err != nil {
 		return agentRunResult{}, err
 	}
@@ -209,7 +210,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
 		Command: command,
-		Cwd:     "/workspace",
+		Cwd:     mountWorkspace,
 		Envs:    prep.agent.EnvVars(agentToken, prep.model),
 		Timeout: commandTimeout.Milliseconds(),
 	}, nil)
@@ -339,17 +340,17 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 
 // buildLayout produces the host paths + mounts for an agent run,
 // dispatching to the root or child builder.
-func (r *Runner) buildLayout(spec internalAgentSpec, contextFileName string) (sandboxLayout, error) {
+func (r *Runner) buildLayout(spec internalAgentSpec) (sandboxLayout, error) {
 	if spec.child != nil {
-		return r.buildChildLayout(spec.child, contextFileName)
+		return r.buildChildLayout(spec.child)
 	}
-	return r.buildRootLayout(spec.files, spec.directories, contextFileName)
+	return r.buildRootLayout(spec.files, spec.directories)
 }
 
 // buildRootLayout creates the host dirs for a host-invoked agent run:
 // a fresh workspace, /out, config dir, and sidecar-results dir under
 // OutputRoot/<jobID>, with caller-supplied inputs resolved into /in.
-func (r *Runner) buildRootLayout(files, directories []string, _ string) (sandboxLayout, error) {
+func (r *Runner) buildRootLayout(files, directories []string) (sandboxLayout, error) {
 	inputVolumes, err := r.resolveMounts(files, directories)
 	if err != nil {
 		return sandboxLayout{}, err
@@ -375,7 +376,7 @@ func (r *Runner) buildRootLayout(files, directories []string, _ string) (sandbox
 // at <parentOut>/child/<name> and keep their own private config +
 // sidecar-results dirs under OutputRoot/<jobID>. Reserving the name
 // (unique per parent) is a side effect.
-func (r *Runner) buildChildLayout(c *childSpawn, _ string) (sandboxLayout, error) {
+func (r *Runner) buildChildLayout(c *childSpawn) (sandboxLayout, error) {
 	if err := c.parent.reserveName(c.name); err != nil {
 		return sandboxLayout{}, err
 	}
@@ -483,12 +484,12 @@ func agentVolumes(l sandboxLayout) []opensandbox.Volume {
 		{
 			Name:      "workspace",
 			Host:      &opensandbox.Host{Path: l.workspaceHost},
-			MountPath: "/workspace",
+			MountPath: mountWorkspace,
 		},
 		{
-			Name:      "out",
+			Name:      outVolumeName,
 			Host:      &opensandbox.Host{Path: l.outHost},
-			MountPath: "/out",
+			MountPath: mountOut,
 		},
 	}
 }
@@ -604,7 +605,7 @@ func (r *Runner) buildMCPWiring(jobID string) mcpWiring {
 			ListenPort: port,
 			Path:       "/" + name + "/mcp",
 		}
-		if name == DemesneServerName {
+		if name == mcpproxy.DemesneServerName {
 			up.ParentJobID = jobID
 		}
 		w.sidecarUpstreams = append(w.sidecarUpstreams, up)

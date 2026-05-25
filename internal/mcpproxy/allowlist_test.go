@@ -12,17 +12,17 @@ import (
 func TestResolveAllowlist_NoOverride(t *testing.T) {
 	got, err := ResolveAllowlist("")
 	require.NoError(t, err)
-	assert.Contains(t, got, "workflowy")
-	wf := got["workflowy"]
+	assert.Contains(t, got, serverWorkflowy)
+	wf := got[serverWorkflowy]
 	assert.False(t, wf.AllowAll)
-	assert.True(t, wf.Allowed("search_nodes"))
+	assert.True(t, wf.Allowed(toolSearchNodes))
 	assert.False(t, wf.Allowed("delete_node"))
 }
 
 func TestResolveAllowlist_OverrideMissingFile(t *testing.T) {
 	got, err := ResolveAllowlist("/nonexistent/path/mcp-allowlist.json")
 	require.NoError(t, err)
-	assert.Contains(t, got, "workflowy")
+	assert.Contains(t, got, serverWorkflowy)
 }
 
 func TestApplyOverride(t *testing.T) {
@@ -35,8 +35,8 @@ func TestApplyOverride(t *testing.T) {
 			name:  "explicit list narrows the default",
 			input: `{"workflowy": ["search_nodes"]}`,
 			serverCheck: func(t *testing.T, got map[string]ServerAllowlist) {
-				wf := got["workflowy"]
-				assert.True(t, wf.Allowed("search_nodes"))
+				wf := got[serverWorkflowy]
+				assert.True(t, wf.Allowed(toolSearchNodes))
 				assert.False(t, wf.Allowed("get_node"))
 			},
 		},
@@ -44,8 +44,8 @@ func TestApplyOverride(t *testing.T) {
 			name:  "asterisk means AllowAll",
 			input: `{"alignment": "*"}`,
 			serverCheck: func(t *testing.T, got map[string]ServerAllowlist) {
-				assert.True(t, got["alignment"].AllowAll)
-				assert.True(t, got["alignment"].Allowed("anything"))
+				assert.True(t, got[serverAlignment].AllowAll)
+				assert.True(t, got[serverAlignment].Allowed("anything"))
 			},
 		},
 		{
@@ -69,7 +69,7 @@ func TestApplyOverride(t *testing.T) {
 			serverCheck: func(t *testing.T, got map[string]ServerAllowlist) {
 				_, ok := got["_doc"]
 				assert.False(t, ok)
-				assert.True(t, got["workflowy"].Allowed("search_nodes"))
+				assert.True(t, got[serverWorkflowy].Allowed(toolSearchNodes))
 			},
 		},
 	}

@@ -51,6 +51,13 @@ const (
 	UsagePathEnv = "DEMESNE_ANTHROPIC_USAGE_PATH"
 )
 
+const (
+	headerAuthorization = "Authorization"
+	headerXAPIKey       = "x-api-key"
+	bearerPrefix        = "Bearer "
+	pathMessages        = "/v1/messages"
+)
+
 // allowedEndpoints is the explicit (method, path) allowlist the proxy
 // will forward. Everything else returns 403. Kept to the bare minimum
 // claude-code needs for inference — no batches, no files, no admin or
@@ -58,7 +65,7 @@ const (
 // otherwise mutate state on the Anthropic side via this credential.
 var allowedEndpoints = map[string]map[string]struct{}{
 	http.MethodPost: {
-		"/v1/messages":              {},
+		pathMessages:                {},
 		"/v1/messages/count_tokens": {},
 	},
 }
@@ -74,16 +81,14 @@ func init() {
 	proxies.Register(registration{})
 }
 
-// registration is the discovery-only registry entry: it exposes Name,
-// EgressHosts, and ListenAddr so the sandbox runner can collect the
-// proxy's egress hosts (none, in this case — SO_MARK bypasses the
-// egress filter) and the sidecar can log the bind addr. Construction
-// and serving happen in the sidecar's main via NewProxyServer.
+// registration is the discovery-only registry entry: it exposes Name
+// and EgressHosts so the sandbox runner can collect the proxy's egress
+// hosts (none, in this case — SO_MARK bypasses the egress filter).
+// Construction and serving happen in the sidecar's main via NewProxyServer.
 type registration struct{}
 
 func (registration) Name() string          { return Name }
 func (registration) EgressHosts() []string { return nil }
-func (registration) ListenAddr() string    { return listenAddr }
 
 // ProxyServer is a hardened reverse proxy for api.anthropic.com.
 // It enforces an explicit endpoint allowlist, verifies that the caller
@@ -161,8 +166,8 @@ func newProxyServer(
 // (the alternative Anthropic auth scheme) is stripped so the proxy is
 // the only credential authority for the upstream.
 func gatingHandler(next http.Handler, agentToken, upstreamToken string) http.Handler {
-	expectedAuth := "Bearer " + agentToken
-	upstreamAuth := "Bearer " + upstreamToken
+	expectedAuth := bearerPrefix + agentToken
+	upstreamAuth := bearerPrefix + upstreamToken
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths, ok := allowedEndpoints[r.Method]
 		if !ok {
@@ -173,12 +178,12 @@ func gatingHandler(next http.Handler, agentToken, upstreamToken string) http.Han
 			deny(w, r, http.StatusForbidden, "path not allowed")
 			return
 		}
-		if r.Header.Get("Authorization") != expectedAuth {
+		if r.Header.Get(headerAuthorization) != expectedAuth {
 			deny(w, r, http.StatusUnauthorized, "agent token mismatch")
 			return
 		}
-		r.Header.Set("Authorization", upstreamAuth)
-		r.Header.Del("x-api-key")
+		r.Header.Set(headerAuthorization, upstreamAuth)
+		r.Header.Del(headerXAPIKey)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -218,9 +223,4 @@ func (p *ProxyServer) Start(ctx context.Context) error {
 		return err
 	}
 	return nil
-}
-
-// Shutdown gracefully stops the proxy.
-func (p *ProxyServer) Shutdown(ctx context.Context) error {
-	return p.server.Shutdown(ctx)
 }

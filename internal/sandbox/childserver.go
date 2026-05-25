@@ -10,6 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/jbeshir/demesne/internal/mcpproxy"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
 
@@ -22,6 +23,18 @@ const keepaliveInterval = 15 * time.Second
 // keepaliveProgressID labels the keepalive progress notifications. It's
 // an opaque MCP progress identifier, not a credential.
 const keepaliveProgressID = "demesne-keepalive"
+
+const (
+	childParamName      = "name"
+	childParamCommand   = "command"
+	childParamImage     = "image"
+	childParamEgress    = "egress"
+	childParamPrompt    = "prompt"
+	childParamAgent     = "agent"
+	childParamModel     = "model"
+	childParamPreamble  = "preamble"
+	childParamSandboxID = "sandbox_id"
+)
 
 // keepAlive holds the nested MCP connection open while a child runs. A
 // child-spawning handler blocks for the child's whole lifecycle and
@@ -59,12 +72,6 @@ func keepAlive(ctx context.Context) func() {
 	return func() { close(done) }
 }
 
-// DemesneServerName is the name the in-process demesne self-server is
-// mounted under on the host MCP aggregator (and thus the MCP server
-// name a sandboxed agent sees). The runner's buildMCPWiring keys the
-// parent-identity header off this name.
-const DemesneServerName = "demesne"
-
 // parentKey carries the calling sandbox's jobID (from the trusted
 // tunnel header) through the MCP handler context.
 type parentKeyT struct{}
@@ -87,61 +94,61 @@ func parentFromRequest(ctx context.Context, req *http.Request) context.Context {
 // the context via WithHTTPContextFunc. Returned for the aggregator's
 // ExtraServers and the runner's MCP wiring.
 func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
-	srv := server.NewMCPServer(DemesneServerName, "0", server.WithToolCapabilities(false))
+	srv := server.NewMCPServer(mcpproxy.DemesneServerName, "0", server.WithToolCapabilities(false))
 	var catalogue []mcp.Tool
 	add := func(tool mcp.Tool, h server.ToolHandlerFunc) {
 		srv.AddTool(tool, h)
 		catalogue = append(catalogue, tool)
 	}
 
-	add(mcp.NewTool("sandbox_script",
+	add(mcp.NewTool(toolSandboxScript,
 		mcp.WithDescription(childScriptDescription),
-		mcp.WithString("name", mcp.Required(), mcp.Description(childNameDescription)),
-		mcp.WithString("command", mcp.Required(),
+		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
+		mcp.WithString(childParamCommand, mcp.Required(),
 			mcp.Description("Shell command to run. /bin/sh -c, cwd /out.")),
-		mcp.WithString("image", mcp.Description(childImageDescription)),
-		mcp.WithString("egress", mcp.Description(childEgressDescription)),
+		mcp.WithString(childParamImage, mcp.Description(childImageDescription)),
+		mcp.WithString(childParamEgress, mcp.Description(childEgressDescription)),
 	), r.handleChildScript)
 
-	add(mcp.NewTool("sandbox_agent",
+	add(mcp.NewTool(toolSandboxAgent,
 		mcp.WithDescription(childAgentDescription),
-		mcp.WithString("name", mcp.Required(), mcp.Description(childNameDescription)),
-		mcp.WithString("prompt", mcp.Required(), mcp.Description("Task for the child agent.")),
-		mcp.WithString("agent", mcp.Description("Agent provider. Defaults to 'claude-code'.")),
-		mcp.WithString("model", mcp.Description("Model: 'opus', 'sonnet' (default), or 'haiku'.")),
-		mcp.WithString("preamble", mcp.Description("Prose prepended to the child's context file.")),
-		mcp.WithString("egress", mcp.Description(childEgressDescription)),
+		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
+		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description("Task for the child agent.")),
+		mcp.WithString(childParamAgent, mcp.Description("Agent provider. Defaults to 'claude-code'.")),
+		mcp.WithString(childParamModel, mcp.Description("Model: 'opus', 'sonnet' (default), or 'haiku'.")),
+		mcp.WithString(childParamPreamble, mcp.Description("Prose prepended to the child's context file.")),
+		mcp.WithString(childParamEgress, mcp.Description(childEgressDescription)),
 	), r.handleChildAgent)
 
-	add(mcp.NewTool("sandbox_research",
+	add(mcp.NewTool(toolSandboxResearch,
 		mcp.WithDescription(childResearchDescription),
-		mcp.WithString("name", mcp.Required(), mcp.Description(childNameDescription)),
-		mcp.WithString("prompt", mcp.Required(), mcp.Description("Research task for the child agent.")),
-		mcp.WithString("agent", mcp.Description("Agent provider. Defaults to 'claude-code'.")),
-		mcp.WithString("model", mcp.Description("Model: 'opus', 'sonnet' (default), or 'haiku'.")),
-		mcp.WithString("preamble", mcp.Description("Prose prepended to the child's context file.")),
+		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
+		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description("Research task for the child agent.")),
+		mcp.WithString(childParamAgent, mcp.Description("Agent provider. Defaults to 'claude-code'.")),
+		mcp.WithString(childParamModel, mcp.Description("Model: 'opus', 'sonnet' (default), or 'haiku'.")),
+		mcp.WithString(childParamPreamble, mcp.Description("Prose prepended to the child's context file.")),
 	), r.handleChildResearch)
 
 	add(mcp.NewTool("sandbox_create",
 		mcp.WithDescription(childCreateDescription),
-		mcp.WithString("name", mcp.Required(), mcp.Description(childNameDescription)),
-		mcp.WithString("image", mcp.Description(childImageDescription)),
-		mcp.WithString("egress", mcp.Description(childEgressDescription)),
+		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
+		mcp.WithString(childParamImage, mcp.Description(childImageDescription)),
+		mcp.WithString(childParamEgress, mcp.Description(childEgressDescription)),
 	), r.handleChildCreate)
 
 	add(mcp.NewTool("sandbox_exec",
 		mcp.WithDescription("Run a shell command in a child sandbox created by sandbox_create. /bin/sh -c, cwd /out."),
-		mcp.WithString("sandbox_id", mcp.Required(), mcp.Description("Handle from sandbox_create.")),
-		mcp.WithString("command", mcp.Required(), mcp.Description("Shell command to run.")),
+		mcp.WithString(childParamSandboxID, mcp.Required(), mcp.Description("Handle from sandbox_create.")),
+		mcp.WithString(childParamCommand, mcp.Required(), mcp.Description("Shell command to run.")),
 	), r.handleChildExec)
 
 	add(mcp.NewTool("sandbox_destroy",
 		mcp.WithDescription(childDestroyDescription),
-		mcp.WithString("sandbox_id", mcp.Required(), mcp.Description("Handle from sandbox_create.")),
+		mcp.WithString(childParamSandboxID, mcp.Required(), mcp.Description("Handle from sandbox_create.")),
 	), r.handleChildDestroy)
 
 	h := server.NewStreamableHTTPServer(srv, server.WithHTTPContextFunc(parentFromRequest))
-	return DemesneServerName, catalogue, h
+	return mcpproxy.DemesneServerName, catalogue, h
 }
 
 // parentFor resolves the calling sandbox's spawning context from the
@@ -165,14 +172,14 @@ func (r *Runner) handleChildScript(ctx context.Context, req mcp.CallToolRequest)
 	if errResult != nil {
 		return errResult, nil
 	}
-	command, err := req.RequireString("command")
+	command, err := req.RequireString(childParamCommand)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	res, err := r.runScript(ctx, ScriptRequest{
 		Command: command,
-		Image:   req.GetString("image", ""),
-		Egress:  EgressMode(req.GetString("egress", string(EgressPackageManagers))),
+		Image:   req.GetString(childParamImage, ""),
+		Egress:  EgressMode(req.GetString(childParamEgress, string(EgressPackageManagers))),
 	}, &childSpawn{name: name, parent: parent})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -189,22 +196,22 @@ func (r *Runner) handleChildAgent(ctx context.Context, req mcp.CallToolRequest) 
 	if errResult != nil {
 		return errResult, nil
 	}
-	prompt, err := req.RequireString("prompt")
+	prompt, err := req.RequireString(childParamPrompt)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	egress := req.GetString("egress", string(EgressNone))
+	egress := req.GetString(childParamEgress, string(EgressNone))
 	if EgressMode(egress) == EgressOpen {
 		return mcp.NewToolResultError(
 			"egress 'open' is not permitted for sandbox_agent; use sandbox_research"), nil
 	}
 	spec := internalAgentSpec{
-		agentName: req.GetString("agent", ""),
-		model:     req.GetString("model", ""),
+		agentName: req.GetString(childParamAgent, ""),
+		model:     req.GetString(childParamModel, ""),
 		prompt:    prompt,
-		preamble:  req.GetString("preamble", ""),
+		preamble:  req.GetString(childParamPreamble, ""),
 		egress:    EgressMode(egress),
-		tool:      "sandbox_agent",
+		tool:      toolSandboxAgent,
 		child:     &childSpawn{name: name, parent: parent},
 	}
 	res, err := r.runAgent(ctx, spec)
@@ -220,17 +227,17 @@ func (r *Runner) handleChildResearch(ctx context.Context, req mcp.CallToolReques
 	if errResult != nil {
 		return errResult, nil
 	}
-	prompt, err := req.RequireString("prompt")
+	prompt, err := req.RequireString(childParamPrompt)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	spec := internalAgentSpec{
-		agentName: req.GetString("agent", ""),
-		model:     req.GetString("model", ""),
+		agentName: req.GetString(childParamAgent, ""),
+		model:     req.GetString(childParamModel, ""),
 		prompt:    prompt,
-		preamble:  req.GetString("preamble", ""),
+		preamble:  req.GetString(childParamPreamble, ""),
 		egress:    EgressOpen,
-		tool:      "sandbox_research",
+		tool:      toolSandboxResearch,
 		// Research is isolated like the host tool: no inherited /in or
 		// shared /workspace, just a fresh sandbox with open egress —
 		// inputs + open egress is the exfil shape we keep off the surface.
@@ -250,8 +257,8 @@ func (r *Runner) handleChildCreate(ctx context.Context, req mcp.CallToolRequest)
 		return errResult, nil
 	}
 	res, err := r.create(ctx, CreateRequest{
-		Image:  req.GetString("image", ""),
-		Egress: EgressMode(req.GetString("egress", string(EgressPackageManagers))),
+		Image:  req.GetString(childParamImage, ""),
+		Egress: EgressMode(req.GetString(childParamEgress, string(EgressPackageManagers))),
 	}, &childSpawn{name: name, parent: parent})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -263,11 +270,11 @@ func (r *Runner) handleChildCreate(ctx context.Context, req mcp.CallToolRequest)
 
 func (r *Runner) handleChildExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	defer keepAlive(ctx)()
-	sandboxID, err := req.RequireString("sandbox_id")
+	sandboxID, err := req.RequireString(childParamSandboxID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	command, err := req.RequireString("command")
+	command, err := req.RequireString(childParamCommand)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -279,7 +286,7 @@ func (r *Runner) handleChildExec(ctx context.Context, req mcp.CallToolRequest) (
 }
 
 func (r *Runner) handleChildDestroy(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	sandboxID, err := req.RequireString("sandbox_id")
+	sandboxID, err := req.RequireString(childParamSandboxID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -301,7 +308,7 @@ func (r *Runner) childSpawnParams(
 	if err != nil {
 		return nil, "", mcp.NewToolResultError(err.Error())
 	}
-	name, err := req.RequireString("name")
+	name, err := req.RequireString(childParamName)
 	if err != nil {
 		return nil, "", mcp.NewToolResultError(err.Error())
 	}
@@ -320,7 +327,8 @@ func formatChildAgentResult(name string, res agentRunResult) string {
 
 const childNameDescription = "Unique name for this child within the current sandbox. " +
 	"Its output appears at /out/child/<name> (visible to you and your ancestors). " +
-	"Allowed characters: letters, digits, '.', '_', '-'."
+	"Allowed characters: lowercase letters, digits, and interior hyphens only " +
+	"(no dots, underscores, or uppercase)."
 
 const childImageDescription = "Container image: 'node', 'python', 'go', or 'anaconda' (default)."
 
@@ -343,8 +351,8 @@ permitted here — use sandbox_research.`
 const childResearchDescription = `Spawn a long-running child research agent with open internet egress.
 
 Like sandbox_agent but with unrestricted outbound access and no extra
-egress knob. Inherits /in and shared /workspace; output at
-/out/child/<name>.`
+egress knob. Runs in a FRESH private workspace with NO /in mounts
+(unlike sandbox_agent); output at /out/child/<name>.`
 
 const childCreateDescription = `Create a persistent child sandbox and return its handle.
 

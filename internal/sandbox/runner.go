@@ -38,6 +38,15 @@ const (
 	metadataDemesneTool = "demesne.tool"
 )
 
+const (
+	toolSandboxScript   = "sandbox_script"
+	toolSandboxAgent    = "sandbox_agent"
+	toolSandboxResearch = "sandbox_research"
+	mountOut            = "/out"
+	mountWorkspace      = "/workspace"
+	outVolumeName       = "out"
+)
+
 // Runner orchestrates sandbox operations: it validates inputs, talks to the
 // OpenSandbox lifecycle server via its SDK, and surfaces results to the MCP
 // layer. One Runner serves all tools (sandbox_script, sandbox_create,
@@ -84,7 +93,7 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 		Egress:         req.Egress,
 		Files:          req.Files,
 		Directories:    req.Directories,
-		Tool:           "sandbox_script",
+		Tool:           toolSandboxScript,
 		TimeoutSeconds: oneShotSandboxTTLSeconds,
 		Child:          child,
 	})
@@ -105,7 +114,7 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
 		Command: req.Command,
-		Cwd:     "/out",
+		Cwd:     mountOut,
 		Timeout: commandTimeout.Milliseconds(),
 	}, nil)
 	if err != nil {
@@ -255,9 +264,9 @@ func (r *Runner) rootMounts(
 		return nil, "", fmt.Errorf("create output dir: %w", err)
 	}
 	mounts = append(mounts, opensandbox.Volume{
-		Name:      "out",
+		Name:      outVolumeName,
 		Host:      &opensandbox.Host{Path: outputHost},
-		MountPath: "/out",
+		MountPath: mountOut,
 	})
 	return mounts, outputHost, nil
 }
@@ -281,12 +290,12 @@ func (r *Runner) childMounts(c *childSpawn) ([]opensandbox.Volume, string, error
 		opensandbox.Volume{
 			Name:      "workspace",
 			Host:      &opensandbox.Host{Path: c.parent.workspaceHost},
-			MountPath: "/workspace",
+			MountPath: mountWorkspace,
 		},
 		opensandbox.Volume{
-			Name:      "out",
+			Name:      outVolumeName,
 			Host:      &opensandbox.Host{Path: outputHost},
-			MountPath: "/out",
+			MountPath: mountOut,
 		},
 	)
 	return mounts, outputHost, nil

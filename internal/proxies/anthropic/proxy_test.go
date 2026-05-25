@@ -16,6 +16,7 @@ import (
 const (
 	testAgentToken    = "test-agent-token"
 	testUpstreamToken = "test-upstream-token"
+	testBindAddr      = "127.0.0.1:0"
 )
 
 // TestProxyAllowedRequestSwapsToken confirms that an allowed
@@ -38,9 +39,9 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got.path = r.URL.Path
 		got.method = r.Method
-		got.authHeader = r.Header.Get("Authorization")
-		_, got.gotAuthSeen = r.Header["Authorization"]
-		got.apiKey = r.Header.Get("x-api-key")
+		got.authHeader = r.Header.Get(headerAuthorization)
+		_, got.gotAuthSeen = r.Header[headerAuthorization]
+		got.apiKey = r.Header.Get(headerXAPIKey)
 		_, got.gotXAPIKey = r.Header["X-Api-Key"]
 		got.anthropicH = r.Header.Get("anthropic-version")
 		got.host = r.Host
@@ -51,17 +52,17 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tsrv.URL+"/v1/messages",
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tsrv.URL+pathMessages,
 		strings.NewReader("hello body"))
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+testAgentToken)
-	req.Header.Set("x-api-key", "stolen-key")
+	req.Header.Set(headerAuthorization, bearerPrefix+testAgentToken)
+	req.Header.Set(headerXAPIKey, "stolen-key")
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -71,9 +72,9 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	respBody, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, "upstream response", string(respBody))
 
-	assert.Equal(t, "/v1/messages", got.path)
+	assert.Equal(t, pathMessages, got.path)
 	assert.Equal(t, http.MethodPost, got.method)
-	assert.Equal(t, "Bearer "+testUpstreamToken, got.authHeader, "agent token must be swapped for upstream token")
+	assert.Equal(t, bearerPrefix+testUpstreamToken, got.authHeader, "agent token must be swapped for upstream token")
 	assert.False(t, got.gotXAPIKey, "x-api-key must be stripped before forwarding (got %q)", got.apiKey)
 	assert.Equal(t, "2023-06-01", got.anthropicH)
 	assert.Equal(t, "hello body", got.body)
@@ -87,11 +88,11 @@ func TestProxyAllowsCountTokens(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
-	req := mustRequest(t, http.MethodPost, tsrv.URL+"/v1/messages/count_tokens")
+	req := mustRequest(t, http.MethodPost, tsrv.URL+pathMessages+"/count_tokens")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -107,7 +108,7 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -130,12 +131,12 @@ func TestProxyDeniesUnknownMethod(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
-		req := mustRequest(t, method, tsrv.URL+"/v1/messages")
+		req := mustRequest(t, method, tsrv.URL+pathMessages)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
@@ -155,7 +156,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -165,7 +166,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 	}{
 		{name: "missing", header: ""},
 		{name: "wrong token", header: "Bearer not-the-token"},
-		{name: "real upstream token leaked back", header: "Bearer " + testUpstreamToken},
+		{name: "real upstream token leaked back", header: bearerPrefix + testUpstreamToken},
 		{name: "wrong scheme", header: "Basic " + testAgentToken},
 	}
 	for _, tc := range cases {
@@ -173,10 +174,10 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-				tsrv.URL+"/v1/messages", strings.NewReader("{}"))
+				tsrv.URL+pathMessages, strings.NewReader("{}"))
 			require.NoError(t, err)
 			if tc.header != "" {
-				req.Header.Set("Authorization", tc.header)
+				req.Header.Set(headerAuthorization, tc.header)
 			}
 			resp, err := http.DefaultClient.Do(req)
 			require.NoError(t, err)
@@ -187,9 +188,9 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 	assert.False(t, upstreamHit)
 }
 
-// TestProxyShutdown confirms Shutdown stops the server cleanly.
+// TestProxyShutdown confirms Start returns cleanly when its context is cancelled.
 func TestProxyShutdown(t *testing.T) {
-	p := NewProxyServerTo("127.0.0.1:0", "http://127.0.0.1:1", testAgentToken, testUpstreamToken, nil)
+	p := NewProxyServerTo(testBindAddr, "http://127.0.0.1:1", testAgentToken, testUpstreamToken, nil)
 
 	startCtx, startCancel := context.WithCancel(context.Background())
 	defer startCancel()
@@ -197,14 +198,12 @@ func TestProxyShutdown(t *testing.T) {
 	go func() { done <- p.Start(startCtx) }()
 
 	time.Sleep(50 * time.Millisecond)
-	shutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	require.NoError(t, p.Shutdown(shutCtx))
+	startCancel()
 	select {
 	case err := <-done:
 		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
-		t.Fatal("Start did not return after Shutdown")
+		t.Fatal("Start did not return after context cancellation")
 	}
 }
 
@@ -214,7 +213,7 @@ func mustRequest(t *testing.T, method, url string) *http.Request {
 	t.Cleanup(cancel)
 	req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader("{}"))
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+testAgentToken)
+	req.Header.Set(headerAuthorization, bearerPrefix+testAgentToken)
 	return req
 }
 
@@ -228,7 +227,7 @@ func upstreamHostPort(rawURL string) string {
 // Anthropic-shaped SSE events updates the tracker's cost.
 func TestProxyTracksUsageFromSSE(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Content-Type", contentTypeEventStream)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`event: message_start
 data: {"type":"message_start","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":1000,"output_tokens":1}}}
@@ -244,7 +243,7 @@ data: {"type":"message_stop"}
 	defer upstream.Close()
 
 	tracker := NewTracker("")
-	p := NewProxyServerTo("127.0.0.1:0", upstream.URL, testAgentToken, testUpstreamToken, tracker)
+	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, tracker)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -256,7 +255,7 @@ data: {"type":"message_stop"}
 	require.NoError(t, resp.Body.Close())
 	assert.Contains(t, string(body), "message_stop", "body must pass through to caller")
 
-	snap := tracker.Snapshot()
+	snap := tracker.snapshot()
 	// 1k input @ $3/MTok + 2k output @ $15/MTok = $0.003 + $0.030 = $0.033.
 	assert.InDelta(t, 0.033, snap.CostUSD, 1e-9)
 }

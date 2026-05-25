@@ -1,5 +1,12 @@
 package mcpproxy
 
+const (
+	serverWorkflowy = "workflowy"
+	serverAlignment = "alignment"
+	toolSearchNodes = "search_nodes"
+	toolGetUser     = "get_user"
+)
+
 // defaultAllowlist maps server name → set of tool names that are
 // considered read-only for that upstream and so safe to expose to
 // sandboxed agents by default. The user's override file may
@@ -13,7 +20,7 @@ package mcpproxy
 // When adding entries: verify upstream-by-upstream that listed
 // tools have no side effects on external systems.
 var defaultAllowlist = map[string]map[string]struct{}{
-	"alignment": setOf(
+	serverAlignment: setOf(
 		"get_article",
 		"get_recommendations",
 		"get_similar_articles",
@@ -50,7 +57,7 @@ var defaultAllowlist = map[string]map[string]struct{}{
 		"get_srs_overview",
 		"get_stats",
 		"get_study_queue",
-		"get_user",
+		toolGetUser,
 		"get_vocab",
 		"get_vocab_srs_details",
 	),
@@ -61,7 +68,7 @@ var defaultAllowlist = map[string]map[string]struct{}{
 		"get_me",
 		"get_portfolio_pnl",
 		"get_positions",
-		"get_user",
+		toolGetUser,
 		"list_bets",
 		"search_markets",
 	),
@@ -80,13 +87,13 @@ var defaultAllowlist = map[string]map[string]struct{}{
 		"get_review_statistics",
 		"get_subjects",
 		"get_summary",
-		"get_user",
+		toolGetUser,
 	),
-	"workflowy": setOf(
+	serverWorkflowy: setOf(
 		"get_node",
 		"list_children",
 		"list_targets",
-		"search_nodes",
+		toolSearchNodes,
 	),
 }
 

@@ -32,6 +32,8 @@ import (
 // Name is the registered name for the MCP tunnel proxy.
 const Name = "mcp"
 
+const tcpNetwork = "tcp"
+
 // FirstListenPort is the loopback port the alphabetically-first
 // upstream's listener binds inside the sidecar. Subsequent
 // upstreams take FirstListenPort+1, +2, … in the order the host
@@ -94,14 +96,12 @@ func init() {
 
 // registration is the discovery-only registry entry. The MCP
 // tunnel reaches the host over a unix socket, so it contributes no
-// egress hosts. ListenAddr reports the first listener's address for
-// logging; the actual port set is decided at runtime from the
+// egress hosts. The actual port set is decided at runtime from the
 // bindings.
 type registration struct{}
 
 func (registration) Name() string          { return Name }
 func (registration) EgressHosts() []string { return nil }
-func (registration) ListenAddr() string    { return fmt.Sprintf("127.0.0.1:%d", FirstListenPort) }
 
 // Server is the sidecar MCP tunnel: a set of per-upstream reverse
 // proxies sharing one unix-socket transport to the host aggregator.
@@ -139,7 +139,7 @@ func (s *Server) Start(ctx context.Context) error {
 	for _, b := range s.bindings {
 		handler := s.handlerFor(b)
 		addr := fmt.Sprintf("127.0.0.1:%d", b.ListenPort)
-		ln, err := lc.Listen(ctx, "tcp", addr)
+		ln, err := lc.Listen(ctx, tcpNetwork, addr)
 		if err != nil {
 			return fmt.Errorf("mcp tunnel listen %s: %w", addr, err)
 		}

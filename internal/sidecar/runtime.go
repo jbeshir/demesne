@@ -34,6 +34,8 @@ const SidecarUsageFile = SidecarResultsDir + "/usage.json"
 // its network namespace.
 const EgressSidecarLabel = "opensandbox.io/egress-sidecar-for"
 
+const dockerCmd = "docker"
+
 // ProxyConfig carries the per-sandbox configuration the agent-vendor
 // proxy needs at sidecar startup. The agent-facing token is validated
 // by the proxy on every inbound request; the upstream token is what
@@ -156,7 +158,7 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 	}
 	args = append(args, imageRef)
 	//nolint:gosec // args composed from validated input
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	// Output (stdout only) — CombinedOutput would mix in Podman's
 	// "Emulate Docker CLI..." stderr banner, corrupting the container
 	// ID and silently breaking later docker rm -f calls.
@@ -180,7 +182,7 @@ func (h *Handle) Stop(ctx context.Context) error {
 		return nil
 	}
 	//nolint:gosec // h.ContainerID is a docker-returned ID
-	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", h.ContainerID)
+	cmd := exec.CommandContext(ctx, dockerCmd, "rm", "-f", h.ContainerID)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker rm -f %s: %w\n%s", h.ContainerID, err, out)
 	}
@@ -190,7 +192,7 @@ func (h *Handle) Stop(ctx context.Context) error {
 func findEgressSidecar(ctx context.Context, sandboxID string) (string, error) {
 	filter := fmt.Sprintf("label=%s=%s", EgressSidecarLabel, sandboxID)
 	//nolint:gosec // filter composed from a validated UUID
-	cmd := exec.CommandContext(ctx, "docker", "ps", "--filter", filter, "--format", "{{.ID}}")
+	cmd := exec.CommandContext(ctx, dockerCmd, "ps", "--filter", filter, "--format", "{{.ID}}")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("locate egress sidecar for %s: %w", sandboxID, err)
