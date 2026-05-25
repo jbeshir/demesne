@@ -9,6 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testChildAlpha = "alpha"
+	testChildBeta  = "beta"
+)
+
 func TestPreviousJobVolumes_Empty(t *testing.T) {
 	assert.Nil(t, previousJobVolumes(nil))
 	assert.Nil(t, previousJobVolumes(map[string]string{}))
@@ -16,8 +21,8 @@ func TestPreviousJobVolumes_Empty(t *testing.T) {
 
 func TestPreviousJobVolumes_SortedReadOnly(t *testing.T) {
 	vols := previousJobVolumes(map[string]string{
-		"beta":  "/out/job/child/beta",
-		"alpha": "/out/job/child/alpha",
+		testChildBeta:  "/out/job/child/" + testChildBeta,
+		testChildAlpha: "/out/job/child/" + testChildAlpha,
 	})
 	require.Len(t, vols, 2)
 
@@ -35,9 +40,9 @@ func TestPreviousJobVolumes_SortedReadOnly(t *testing.T) {
 
 func TestPreviousJobNames_SortedAndEmpty(t *testing.T) {
 	assert.Nil(t, previousJobNames(nil))
-	assert.Equal(t, []string{"alpha", "beta"}, previousJobNames(map[string]string{
-		"beta":  "/x",
-		"alpha": "/y",
+	assert.Equal(t, []string{testChildAlpha, testChildBeta}, previousJobNames(map[string]string{
+		testChildBeta:  "/x",
+		testChildAlpha: "/y",
 	}))
 }
 
@@ -71,7 +76,7 @@ func TestBuildChildLayout_IsolatedVsInherited(t *testing.T) {
 
 	// Isolated (research): no inherited inputs, no previous-jobs, a fresh
 	// private workspace, but /out still nests under the parent.
-	iso, err := r.buildChildLayout(&childSpawn{name: "research1", parent: parent, isolated: true}, "CLAUDE.md")
+	iso, err := r.buildChildLayout(&childSpawn{name: "research1", parent: parent, isolated: true})
 	require.NoError(t, err)
 	assert.Empty(t, iso.inputVolumes)
 	assert.Empty(t, iso.previousJobs)
@@ -82,7 +87,7 @@ func TestBuildChildLayout_IsolatedVsInherited(t *testing.T) {
 	// Inherited (agent/script): shares /in, /workspace, and previous-jobs.
 	// (Siblings are recorded after a successful create, not in
 	// buildChildLayout, so only the pre-seeded "earlier" is visible here.)
-	inh, err := r.buildChildLayout(&childSpawn{name: "impl1", parent: parent}, "CLAUDE.md")
+	inh, err := r.buildChildLayout(&childSpawn{name: "impl1", parent: parent})
 	require.NoError(t, err)
 	assert.Equal(t, parent.inputVolumes, inh.inputVolumes)
 	assert.Equal(t, parent.workspaceHost, inh.workspaceHost)

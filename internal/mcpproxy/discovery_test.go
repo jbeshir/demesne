@@ -24,8 +24,8 @@ func TestParseUpstreams(t *testing.T) {
 				}
 			}`,
 			want: []UpstreamSpec{
-				{Name: "alignment", Command: "/usr/bin/al"},
-				{Name: "workflowy", Command: "/usr/bin/wf", Args: []string{"-v"}, Env: map[string]string{"TOKEN": "x"}},
+				{Name: serverAlignment, Command: "/usr/bin/al"},
+				{Name: serverWorkflowy, Command: "/usr/bin/wf", Args: []string{"-v"}, Env: map[string]string{"TOKEN": "x"}},
 			},
 		},
 		{

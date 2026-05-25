@@ -8,7 +8,7 @@ import (
 )
 
 func TestLookupPricing_ExactFamily(t *testing.T) {
-	p, ok := LookupPricing("claude-sonnet-4-6")
+	p, ok := LookupPricing(claudeSonnet46)
 	require.True(t, ok)
 	assert.InDelta(t, 3.0, p.InputPerMTok, 1e-9)
 	assert.InDelta(t, 15.0, p.OutputPerMTok, 1e-9)
@@ -45,7 +45,7 @@ func TestLookupPricing_Unknown(t *testing.T) {
 
 func TestCostUSD_SonnetMath(t *testing.T) {
 	// 1M input + 1M output on sonnet @ $3 / $15 per MTok = $18.
-	c := CostUSD("claude-sonnet-4-6", TokenCounts{
+	c := CostUSD(claudeSonnet46, TokenCounts{
 		InputTokens:  1_000_000,
 		OutputTokens: 1_000_000,
 	})
@@ -54,7 +54,7 @@ func TestCostUSD_SonnetMath(t *testing.T) {
 
 func TestCostUSD_CacheTokens(t *testing.T) {
 	// 1M cache write + 1M cache read on sonnet @ $3.75 / $0.30 per MTok = $4.05.
-	c := CostUSD("claude-sonnet-4-6", TokenCounts{
+	c := CostUSD(claudeSonnet46, TokenCounts{
 		CacheCreationInputTokens: 1_000_000,
 		CacheReadInputTokens:     1_000_000,
 	})

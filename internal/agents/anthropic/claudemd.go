@@ -7,6 +7,8 @@ import (
 	"github.com/jbeshir/demesne/internal/agents"
 )
 
+const egressOpen = "open"
+
 // generateContext composes the CLAUDE.md content the agent reads from
 // /in/CLAUDE.md (symlinked to ./CLAUDE.md in cwd).
 //
@@ -64,7 +66,7 @@ func generateContext(
 			"`/in/previous-jobs/<name>` — read earlier siblings' results there.\n")
 	}
 	b.WriteString("- " + egressDescription(egress) + "\n")
-	if egress == "open" {
+	if egress == egressOpen {
 		b.WriteString("- **This is a long-running research task.** Flush " +
 			"partial findings to `/out` as you go so progress survives " +
 			"interruption.\n")
@@ -111,7 +113,9 @@ func writeOrchestration(b *strings.Builder) {
 		"`sandbox_create`/`sandbox_exec`/`sandbox_destroy`). Children inherit your " +
 		"`/in` and share your `/workspace`; each child's output is at " +
 		"`/out/child/<name>`, and completed siblings' outputs are mounted read-only " +
-		"at `/in/previous-jobs/<name>`.\n\n")
+		"at `/in/previous-jobs/<name>`. " +
+		"(Exception: `sandbox_research` children get a fresh private workspace " +
+		"with no `/in` mounts — they do NOT inherit `/in` or share `/workspace`.)\n\n")
 	b.WriteString("- **Validate with real builds/tests.** To compile, test, or lint " +
 		"code, spawn a `sandbox_script` child — or a persistent " +
 		"`sandbox_create`+`sandbox_exec` sandbox for repeated runs — with the " +
@@ -133,7 +137,7 @@ func writeOrchestration(b *strings.Builder) {
 // promise more reachability than the policy allows.
 func egressDescription(egress string) string {
 	switch egress {
-	case "open":
+	case egressOpen:
 		return "Outbound network access is unrestricted — you can reach any " +
 			"HTTPS endpoint on the open internet."
 	case "package-managers":

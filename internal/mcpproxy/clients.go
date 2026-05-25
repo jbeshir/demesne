@@ -27,9 +27,8 @@ var clientInfo = mcp.Implementation{Name: "demesne-mcp", Version: "0"}
 // upstreamClient pairs a live mcp-go client with its expiry
 // timer. Both are guarded by Pool.mu in the surrounding pool.
 type upstreamClient struct {
-	c           *client.Client
-	idleTimer   *time.Timer
-	lastUsedUTC time.Time
+	c         *client.Client
+	idleTimer *time.Timer
 }
 
 // Pool manages lazy stdio MCP clients keyed by server name. The
@@ -112,7 +111,6 @@ func (p *Pool) acquire(ctx context.Context, server string) (*client.Client, erro
 		return nil, fmt.Errorf("mcpproxy: no upstream registered for %q", server)
 	}
 	if uc, ok := p.clients[server]; ok {
-		uc.lastUsedUTC = time.Now().UTC()
 		p.resetIdleTimerLocked(server, uc)
 		return uc.c, nil
 	}
@@ -120,7 +118,7 @@ func (p *Pool) acquire(ctx context.Context, server string) (*client.Client, erro
 	if err != nil {
 		return nil, err
 	}
-	uc := &upstreamClient{c: c, lastUsedUTC: time.Now().UTC()}
+	uc := &upstreamClient{c: c}
 	p.clients[server] = uc
 	p.resetIdleTimerLocked(server, uc)
 	return c, nil

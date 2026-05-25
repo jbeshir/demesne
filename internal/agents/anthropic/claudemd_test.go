@@ -7,6 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	egressNone    = "none"
+	promptDefault = "do the thing"
+	wantTask      = "## Task"
+	wantEnv       = "## Environment"
+	inDataMount   = "/in/data"
+)
+
 func TestGenerateContext(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -21,49 +29,49 @@ func TestGenerateContext(t *testing.T) {
 	}{
 		{
 			name:    "no preamble no inputs",
-			prompt:  "do the thing",
-			egress:  "none",
-			want:    []string{"## Environment", "No caller-supplied inputs", "## Task", "do the thing"},
-			notWant: []string{"/in/notes", "/in/data"},
+			prompt:  promptDefault,
+			egress:  egressNone,
+			want:    []string{wantEnv, "No caller-supplied inputs", wantTask, promptDefault},
+			notWant: []string{"/in/notes", inDataMount},
 		},
 		{
 			name:     "preamble only",
 			preamble: "Project: demesne. Stay terse.",
 			prompt:   "explain the runner",
-			egress:   "none",
+			egress:   egressNone,
 			want: []string{
 				"Project: demesne. Stay terse.",
-				"## Environment",
-				"## Task",
+				wantEnv,
+				wantTask,
 				"explain the runner",
 			},
-			notWant: []string{"/in/notes", "/in/data"},
+			notWant: []string{"/in/notes", inDataMount},
 		},
 		{
 			name:   "inputs only",
 			prompt: "summarise the file",
-			egress: "none",
+			egress: egressNone,
 			inputs: []agents.InputInfo{
 				{Basename: "notes.txt", Size: 1024},
 				{Basename: "data", IsDir: true},
 			},
 			want: []string{
 				"/in/notes.txt", "file (1024 bytes)",
-				"/in/data", "dir",
-				"## Task", "summarise the file",
+				inDataMount, "dir",
+				wantTask, "summarise the file",
 			},
 		},
 		{
 			name:     "preamble and inputs",
 			preamble: "context: refactor",
 			prompt:   "produce a plan",
-			egress:   "none",
+			egress:   egressNone,
 			inputs:   []agents.InputInfo{{Basename: "src", IsDir: true}},
 			want: []string{
 				"context: refactor",
-				"## Environment",
+				wantEnv,
 				"/in/src",
-				"## Task",
+				wantTask,
 				"produce a plan",
 			},
 		},
@@ -82,7 +90,7 @@ func TestGenerateContext(t *testing.T) {
 		{
 			name:   "open egress (research mode)",
 			prompt: "investigate the corpus",
-			egress: "open",
+			egress: egressOpen,
 			want: []string{
 				"Outbound network access is unrestricted",
 				"long-running research task",
@@ -94,22 +102,22 @@ func TestGenerateContext(t *testing.T) {
 		},
 		{
 			name:    "no host tools omits the section",
-			prompt:  "do the thing",
-			egress:  "none",
+			prompt:  promptDefault,
+			egress:  egressNone,
 			notWant: []string{"Available host tools"},
 		},
 		{
 			name:   "no previous jobs omits the note",
-			prompt: "do the thing",
-			egress: "none",
+			prompt: promptDefault,
+			egress: egressNone,
 			// The orchestration section always mentions /in/previous-jobs,
 			// so key on the conditional note's distinctive phrasing.
 			notWant: []string{"read earlier siblings' results"},
 		},
 		{
 			name:   "orchestration guidance always present",
-			prompt: "do the thing",
-			egress: "none",
+			prompt: promptDefault,
+			egress: egressNone,
 			want: []string{
 				"## Orchestrating child agents",
 				"Validate with real builds/tests",
@@ -120,7 +128,7 @@ func TestGenerateContext(t *testing.T) {
 		{
 			name:         "previous jobs note listed when present",
 			prompt:       "build on earlier work",
-			egress:       "none",
+			egress:       egressNone,
 			previousJobs: []string{"phase01", "phase02"},
 			want: []string{
 				"`/in/previous-jobs/<name>`",
@@ -130,7 +138,7 @@ func TestGenerateContext(t *testing.T) {
 		{
 			name:   "host tools listed under native names",
 			prompt: "look something up",
-			egress: "none",
+			egress: egressNone,
 			mcpServers: []agents.MCPServerInfo{
 				{
 					Name: "workflowy",

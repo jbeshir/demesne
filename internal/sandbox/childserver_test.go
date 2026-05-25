@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jbeshir/demesne/internal/mcpproxy"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
 
@@ -38,7 +39,7 @@ func TestReserveName_Unique(t *testing.T) {
 func TestChildMCPServer_Catalogue(t *testing.T) {
 	r := NewRunner(Config{})
 	name, tools, handler := r.ChildMCPServer()
-	assert.Equal(t, DemesneServerName, name)
+	assert.Equal(t, mcpproxy.DemesneServerName, name)
 	require.NotNil(t, handler)
 
 	got := map[string]bool{}
@@ -46,7 +47,7 @@ func TestChildMCPServer_Catalogue(t *testing.T) {
 		got[tl.Name] = true
 	}
 	for _, want := range []string{
-		"sandbox_script", "sandbox_agent", "sandbox_research",
+		toolSandboxScript, toolSandboxAgent, toolSandboxResearch,
 		"sandbox_create", "sandbox_exec", "sandbox_destroy",
 	} {
 		assert.True(t, got[want], "missing tool %q", want)
@@ -90,11 +91,11 @@ func TestHandleChildAgent_RejectsOpenEgress(t *testing.T) {
 	ctx := context.WithValue(context.Background(), parentKey, "job-9")
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "sandbox_agent"
+	req.Params.Name = toolSandboxAgent
 	req.Params.Arguments = map[string]any{
-		"name":   "child",
-		"prompt": "do a thing",
-		"egress": "open",
+		childParamName:   "child",
+		childParamPrompt: "do a thing",
+		childParamEgress: "open",
 	}
 	res, err := r.handleChildAgent(ctx, req)
 	require.NoError(t, err)
@@ -105,8 +106,8 @@ func TestHandleChildAgent_RejectsOpenEgress(t *testing.T) {
 func TestHandleChildScript_NoParentIdentity(t *testing.T) {
 	r := NewRunner(Config{})
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "sandbox_script"
-	req.Params.Arguments = map[string]any{"name": "x", "command": "echo hi"}
+	req.Params.Name = toolSandboxScript
+	req.Params.Arguments = map[string]any{childParamName: "x", childParamCommand: "echo hi"}
 	res, err := r.handleChildScript(context.Background(), req)
 	require.NoError(t, err)
 	assert.True(t, res.IsError)

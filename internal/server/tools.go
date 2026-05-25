@@ -13,7 +13,7 @@ func (s *Server) handleSandboxScript(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	command, err := request.RequireString("command")
+	command, err := request.RequireString(paramCommand)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -21,14 +21,14 @@ func (s *Server) handleSandboxScript(
 		return mcp.NewToolResultError("command is required"), nil
 	}
 
-	image := request.GetString("image", "")
-	egress := request.GetString("egress", string(sandbox.EgressPackageManagers))
+	image := request.GetString(paramImage, "")
+	egress := request.GetString(paramEgress, string(sandbox.EgressPackageManagers))
 
-	files, err := optionalStringSlice(request, "files")
+	files, err := optionalStringSlice(request, paramFiles)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	directories, err := optionalStringSlice(request, "directories")
+	directories, err := optionalStringSlice(request, paramDirectories)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -50,14 +50,14 @@ func (s *Server) handleSandboxCreate(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	image := request.GetString("image", "")
-	egress := request.GetString("egress", string(sandbox.EgressPackageManagers))
+	image := request.GetString(paramImage, "")
+	egress := request.GetString(paramEgress, string(sandbox.EgressPackageManagers))
 
-	files, err := optionalStringSlice(request, "files")
+	files, err := optionalStringSlice(request, paramFiles)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	directories, err := optionalStringSlice(request, "directories")
+	directories, err := optionalStringSlice(request, paramDirectories)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -80,14 +80,14 @@ func (s *Server) handleSandboxExec(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	sandboxID, err := request.RequireString("sandbox_id")
+	sandboxID, err := request.RequireString(paramSandboxID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	if sandboxID == "" {
 		return mcp.NewToolResultError("sandbox_id is required"), nil
 	}
-	command, err := request.RequireString("command")
+	command, err := request.RequireString(paramCommand)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -111,15 +111,15 @@ func (s *Server) handleSandboxUpload(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	sandboxID, err := request.RequireString("sandbox_id")
+	sandboxID, err := request.RequireString(paramSandboxID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	src, err := request.RequireString("src")
+	src, err := request.RequireString(paramSrc)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	dst, err := request.RequireString("dst")
+	dst, err := request.RequireString(paramDst)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -143,11 +143,11 @@ func (s *Server) handleSandboxDownload(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	sandboxID, err := request.RequireString("sandbox_id")
+	sandboxID, err := request.RequireString(paramSandboxID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	src, err := request.RequireString("src")
+	src, err := request.RequireString(paramSrc)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -171,7 +171,7 @@ func (s *Server) handleSandboxDestroy(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	sandboxID, err := request.RequireString("sandbox_id")
+	sandboxID, err := request.RequireString(paramSandboxID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -189,7 +189,7 @@ func (s *Server) handleSandboxAgent(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	prompt, err := request.RequireString("prompt")
+	prompt, err := request.RequireString(paramPrompt)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -197,10 +197,10 @@ func (s *Server) handleSandboxAgent(
 		return mcp.NewToolResultError("prompt is required"), nil
 	}
 
-	agentName := request.GetString("agent", "")
-	model := request.GetString("model", "")
-	preamble := request.GetString("preamble", "")
-	egress := request.GetString("egress", string(sandbox.EgressNone))
+	agentName := request.GetString(paramAgent, "")
+	model := request.GetString(paramModel, "")
+	preamble := request.GetString(paramPreamble, "")
+	egress := request.GetString(paramEgress, string(sandbox.EgressNone))
 	// sandbox_agent never permits open egress: the combination of
 	// read-only /in mounts and unrestricted outbound is the
 	// data-exfiltration shape we keep off the MCP surface. Callers
@@ -213,11 +213,11 @@ func (s *Server) handleSandboxAgent(
 		), nil
 	}
 
-	files, err := optionalStringSlice(request, "files")
+	files, err := optionalStringSlice(request, paramFiles)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	directories, err := optionalStringSlice(request, "directories")
+	directories, err := optionalStringSlice(request, paramDirectories)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -243,7 +243,7 @@ func (s *Server) handleSandboxResearch(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	prompt, err := request.RequireString("prompt")
+	prompt, err := request.RequireString(paramPrompt)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -251,9 +251,9 @@ func (s *Server) handleSandboxResearch(
 		return mcp.NewToolResultError("prompt is required"), nil
 	}
 
-	agentName := request.GetString("agent", "")
-	model := request.GetString("model", "")
-	preamble := request.GetString("preamble", "")
+	agentName := request.GetString(paramAgent, "")
+	model := request.GetString(paramModel, "")
+	preamble := request.GetString(paramPreamble, "")
 
 	res, err := s.runner.Research(ctx, sandbox.ResearchRequest{
 		Agent:    agentName,

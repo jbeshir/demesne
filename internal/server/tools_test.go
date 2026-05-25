@@ -11,6 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testSandboxID    = "sbx-1"
+	testError        = "boom"
+	msgUnexpectedErr = "unexpected error result: %s"
+	msgIsError       = "case %d: expected IsError=true for %v"
+	msgNoCall        = "case %d: runner should not be called"
+	testCmdEcho      = "echo hello"
+	testCmdTrue      = "true"
+	testFile         = "/some/file.txt"
+	testDir          = "/some/dir"
+	msgExitCodeZero  = "exit_code: 0"
+)
+
 type fakeRunner struct {
 	scriptCalls    int
 	gotScriptReq   sandbox.ScriptRequest
@@ -121,8 +134,8 @@ func TestHandleSandboxScript_InvalidFiles(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	got, err := s.handleSandboxScript(context.Background(), newRequest(map[string]any{
-		"command": "true",
-		"files":   "not-an-array",
+		paramCommand: testCmdTrue,
+		paramFiles:   "not-an-array",
 	}))
 	require.NoError(t, err)
 	assert.True(t, got.IsError, "expected IsError=true for non-array files")
@@ -130,14 +143,14 @@ func TestHandleSandboxScript_InvalidFiles(t *testing.T) {
 }
 
 func TestHandleSandboxScript_RunnerErrorSurfaced(t *testing.T) {
-	r := &fakeRunner{scriptErr: errors.New("boom")}
+	r := &fakeRunner{scriptErr: errors.New(testError)}
 	s := NewServer(r)
 	got, err := s.handleSandboxScript(context.Background(), newRequest(map[string]any{
-		"command": "true",
+		paramCommand: testCmdTrue,
 	}))
 	require.NoError(t, err)
 	assert.True(t, got.IsError, "expected IsError=true when runner fails")
-	assert.Contains(t, resultText(t, got), "boom")
+	assert.Contains(t, resultText(t, got), testError)
 }
 
 func TestHandleSandboxScript_HappyPath(t *testing.T) {
@@ -151,25 +164,25 @@ func TestHandleSandboxScript_HappyPath(t *testing.T) {
 	}
 	s := NewServer(r)
 	got, err := s.handleSandboxScript(context.Background(), newRequest(map[string]any{
-		"command":     "echo hello",
-		"image":       "anaconda",
-		"egress":      "none",
-		"files":       []any{"/some/file.txt"},
-		"directories": []any{"/some/dir"},
+		paramCommand:     testCmdEcho,
+		paramImage:       "anaconda",
+		paramEgress:      "none",
+		paramFiles:       []any{testFile},
+		paramDirectories: []any{testDir},
 	}))
 	require.NoError(t, err)
-	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, 1, r.scriptCalls)
 	assert.Equal(t, sandbox.ScriptRequest{
-		Command:     "echo hello",
+		Command:     testCmdEcho,
 		Image:       "anaconda",
 		Egress:      sandbox.EgressNone,
-		Files:       []string{"/some/file.txt"},
-		Directories: []string{"/some/dir"},
+		Files:       []string{testFile},
+		Directories: []string{testDir},
 	}, r.gotScriptReq)
 
 	text := resultText(t, got)
-	for _, want := range []string{"exit_code: 0", "output_dir: /tmp/demesne/out/abc-123", "job_id: abc-123", "hello"} {
+	for _, want := range []string{msgExitCodeZero, "output_dir: /tmp/demesne/out/abc-123", "job_id: abc-123", "hello"} {
 		assert.Contains(t, text, want)
 	}
 }
@@ -178,7 +191,7 @@ func TestHandleSandboxScript_DefaultEgress(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	_, err := s.handleSandboxScript(context.Background(), newRequest(map[string]any{
-		"command": "true",
+		paramCommand: testCmdTrue,
 	}))
 	require.NoError(t, err)
 	assert.Equal(t, sandbox.EgressPackageManagers, r.gotScriptReq.Egress)
@@ -193,11 +206,11 @@ func TestHandleSandboxCreate_HappyPath(t *testing.T) {
 	}
 	s := NewServer(r)
 	got, err := s.handleSandboxCreate(context.Background(), newRequest(map[string]any{
-		"image":  "python",
-		"egress": "none",
+		paramImage:  "python",
+		paramEgress: "none",
 	}))
 	require.NoError(t, err)
-	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, 1, r.createCalls)
 	assert.Equal(t, sandbox.CreateRequest{Image: "python", Egress: sandbox.EgressNone}, r.gotCreateReq)
 	text := resultText(t, got)
@@ -217,17 +230,17 @@ func TestHandleSandboxCreate_DefaultEgress(t *testing.T) {
 func TestHandleSandboxExec_MissingParams(t *testing.T) {
 	cases := []map[string]any{
 		{},
-		{"sandbox_id": "sbx-1"},
-		{"command": "echo hi"},
-		{"sandbox_id": "", "command": "echo hi"},
+		{paramSandboxID: testSandboxID},
+		{paramCommand: "echo hi"},
+		{paramSandboxID: "", paramCommand: "echo hi"},
 	}
 	for i, args := range cases {
 		r := &fakeRunner{}
 		s := NewServer(r)
 		got, err := s.handleSandboxExec(context.Background(), newRequest(args))
 		require.NoError(t, err)
-		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
-		assert.Zero(t, r.execCalls, "case %d: runner should not be called", i)
+		assert.True(t, got.IsError, msgIsError, i, args)
+		assert.Zero(t, r.execCalls, msgNoCall, i)
 	}
 }
 
@@ -237,45 +250,45 @@ func TestHandleSandboxExec_HappyPath(t *testing.T) {
 	}
 	s := NewServer(r)
 	got, err := s.handleSandboxExec(context.Background(), newRequest(map[string]any{
-		"sandbox_id": "sbx-1",
-		"command":    "echo hello",
+		paramSandboxID: testSandboxID,
+		paramCommand:   testCmdEcho,
 	}))
 	require.NoError(t, err)
-	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
-	assert.Equal(t, sandbox.ExecRequest{SandboxID: "sbx-1", Command: "echo hello"}, r.gotExecReq)
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
+	assert.Equal(t, sandbox.ExecRequest{SandboxID: testSandboxID, Command: testCmdEcho}, r.gotExecReq)
 	text := resultText(t, got)
-	for _, want := range []string{"exit_code: 0", "hello"} {
+	for _, want := range []string{msgExitCodeZero, "hello"} {
 		assert.Contains(t, text, want)
 	}
 }
 
 func TestHandleSandboxExec_RunnerErrorSurfaced(t *testing.T) {
-	r := &fakeRunner{execErr: errors.New("boom")}
+	r := &fakeRunner{execErr: errors.New(testError)}
 	s := NewServer(r)
 	got, err := s.handleSandboxExec(context.Background(), newRequest(map[string]any{
-		"sandbox_id": "sbx-1",
-		"command":    "true",
+		paramSandboxID: testSandboxID,
+		paramCommand:   testCmdTrue,
 	}))
 	require.NoError(t, err)
 	assert.True(t, got.IsError, "expected IsError=true when runner fails")
-	assert.Contains(t, resultText(t, got), "boom")
+	assert.Contains(t, resultText(t, got), testError)
 }
 
 func TestHandleSandboxUpload_MissingParams(t *testing.T) {
 	cases := []map[string]any{
 		{},
-		{"sandbox_id": "sbx-1"},
-		{"sandbox_id": "sbx-1", "src": "/a"},
-		{"src": "/a", "dst": "/b"},
-		{"sandbox_id": "sbx-1", "src": "", "dst": "/b"},
+		{paramSandboxID: testSandboxID},
+		{paramSandboxID: testSandboxID, paramSrc: "/a"},
+		{paramSrc: "/a", paramDst: "/b"},
+		{paramSandboxID: testSandboxID, paramSrc: "", paramDst: "/b"},
 	}
 	for i, args := range cases {
 		r := &fakeRunner{}
 		s := NewServer(r)
 		got, err := s.handleSandboxUpload(context.Background(), newRequest(args))
 		require.NoError(t, err)
-		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
-		assert.Zero(t, r.uploadCalls, "case %d: runner should not be called", i)
+		assert.True(t, got.IsError, msgIsError, i, args)
+		assert.Zero(t, r.uploadCalls, msgNoCall, i)
 	}
 }
 
@@ -283,30 +296,30 @@ func TestHandleSandboxUpload_HappyPath(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	got, err := s.handleSandboxUpload(context.Background(), newRequest(map[string]any{
-		"sandbox_id": "sbx-1",
-		"src":        "/host/data.txt",
-		"dst":        "/tmp/data.txt",
+		paramSandboxID: testSandboxID,
+		paramSrc:       "/host/data.txt",
+		paramDst:       "/tmp/data.txt",
 	}))
 	require.NoError(t, err)
-	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
-	assert.Equal(t, sandbox.UploadRequest{SandboxID: "sbx-1", HostSrc: "/host/data.txt", SandboxDst: "/tmp/data.txt"}, r.gotUploadReq)
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
+	assert.Equal(t, sandbox.UploadRequest{SandboxID: testSandboxID, HostSrc: "/host/data.txt", SandboxDst: "/tmp/data.txt"}, r.gotUploadReq)
 	assert.Contains(t, resultText(t, got), "uploaded: data.txt -> /tmp/data.txt")
 }
 
 func TestHandleSandboxDownload_MissingParams(t *testing.T) {
 	cases := []map[string]any{
 		{},
-		{"sandbox_id": "sbx-1"},
-		{"src": "/in/a"},
-		{"sandbox_id": "", "src": "/in/a"},
+		{paramSandboxID: testSandboxID},
+		{paramSrc: "/in/a"},
+		{paramSandboxID: "", paramSrc: "/in/a"},
 	}
 	for i, args := range cases {
 		r := &fakeRunner{}
 		s := NewServer(r)
 		got, err := s.handleSandboxDownload(context.Background(), newRequest(args))
 		require.NoError(t, err)
-		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
-		assert.Zero(t, r.downloadCalls, "case %d: runner should not be called", i)
+		assert.True(t, got.IsError, msgIsError, i, args)
+		assert.Zero(t, r.downloadCalls, msgNoCall, i)
 	}
 }
 
@@ -316,12 +329,12 @@ func TestHandleSandboxDownload_HappyPath(t *testing.T) {
 	}
 	s := NewServer(r)
 	got, err := s.handleSandboxDownload(context.Background(), newRequest(map[string]any{
-		"sandbox_id": "sbx-1",
-		"src":        "/sandbox/a.txt",
+		paramSandboxID: testSandboxID,
+		paramSrc:       "/sandbox/a.txt",
 	}))
 	require.NoError(t, err)
-	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
-	assert.Equal(t, sandbox.DownloadRequest{SandboxID: "sbx-1", SandboxSrc: "/sandbox/a.txt"}, r.gotDownloadReq)
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
+	assert.Equal(t, sandbox.DownloadRequest{SandboxID: testSandboxID, SandboxSrc: "/sandbox/a.txt"}, r.gotDownloadReq)
 	assert.Contains(t, resultText(t, got), "downloaded: /sandbox/a.txt -> /host/out/job-1/downloads/a.txt")
 }
 
@@ -338,23 +351,23 @@ func TestHandleSandboxDestroy_HappyPath(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	got, err := s.handleSandboxDestroy(context.Background(), newRequest(map[string]any{
-		"sandbox_id": "sbx-1",
+		paramSandboxID: testSandboxID,
 	}))
 	require.NoError(t, err)
-	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
-	assert.Equal(t, "sbx-1", r.gotDestroyReq.SandboxID)
-	assert.Contains(t, resultText(t, got), "destroyed: sbx-1")
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
+	assert.Equal(t, testSandboxID, r.gotDestroyReq.SandboxID)
+	assert.Contains(t, resultText(t, got), "destroyed: "+testSandboxID)
 }
 
 func TestHandleSandboxAgent_MissingPrompt(t *testing.T) {
-	cases := []map[string]any{{}, {"prompt": ""}}
+	cases := []map[string]any{{}, {paramPrompt: ""}}
 	for i, args := range cases {
 		r := &fakeRunner{}
 		s := NewServer(r)
 		got, err := s.handleSandboxAgent(context.Background(), newRequest(args))
 		require.NoError(t, err)
-		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
-		assert.Zero(t, r.agentCalls, "case %d: runner should not be called", i)
+		assert.True(t, got.IsError, msgIsError, i, args)
+		assert.Zero(t, r.agentCalls, msgNoCall, i)
 	}
 }
 
@@ -370,27 +383,27 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 	}
 	s := NewServer(r)
 	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
-		"prompt":      "reply PONG",
-		"model":       "haiku",
-		"preamble":    "say only the word",
-		"files":       []any{"/some/file.txt"},
-		"directories": []any{"/some/dir"},
-		"egress":      "package-managers",
+		paramPrompt:      "reply PONG",
+		paramModel:       "haiku",
+		paramPreamble:    "say only the word",
+		paramFiles:       []any{testFile},
+		paramDirectories: []any{testDir},
+		paramEgress:      "package-managers",
 	}))
 	require.NoError(t, err)
-	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, sandbox.AgentRequest{
 		Agent:       "",
 		Model:       "haiku",
 		Prompt:      "reply PONG",
 		Preamble:    "say only the word",
-		Files:       []string{"/some/file.txt"},
-		Directories: []string{"/some/dir"},
+		Files:       []string{testFile},
+		Directories: []string{testDir},
 		Egress:      sandbox.EgressPackageManagers,
 	}, r.gotAgentReq)
 	text := resultText(t, got)
 	for _, want := range []string{
-		"exit_code: 0", "output_dir: /tmp/demesne-out/abc", "job_id: abc",
+		msgExitCodeZero, "output_dir: /tmp/demesne-out/abc", "job_id: abc",
 		"cost_usd: 0.0123", "PONG",
 	} {
 		assert.Contains(t, text, want)
@@ -401,8 +414,8 @@ func TestHandleSandboxAgent_RejectsOpenEgress(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
-		"prompt": "hi",
-		"egress": "open",
+		paramPrompt: "hi",
+		paramEgress: "open",
 	}))
 	require.NoError(t, err)
 	assert.True(t, got.IsError, "open egress must be refused for sandbox_agent")
@@ -414,32 +427,32 @@ func TestHandleSandboxAgent_DefaultEgress(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	_, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
-		"prompt": "hi",
+		paramPrompt: "hi",
 	}))
 	require.NoError(t, err)
 	assert.Equal(t, sandbox.EgressNone, r.gotAgentReq.Egress)
 }
 
 func TestHandleSandboxAgent_RunnerErrorSurfaced(t *testing.T) {
-	r := &fakeRunner{agentErr: errors.New("boom")}
+	r := &fakeRunner{agentErr: errors.New(testError)}
 	s := NewServer(r)
 	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
-		"prompt": "hi",
+		paramPrompt: "hi",
 	}))
 	require.NoError(t, err)
 	assert.True(t, got.IsError, "expected IsError=true")
-	assert.Contains(t, resultText(t, got), "boom")
+	assert.Contains(t, resultText(t, got), testError)
 }
 
 func TestHandleSandboxResearch_MissingPrompt(t *testing.T) {
-	cases := []map[string]any{{}, {"prompt": ""}}
+	cases := []map[string]any{{}, {paramPrompt: ""}}
 	for i, args := range cases {
 		r := &fakeRunner{}
 		s := NewServer(r)
 		got, err := s.handleSandboxResearch(context.Background(), newRequest(args))
 		require.NoError(t, err)
-		assert.True(t, got.IsError, "case %d: expected IsError=true for %v", i, args)
-		assert.Zero(t, r.researchCalls, "case %d: runner should not be called", i)
+		assert.True(t, got.IsError, msgIsError, i, args)
+		assert.Zero(t, r.researchCalls, msgNoCall, i)
 	}
 }
 
@@ -455,12 +468,12 @@ func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 	}
 	s := NewServer(r)
 	got, err := s.handleSandboxResearch(context.Background(), newRequest(map[string]any{
-		"prompt":   "investigate the corpus",
-		"model":    "sonnet",
-		"preamble": "stay focused",
+		paramPrompt:   "investigate the corpus",
+		paramModel:    "sonnet",
+		paramPreamble: "stay focused",
 	}))
 	require.NoError(t, err)
-	require.False(t, got.IsError, "unexpected error result: %s", resultText(t, got))
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, sandbox.ResearchRequest{
 		Agent:    "",
 		Model:    "sonnet",
@@ -469,7 +482,7 @@ func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 	}, r.gotResearchReq)
 	text := resultText(t, got)
 	for _, want := range []string{
-		"exit_code: 0", "output_dir: /tmp/demesne-out/rsh", "job_id: rsh",
+		msgExitCodeZero, "output_dir: /tmp/demesne-out/rsh", "job_id: rsh",
 		"cost_usd: 0.4200", "DONE",
 	} {
 		assert.Contains(t, text, want)
@@ -477,12 +490,12 @@ func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 }
 
 func TestHandleSandboxResearch_RunnerErrorSurfaced(t *testing.T) {
-	r := &fakeRunner{researchErr: errors.New("boom")}
+	r := &fakeRunner{researchErr: errors.New(testError)}
 	s := NewServer(r)
 	got, err := s.handleSandboxResearch(context.Background(), newRequest(map[string]any{
-		"prompt": "hi",
+		paramPrompt: "hi",
 	}))
 	require.NoError(t, err)
 	assert.True(t, got.IsError)
-	assert.Contains(t, resultText(t, got), "boom")
+	assert.Contains(t, resultText(t, got), testError)
 }

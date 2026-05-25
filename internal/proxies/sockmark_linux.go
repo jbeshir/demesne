@@ -26,6 +26,5 @@ const soMarkBypass = 1
 // The fd comes from syscall.RawConn.Control which only ever yields
 // values in the int range on Linux, so the conversion is safe.
 func setBypassMark(fd uintptr) error {
-	//nolint:gosec // fd is always within int range
 	return syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_MARK, soMarkBypass)
 }
