@@ -79,6 +79,42 @@ func TestProxy_ForwardsModuleAndSumdb(t *testing.T) {
 	}
 }
 
+func TestProxy_FollowsRedirectInternally(t *testing.T) {
+	// proxy.golang.org serves large module zips by redirecting to a CDN
+	// (storage.googleapis.com) the sandbox can't resolve. The proxy must
+	// follow the redirect itself and return the final body.
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("zip-bytes"))
+	}))
+	defer final.Close()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".zip") {
+			http.Redirect(w, r, final.URL+"/cdn/blob", http.StatusFound)
+			return
+		}
+		_, _ = w.Write([]byte("ok:" + r.URL.Path)) //nolint:gosec // G705: path is test input
+	}))
+	defer upstream.Close()
+
+	addr := startProxy(t, upstream.URL)
+
+	// Disable client-side redirect following so the assertion proves the
+	// proxy (not this client) followed the redirect.
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"http://"+addr+"/github.com/foo/bar/@v/v1.0.0.zip", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "proxy should follow the redirect, not relay it")
+	assert.Equal(t, "zip-bytes", string(body))
+}
+
 func TestProxy_RejectsNonGet(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

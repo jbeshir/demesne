@@ -11,11 +11,12 @@ package goproxy
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/jbeshir/demesne/internal/proxies"
@@ -67,7 +68,7 @@ type registration struct{}
 func (registration) Name() string          { return Name }
 func (registration) EgressHosts() []string { return []string{SumDBHost} }
 
-// ProxyServer is a reverse proxy for proxy.golang.org.
+// ProxyServer is a forwarding proxy for proxy.golang.org.
 type ProxyServer struct {
 	bindAddr string
 	server   *http.Server
@@ -91,19 +92,15 @@ func newProxyServer(bindAddr, upstreamURL string, transport http.RoundTripper) *
 	if err != nil {
 		panic("goproxy: invalid upstream URL " + upstreamURL + ": " + err.Error())
 	}
-	rp := &httputil.ReverseProxy{
-		Rewrite: func(r *httputil.ProxyRequest) {
-			r.SetURL(target) // joins target with the request path
-			r.Out.Host = target.Host
-		},
-		Transport: transport,
-		ErrorLog:  log.New(log.Writer(), "go-mod-proxy: ", log.LstdFlags),
+	h := &forwarder{
+		target: target,
+		client: &http.Client{Transport: transport},
 	}
 	return &ProxyServer{
 		bindAddr: bindAddr,
 		server: &http.Server{
 			Addr:              bindAddr,
-			Handler:           methodGate(rp),
+			Handler:           methodGate(h),
 			ReadHeaderTimeout: 30 * time.Second,
 		},
 	}
@@ -120,6 +117,63 @@ func methodGate(next http.Handler) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+}
+
+// forwarder proxies Go module-proxy requests to the upstream, following
+// redirects internally over the egress-bypass transport. proxy.golang.org
+// serves large module zips by 302-redirecting to a storage.googleapis.com
+// signed URL; the sandbox client cannot resolve that host, so the proxy
+// must follow the redirect itself (it holds the egress bypass) and stream
+// the final response back. A ReverseProxy would relay the 302 unchanged
+// and the client's follow-up fetch would fail DNS.
+type forwarder struct {
+	target *url.URL
+	client *http.Client
+}
+
+func (f *forwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	out := *f.target
+	out.Path = singleJoiningSlash(f.target.Path, r.URL.Path)
+	out.RawQuery = r.URL.RawQuery
+
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, out.String(), nil)
+	if err != nil {
+		http.Error(w, "bad upstream request", http.StatusBadGateway)
+		return
+	}
+
+	resp, err := f.client.Do(req) //nolint:gosec // fixed upstream host; only path/query come from the request
+	if err != nil {
+		log.Printf("go-mod proxy: upstream error: %v", err)
+		http.Error(w, "upstream fetch failed", http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	for key, vals := range resp.Header {
+		for _, v := range vals {
+			w.Header().Add(key, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("go-mod proxy: response copy error: %v", err)
+	}
+}
+
+// singleJoiningSlash joins two URL path segments with exactly one slash,
+// matching net/http/httputil's path-join semantics.
+func singleJoiningSlash(a, b string) string {
+	aslash := strings.HasSuffix(a, "/")
+	bslash := strings.HasPrefix(b, "/")
+	switch {
+	case aslash && bslash:
+		return a + b[1:]
+	case !aslash && !bslash && a != "" && b != "":
+		return a + "/" + b
+	default:
+		return a + b
+	}
 }
 
 // Start binds and serves until ctx is cancelled, then gracefully shuts
