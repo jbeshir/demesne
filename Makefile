@@ -1,8 +1,8 @@
 .PHONY: setup-tools
 setup-tools:
-	go install golang.org/x/tools/cmd/goimports@latest
-	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	go install github.com/joho/godotenv/cmd/godotenv@latest
+	go get -tool golang.org/x/tools/cmd/goimports@latest
+	go get -tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	go get -tool github.com/joho/godotenv/cmd/godotenv@latest
 
 .PHONY: setup-files
 setup-files: .env
@@ -16,7 +16,7 @@ validate: lint test-short build
 
 .PHONY: lint
 lint: sidecar-binary
-	golangci-lint run --config .golangci.yml ./...
+	go tool golangci-lint run --config .golangci.yml ./...
 
 .PHONY: test-short
 test-short: sidecar-binary
@@ -28,12 +28,12 @@ test: sidecar-binary
 
 .PHONY: test-integration
 test-integration: sidecar-binary .env
-	godotenv -f .env go test -v -tags integration ./internal/sandbox/
+	go tool godotenv -f .env go test -v -tags integration ./internal/sandbox/
 
 .PHONY: fmt
 fmt:
 	go fmt ./...
-	goimports -w .
+	go tool goimports -w .
 
 # ── Build ─────────────────────────────────────────────────────
 
