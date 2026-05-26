@@ -7,6 +7,15 @@ import (
 	"strings"
 )
 
+// Claude Code stream-json event types and content-block type constants.
+// Values match the Claude Code stream-json spec; typos here would silently
+// skip events rather than failing loudly.
+const (
+	evtTypeResult    = "result"
+	evtTypeAssistant = "assistant"
+	contentTypeText  = "text"
+)
+
 // streamEvent is the subset of a Claude Code stream-json NDJSON line we
 // read to recover the final answer.
 type streamEvent struct {
@@ -38,13 +47,13 @@ func (claudeCodeAgent) ResultText(transcript []byte) string {
 			continue
 		}
 		switch evt.Type {
-		case "result":
+		case evtTypeResult:
 			if evt.Result != "" {
 				result = evt.Result
 			}
-		case "assistant":
+		case evtTypeAssistant:
 			for _, c := range evt.Message.Content {
-				if c.Type == "text" {
+				if c.Type == contentTypeText {
 					assistant.WriteString(c.Text)
 				}
 			}

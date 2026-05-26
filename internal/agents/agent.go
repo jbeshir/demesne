@@ -11,12 +11,35 @@ package agents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
 
 	"github.com/jbeshir/demesne/internal/egress"
 )
+
+// ModelName is the validated caller-facing model alias ("opus", "sonnet",
+// "haiku"). Provider packages define the concrete constants; the sandbox
+// resolves raw MCP input strings to ModelName before passing to
+// Command/EnvVars so those methods never see an unvalidated string.
+type ModelName string
+
+// ErrUnknownAgent is the sentinel wrapped by Lookup when the requested
+// agent name has no registered provider. Use errors.Is to distinguish
+// this from operational (infra) errors without inspecting the text.
+var ErrUnknownAgent = errors.New("is not registered")
+
+// ContextParams is the input to GenerateContext: all per-run context the
+// provider needs to emit the agent's context file (e.g. CLAUDE.md).
+type ContextParams struct {
+	Preamble     string
+	Prompt       string
+	Egress       egress.Mode
+	Inputs       []InputInfo
+	MCPServers   []MCPServerInfo
+	PreviousJobs []string
+}
 
 // InputInfo summarises one /in/<basename> mount for an agent's context
 // file generator (e.g. CLAUDE.md, AGENTS.md).
@@ -72,20 +95,8 @@ type Agent interface {
 
 	// GenerateContext returns the contents of the context file (e.g.
 	// CLAUDE.md) that should be written into the sandbox before the agent
-	// starts. Inputs describe each /in/<basename> mount; egress is the
-	// caller-visible egress.Mode so the provider can tell the model
-	// exactly what's reachable. Empty egress is treated as "none".
-	// mcpServers lists the host MCP servers wired into this run (empty
-	// when none); the provider documents them in the context file.
-	// previousJobs names completed sibling jobs whose /out is mounted
-	// read-only under /in/previous-jobs/<name> (empty when none).
-	GenerateContext(
-		preamble, prompt string,
-		egress egress.Mode,
-		inputs []InputInfo,
-		mcpServers []MCPServerInfo,
-		previousJobs []string,
-	) string
+	// starts. p bundles all per-run context the provider needs.
+	GenerateContext(p ContextParams) string
 
 	// WriteAgentConfig writes whatever CLI configuration the agent needs
 	// into configDir before the sandbox starts (e.g. an mcp.json
@@ -110,17 +121,17 @@ type Agent interface {
 	// ResolveModel validates and normalises a caller-supplied model name
 	// against the vendor's whitelist. Empty input must resolve to a
 	// sensible default.
-	ResolveModel(name string) (string, error)
+	ResolveModel(name string) (ModelName, error)
 
 	// Command is the argv the runner should execute inside the sandbox.
-	Command(prompt, model string) []string
+	Command(prompt string, model ModelName) []string
 
 	// EnvVars are the environment variables to set on the command. Keys
 	// are env var names; values are literal values to inject. Each
 	// provider knows the URL of its own proxy (via the matching
 	// internal/proxies/<vendor> package), so callers don't need to
 	// thread proxy URLs through this interface.
-	EnvVars(oauthToken, model string) map[string]string
+	EnvVars(oauthToken string, model ModelName) map[string]string
 }
 
 var (
@@ -156,7 +167,7 @@ func Lookup(name string) (Agent, error) {
 		available = append(available, k)
 	}
 	sort.Strings(available)
-	return nil, fmt.Errorf("agent %q is not registered (available: %v)", name, available)
+	return nil, fmt.Errorf("agent %q %w (available: %v)", name, ErrUnknownAgent, available)
 }
 
 // DefaultAgent is the name resolved when sandbox_agent's `agent`
