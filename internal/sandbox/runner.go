@@ -42,6 +42,7 @@ const (
 	toolSandboxScript   = "sandbox_script"
 	toolSandboxAgent    = "sandbox_agent"
 	toolSandboxResearch = "sandbox_research"
+	toolSandboxCreate   = "sandbox_create"
 	mountOut            = "/out"
 	mountWorkspace      = "/workspace"
 	outVolumeName       = "out"

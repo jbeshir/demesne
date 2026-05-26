@@ -20,7 +20,7 @@ func (r *Runner) create(ctx context.Context, req CreateRequest, child *childSpaw
 		Egress:         req.Egress,
 		Files:          req.Files,
 		Directories:    req.Directories,
-		Tool:           "sandbox_create",
+		Tool:           toolSandboxCreate,
 		TimeoutSeconds: persistentSandboxTTLSeconds,
 		Child:          child,
 	})

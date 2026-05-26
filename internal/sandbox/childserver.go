@@ -129,7 +129,7 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		mcp.WithString(childParamPreamble, mcp.Description("Prose prepended to the child's context file.")),
 	), r.handleChildResearch)
 
-	add(mcp.NewTool("sandbox_create",
+	add(mcp.NewTool(toolSandboxCreate,
 		mcp.WithDescription(childCreateDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamImage, mcp.Description(childImageDescription)),
@@ -176,10 +176,14 @@ func (r *Runner) handleChildScript(ctx context.Context, req mcp.CallToolRequest)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	egress := req.GetString(childParamEgress, string(EgressPackageManagers))
+	if errResult := rejectOpenEgress(egress); errResult != nil {
+		return errResult, nil
+	}
 	res, err := r.runScript(ctx, ScriptRequest{
 		Command: command,
 		Image:   req.GetString(childParamImage, ""),
-		Egress:  EgressMode(req.GetString(childParamEgress, string(EgressPackageManagers))),
+		Egress:  EgressMode(egress),
 	}, &childSpawn{name: name, parent: parent})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -201,9 +205,8 @@ func (r *Runner) handleChildAgent(ctx context.Context, req mcp.CallToolRequest) 
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	egress := req.GetString(childParamEgress, string(EgressNone))
-	if EgressMode(egress) == EgressOpen {
-		return mcp.NewToolResultError(
-			"egress 'open' is not permitted for sandbox_agent; use sandbox_research"), nil
+	if errResult := rejectOpenEgress(egress); errResult != nil {
+		return errResult, nil
 	}
 	spec := internalAgentSpec{
 		agentName: req.GetString(childParamAgent, ""),
@@ -256,9 +259,13 @@ func (r *Runner) handleChildCreate(ctx context.Context, req mcp.CallToolRequest)
 	if errResult != nil {
 		return errResult, nil
 	}
+	egress := req.GetString(childParamEgress, string(EgressPackageManagers))
+	if errResult := rejectOpenEgress(egress); errResult != nil {
+		return errResult, nil
+	}
 	res, err := r.create(ctx, CreateRequest{
 		Image:  req.GetString(childParamImage, ""),
-		Egress: EgressMode(req.GetString(childParamEgress, string(EgressPackageManagers))),
+		Egress: EgressMode(egress),
 	}, &childSpawn{name: name, parent: parent})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -314,6 +321,21 @@ func (r *Runner) childSpawnParams(
 		return nil, "", mcp.NewToolResultError(err.Error())
 	}
 	return parent, name, nil
+}
+
+// rejectOpenEgress returns an error result when a child tool that
+// inherits the parent's read-only /in mounts is asked for 'open' egress.
+// Inputs plus unrestricted outbound is the data-exfiltration shape demesne
+// keeps off the child surface: sandbox_research is the only route to open
+// egress, and it deliberately mounts no inputs. Returns nil when egress is
+// acceptable (sandbox_script/sandbox_create/sandbox_agent share this guard).
+func rejectOpenEgress(egress string) *mcp.CallToolResult {
+	if EgressMode(egress) == EgressOpen {
+		return mcp.NewToolResultError(
+			"egress 'open' is not permitted here; it would combine caller inputs with " +
+				"unrestricted outbound. Use sandbox_research (no input mounts) for open egress.")
+	}
+	return nil
 }
 
 func formatChildAgentResult(name string, res agentRunResult) string {
