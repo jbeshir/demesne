@@ -13,12 +13,9 @@ func (s *Server) handleSandboxScript(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	command, err := request.RequireString(paramCommand)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	if command == "" {
-		return mcp.NewToolResultError("command is required"), nil
+	command, errRes := requireNonEmpty(request, paramCommand)
+	if errRes != nil {
+		return errRes, nil
 	}
 
 	image := request.GetString(paramImage, "")
@@ -80,19 +77,13 @@ func (s *Server) handleSandboxExec(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	sandboxID, err := request.RequireString(paramSandboxID)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+	sandboxID, errRes := requireNonEmpty(request, paramSandboxID)
+	if errRes != nil {
+		return errRes, nil
 	}
-	if sandboxID == "" {
-		return mcp.NewToolResultError("sandbox_id is required"), nil
-	}
-	command, err := request.RequireString(paramCommand)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	if command == "" {
-		return mcp.NewToolResultError("command is required"), nil
+	command, errRes := requireNonEmpty(request, paramCommand)
+	if errRes != nil {
+		return errRes, nil
 	}
 
 	res, err := s.runner.Exec(ctx, sandbox.ExecRequest{
@@ -171,12 +162,9 @@ func (s *Server) handleSandboxDestroy(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	sandboxID, err := request.RequireString(paramSandboxID)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	if sandboxID == "" {
-		return mcp.NewToolResultError("sandbox_id is required"), nil
+	sandboxID, errRes := requireNonEmpty(request, paramSandboxID)
+	if errRes != nil {
+		return errRes, nil
 	}
 
 	if err := s.runner.Destroy(ctx, sandbox.DestroyRequest{SandboxID: sandbox.SandboxID(sandboxID)}); err != nil {
@@ -189,12 +177,9 @@ func (s *Server) handleSandboxAgent(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	prompt, err := request.RequireString(paramPrompt)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	if prompt == "" {
-		return mcp.NewToolResultError("prompt is required"), nil
+	prompt, errRes := requireNonEmpty(request, paramPrompt)
+	if errRes != nil {
+		return errRes, nil
 	}
 
 	agentName := request.GetString(paramAgent, "")
@@ -243,12 +228,9 @@ func (s *Server) handleSandboxResearch(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-	prompt, err := request.RequireString(paramPrompt)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	if prompt == "" {
-		return mcp.NewToolResultError("prompt is required"), nil
+	prompt, errRes := requireNonEmpty(request, paramPrompt)
+	if errRes != nil {
+		return errRes, nil
 	}
 
 	agentName := request.GetString(paramAgent, "")
@@ -269,21 +251,17 @@ func (s *Server) handleSandboxResearch(
 	)), nil
 }
 
-// formatAgentRunResult is the shared output formatter for sandbox_agent
-// and sandbox_research. Both surface the same set of fields; keeping a
-// single formatter ensures the result text doesn't drift between them.
-// total_usage_usd adds the spend of any child sandboxes the run spawned.
-func formatAgentRunResult(
-	exitCode int,
-	outputPath string,
-	jobID sandbox.JobID,
-	costUSD, totalUsageUSD float64,
-	stdout string,
-) string {
-	return fmt.Sprintf(
-		"exit_code: %d\noutput_dir: %s\njob_id: %s\ncost_usd: %.4f\ntotal_usage_usd: %.4f\n---\n%s",
-		exitCode, outputPath, jobID, costUSD, totalUsageUSD, stdout,
-	)
+// requireNonEmpty extracts a required, non-empty string param, returning an
+// error result when the param is absent or empty.
+func requireNonEmpty(req mcp.CallToolRequest, key string) (string, *mcp.CallToolResult) {
+	v, err := req.RequireString(key)
+	if err != nil {
+		return "", mcp.NewToolResultError(err.Error())
+	}
+	if v == "" {
+		return "", mcp.NewToolResultError(key + " is required")
+	}
+	return v, nil
 }
 
 // optionalStringSlice returns the named argument as []string. It treats a

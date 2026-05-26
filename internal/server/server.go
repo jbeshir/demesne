@@ -21,8 +21,6 @@ const (
 	paramPreamble     = "preamble"
 	paramSrc          = "src"
 	paramDst          = "dst"
-	typeKey           = "type"
-	typeString        = "string"
 	sandboxHandleDesc = "Sandbox handle returned by sandbox_create."
 )
 
@@ -64,6 +62,8 @@ func (s *Server) Run() error {
 	return server.ServeStdio(s.mcpServer)
 }
 
+func stringArrayItems() map[string]any { return map[string]any{"type": "string"} }
+
 func (s *Server) registerTools() {
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxScript,
 		mcp.WithDescription(scriptToolDescription),
@@ -78,11 +78,11 @@ func (s *Server) registerTools() {
 		mcp.WithString(paramEgress, mcp.Description(egressParamDescription)),
 		mcp.WithArray(paramFiles,
 			mcp.Description(filesParamDescription),
-			mcp.Items(map[string]any{typeKey: typeString}),
+			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithArray(paramDirectories,
 			mcp.Description(directoriesParamDescription),
-			mcp.Items(map[string]any{typeKey: typeString}),
+			mcp.Items(stringArrayItems()),
 		),
 	), s.handleSandboxScript)
 
@@ -92,11 +92,11 @@ func (s *Server) registerTools() {
 		mcp.WithString(paramEgress, mcp.Description(egressParamDescription)),
 		mcp.WithArray(paramFiles,
 			mcp.Description(filesParamDescription),
-			mcp.Items(map[string]any{typeKey: typeString}),
+			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithArray(paramDirectories,
 			mcp.Description(directoriesParamDescription),
-			mcp.Items(map[string]any{typeKey: typeString}),
+			mcp.Items(stringArrayItems()),
 		),
 	), s.handleSandboxCreate)
 
@@ -194,11 +194,11 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithArray(paramFiles,
 			mcp.Description(filesParamDescription),
-			mcp.Items(map[string]any{typeKey: typeString}),
+			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithArray(paramDirectories,
 			mcp.Description(directoriesParamDescription),
-			mcp.Items(map[string]any{typeKey: typeString}),
+			mcp.Items(stringArrayItems()),
 		),
 	), s.handleSandboxAgent)
 
