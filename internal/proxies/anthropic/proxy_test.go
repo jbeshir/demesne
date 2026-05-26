@@ -257,5 +257,5 @@ data: {"type":"message_stop"}
 
 	snap := tracker.snapshot()
 	// 1k input @ $3/MTok + 2k output @ $15/MTok = $0.003 + $0.030 = $0.033.
-	assert.InDelta(t, 0.033, snap.CostUSD, 1e-9)
+	assert.InDelta(t, 0.033, float64(snap.CostUSD), 1e-9)
 }
