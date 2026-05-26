@@ -20,7 +20,7 @@ import (
 type Tracker struct {
 	mu        sync.Mutex
 	usagePath string // empty disables disk writes
-	perModel  map[string]*TokenCounts
+	perModel  map[ModelID]*TokenCounts
 }
 
 // NewTracker constructs a Tracker. usagePath is the host-bind-mounted
@@ -29,7 +29,7 @@ type Tracker struct {
 func NewTracker(usagePath string) *Tracker {
 	return &Tracker{
 		usagePath: usagePath,
-		perModel:  map[string]*TokenCounts{},
+		perModel:  map[ModelID]*TokenCounts{},
 	}
 }
 
@@ -37,7 +37,7 @@ func NewTracker(usagePath string) *Tracker {
 // and rewrites usage.json. modelID may be a dated Anthropic ID (e.g.
 // "claude-opus-4-7-20251201"); pricing uses longest-prefix-match so
 // dated IDs route to their family.
-func (t *Tracker) Add(modelID string, tc TokenCounts) {
+func (t *Tracker) Add(modelID ModelID, tc TokenCounts) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if modelID == "" {
@@ -56,8 +56,8 @@ func (t *Tracker) Add(modelID string, tc TokenCounts) {
 }
 
 // costUSDLocked returns the cumulative cost; caller must hold the mutex.
-func (t *Tracker) costUSDLocked() float64 {
-	var total float64
+func (t *Tracker) costUSDLocked() USD {
+	var total USD
 	for modelID, mu := range t.perModel {
 		total += CostUSD(modelID, *mu)
 	}
@@ -66,17 +66,17 @@ func (t *Tracker) costUSDLocked() float64 {
 
 // Snapshot is the JSON-serializable view of the tracker.
 type Snapshot struct {
-	CostUSD  float64                `json:"cost_usd"`
+	CostUSD  USD                    `json:"cost_usd"`
 	PerModel map[string]ModelReport `json:"per_model"`
 }
 
 // ModelReport breaks usage down for one Anthropic model family.
 type ModelReport struct {
-	InputTokens              int64   `json:"input_tokens"`
-	OutputTokens             int64   `json:"output_tokens"`
-	CacheCreationInputTokens int64   `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     int64   `json:"cache_read_input_tokens"`
-	CostUSD                  float64 `json:"cost_usd"`
+	InputTokens              int64 `json:"input_tokens"`
+	OutputTokens             int64 `json:"output_tokens"`
+	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
+	CostUSD                  USD   `json:"cost_usd"`
 }
 
 // snapshot returns the current state. Called only by in-package tests;
@@ -90,18 +90,18 @@ func (t *Tracker) snapshot() Snapshot {
 func (t *Tracker) snapshotLocked() Snapshot {
 	models := make([]string, 0, len(t.perModel))
 	for k := range t.perModel {
-		models = append(models, k)
+		models = append(models, string(k))
 	}
 	sort.Strings(models)
 	report := make(map[string]ModelReport, len(t.perModel))
 	for _, m := range models {
-		mu := t.perModel[m]
+		mu := t.perModel[ModelID(m)]
 		report[m] = ModelReport{
 			InputTokens:              mu.InputTokens,
 			OutputTokens:             mu.OutputTokens,
 			CacheCreationInputTokens: mu.CacheCreationInputTokens,
 			CacheReadInputTokens:     mu.CacheReadInputTokens,
-			CostUSD:                  CostUSD(m, *mu),
+			CostUSD:                  CostUSD(ModelID(m), *mu),
 		}
 	}
 	return Snapshot{
@@ -175,13 +175,10 @@ type sseInterceptor struct {
 	tracker  *Tracker
 	buf      bytes.Buffer
 
-	modelID                  string
-	inputTokens              int64
-	cacheCreationInputTokens int64
-	cacheReadInputTokens     int64
-	outputTokens             int64
-	sawStart                 bool
-	flushed                  bool
+	modelID  ModelID
+	counts   TokenCounts
+	sawStart bool
+	flushed  bool
 }
 
 func (s *sseInterceptor) Read(p []byte) (int, error) {
@@ -226,23 +223,13 @@ func (s *sseInterceptor) scan(eof bool) {
 	}
 }
 
-// sseUsage is the JSON shape of a usage block embedded in an SSE
-// event. Anthropic puts one inside message_start.message and another
-// inside message_delta directly.
-type sseUsage struct {
-	InputTokens              int64 `json:"input_tokens"`
-	OutputTokens             int64 `json:"output_tokens"`
-	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
-}
-
 type sseEvent struct {
 	Type    string `json:"type"`
 	Message *struct {
-		Model string    `json:"model"`
-		Usage *sseUsage `json:"usage"`
+		Model string       `json:"model"`
+		Usage *TokenCounts `json:"usage"`
 	} `json:"message"`
-	Usage *sseUsage `json:"usage"`
+	Usage *TokenCounts `json:"usage"`
 }
 
 func (s *sseInterceptor) handleLine(line string) {
@@ -272,15 +259,12 @@ func (s *sseInterceptor) applyStart(ev sseEvent) {
 		return
 	}
 	if ev.Message.Model != "" {
-		s.modelID = ev.Message.Model
+		s.modelID = ModelID(ev.Message.Model)
 	}
 	if ev.Message.Usage == nil {
 		return
 	}
-	s.inputTokens = ev.Message.Usage.InputTokens
-	s.cacheCreationInputTokens = ev.Message.Usage.CacheCreationInputTokens
-	s.cacheReadInputTokens = ev.Message.Usage.CacheReadInputTokens
-	s.outputTokens = ev.Message.Usage.OutputTokens
+	s.counts = *ev.Message.Usage
 	s.sawStart = true
 }
 
@@ -290,15 +274,15 @@ func (s *sseInterceptor) applyDelta(ev sseEvent) {
 	}
 	// message_delta.usage.output_tokens is the cumulative output for
 	// the message; it supersedes the initial value from message_start.
-	s.outputTokens = ev.Usage.OutputTokens
+	s.counts.OutputTokens = ev.Usage.OutputTokens
 	if ev.Usage.InputTokens > 0 {
-		s.inputTokens = ev.Usage.InputTokens
+		s.counts.InputTokens = ev.Usage.InputTokens
 	}
 	if ev.Usage.CacheCreationInputTokens > 0 {
-		s.cacheCreationInputTokens = ev.Usage.CacheCreationInputTokens
+		s.counts.CacheCreationInputTokens = ev.Usage.CacheCreationInputTokens
 	}
 	if ev.Usage.CacheReadInputTokens > 0 {
-		s.cacheReadInputTokens = ev.Usage.CacheReadInputTokens
+		s.counts.CacheReadInputTokens = ev.Usage.CacheReadInputTokens
 	}
 }
 
@@ -310,12 +294,7 @@ func (s *sseInterceptor) flush() {
 	if !s.sawStart {
 		return
 	}
-	s.tracker.Add(s.modelID, TokenCounts{
-		InputTokens:              s.inputTokens,
-		OutputTokens:             s.outputTokens,
-		CacheCreationInputTokens: s.cacheCreationInputTokens,
-		CacheReadInputTokens:     s.cacheReadInputTokens,
-	})
+	s.tracker.Add(s.modelID, s.counts)
 }
 
 // jsonInterceptor buffers a non-streaming JSON response body, forwards
@@ -341,13 +320,8 @@ func (j *jsonInterceptor) Close() error {
 		return nil
 	}
 	var body struct {
-		Model string `json:"model"`
-		Usage *struct {
-			InputTokens              int64 `json:"input_tokens"`
-			OutputTokens             int64 `json:"output_tokens"`
-			CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
-			CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
-		} `json:"usage"`
+		Model string       `json:"model"`
+		Usage *TokenCounts `json:"usage"`
 	}
 	if err := json.Unmarshal(j.tee.Bytes(), &body); err != nil {
 		return nil
@@ -355,11 +329,6 @@ func (j *jsonInterceptor) Close() error {
 	if body.Usage == nil {
 		return nil
 	}
-	j.tracker.Add(body.Model, TokenCounts{
-		InputTokens:              body.Usage.InputTokens,
-		OutputTokens:             body.Usage.OutputTokens,
-		CacheCreationInputTokens: body.Usage.CacheCreationInputTokens,
-		CacheReadInputTokens:     body.Usage.CacheReadInputTokens,
-	})
+	j.tracker.Add(ModelID(body.Model), *body.Usage)
 	return nil
 }

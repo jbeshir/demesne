@@ -10,8 +10,8 @@ import (
 func TestLookupPricing_ExactFamily(t *testing.T) {
 	p, ok := LookupPricing(claudeSonnet46)
 	require.True(t, ok)
-	assert.InDelta(t, 3.0, p.InputPerMTok, 1e-9)
-	assert.InDelta(t, 15.0, p.OutputPerMTok, 1e-9)
+	assert.InDelta(t, 3.0, float64(p.InputPerMTok), 1e-9)
+	assert.InDelta(t, 15.0, float64(p.OutputPerMTok), 1e-9)
 }
 
 func TestLookupPricing_DatedID(t *testing.T) {
@@ -20,8 +20,8 @@ func TestLookupPricing_DatedID(t *testing.T) {
 	// the family entry.
 	p, ok := LookupPricing("claude-opus-4-7-20251201")
 	require.True(t, ok)
-	assert.InDelta(t, 15.0, p.InputPerMTok, 1e-9)
-	assert.InDelta(t, 75.0, p.OutputPerMTok, 1e-9)
+	assert.InDelta(t, 15.0, float64(p.InputPerMTok), 1e-9)
+	assert.InDelta(t, 75.0, float64(p.OutputPerMTok), 1e-9)
 }
 
 func TestLookupPricing_LongestPrefixWins(t *testing.T) {
@@ -49,7 +49,7 @@ func TestCostUSD_SonnetMath(t *testing.T) {
 		InputTokens:  1_000_000,
 		OutputTokens: 1_000_000,
 	})
-	assert.InDelta(t, 18.0, c, 1e-9)
+	assert.InDelta(t, 18.0, float64(c), 1e-9)
 }
 
 func TestCostUSD_CacheTokens(t *testing.T) {
@@ -58,10 +58,10 @@ func TestCostUSD_CacheTokens(t *testing.T) {
 		CacheCreationInputTokens: 1_000_000,
 		CacheReadInputTokens:     1_000_000,
 	})
-	assert.InDelta(t, 4.05, c, 1e-9)
+	assert.InDelta(t, 4.05, float64(c), 1e-9)
 }
 
 func TestCostUSD_UnknownModelReturnsZero(t *testing.T) {
 	c := CostUSD("gpt-4o", TokenCounts{InputTokens: 1_000_000})
-	assert.InDelta(t, 0.0, c, 1e-9)
+	assert.InDelta(t, 0.0, float64(c), 1e-9)
 }
