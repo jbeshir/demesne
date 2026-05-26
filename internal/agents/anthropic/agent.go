@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jbeshir/demesne/internal/agents"
+	"github.com/jbeshir/demesne/internal/egress"
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
 )
 
@@ -29,7 +30,8 @@ func (claudeCodeAgent) EnsureImage(ctx context.Context) (string, error) {
 }
 
 func (claudeCodeAgent) GenerateContext(
-	preamble, prompt, egress string,
+	preamble, prompt string,
+	egress egress.Mode,
 	inputs []agents.InputInfo,
 	mcpServers []agents.MCPServerInfo,
 	previousJobs []string,

@@ -1,16 +1,15 @@
 package sandbox
 
-// EgressMode controls outbound network access for a sandbox.
-type EgressMode string
+import "github.com/jbeshir/demesne/internal/egress"
+
+// EgressMode is an alias for egress.Mode (kept so existing
+// sandbox.EgressXxx references compile unchanged).
+type EgressMode = egress.Mode
 
 const (
-	EgressNone            EgressMode = "none"
-	EgressPackageManagers EgressMode = "package-managers"
-	// EgressOpen is unrestricted outbound access. Only sandbox_research
-	// uses it; sandbox_agent rejects it because pairing read-only inputs
-	// with open egress is the data-exfiltration shape we want to keep
-	// off the surface.
-	EgressOpen EgressMode = "open"
+	EgressNone            = egress.None
+	EgressPackageManagers = egress.PackageManagers
+	EgressOpen            = egress.Open
 )
 
 // ScriptRequest captures the inputs to a single sandbox_script invocation.
@@ -113,15 +112,4 @@ type ResearchRequest struct {
 	Model    string
 	Prompt   string
 	Preamble string
-}
-
-// ResearchResult captures the outputs of sandbox_research.
-type ResearchResult struct {
-	JobID         string
-	OutputPath    string
-	WorkspacePath string
-	Stdout        string
-	ExitCode      int
-	CostUSD       float64
-	TotalUsageUSD float64
 }

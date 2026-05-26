@@ -36,7 +36,7 @@ type Runner interface {
 	Download(ctx context.Context, req sandbox.DownloadRequest) (sandbox.DownloadResult, error)
 	Destroy(ctx context.Context, req sandbox.DestroyRequest) error
 	Agent(ctx context.Context, req sandbox.AgentRequest) (sandbox.AgentResult, error)
-	Research(ctx context.Context, req sandbox.ResearchRequest) (sandbox.ResearchResult, error)
+	Research(ctx context.Context, req sandbox.ResearchRequest) (sandbox.AgentResult, error)
 }
 
 // Server is the MCP server for Demesne.
