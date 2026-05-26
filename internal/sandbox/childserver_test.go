@@ -13,6 +13,9 @@ import (
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
 
+// testChildName is the child name reused across the spawn-handler tests.
+const testChildName = "child"
+
 func TestValidateChildName(t *testing.T) {
 	valid := []string{"a", "probe-1", "phase01", "ab-cd-3"}
 	for _, n := range valid {
@@ -48,7 +51,7 @@ func TestChildMCPServer_Catalogue(t *testing.T) {
 	}
 	for _, want := range []string{
 		toolSandboxScript, toolSandboxAgent, toolSandboxResearch,
-		"sandbox_create", "sandbox_exec", "sandbox_destroy",
+		toolSandboxCreate, "sandbox_exec", "sandbox_destroy",
 	} {
 		assert.True(t, got[want], "missing tool %q", want)
 	}
@@ -93,11 +96,46 @@ func TestHandleChildAgent_RejectsOpenEgress(t *testing.T) {
 	req := mcp.CallToolRequest{}
 	req.Params.Name = toolSandboxAgent
 	req.Params.Arguments = map[string]any{
-		childParamName:   "child",
+		childParamName:   testChildName,
 		childParamPrompt: "do a thing",
-		childParamEgress: "open",
+		childParamEgress: string(EgressOpen),
 	}
 	res, err := r.handleChildAgent(ctx, req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.True(t, res.IsError)
+}
+
+func TestHandleChildScript_RejectsOpenEgress(t *testing.T) {
+	r := NewRunner(Config{})
+	r.registerChild("job-11", &childContext{usedNames: map[string]bool{}})
+	ctx := context.WithValue(context.Background(), parentKey, "job-11")
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = toolSandboxScript
+	req.Params.Arguments = map[string]any{
+		childParamName:    testChildName,
+		childParamCommand: "echo hi",
+		childParamEgress:  string(EgressOpen),
+	}
+	res, err := r.handleChildScript(ctx, req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.True(t, res.IsError)
+}
+
+func TestHandleChildCreate_RejectsOpenEgress(t *testing.T) {
+	r := NewRunner(Config{})
+	r.registerChild("job-12", &childContext{usedNames: map[string]bool{}})
+	ctx := context.WithValue(context.Background(), parentKey, "job-12")
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = toolSandboxCreate
+	req.Params.Arguments = map[string]any{
+		childParamName:   testChildName,
+		childParamEgress: string(EgressOpen),
+	}
+	res, err := r.handleChildCreate(ctx, req)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.True(t, res.IsError)
