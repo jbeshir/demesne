@@ -138,15 +138,16 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	// Register this run so its own in-sandbox demesne tools can spawn
 	// children that inherit our inputs + workspace and nest under our
 	// /out. Deregister on the way out.
-	r.registerChild(layout.jobID, &childContext{
-		inputVolumes:  layout.inputVolumes,
-		inputs:        prep.inputs,
-		workspaceHost: layout.workspaceHost,
-		outHost:       layout.outHost,
-		depth:         layout.depth,
-		usedNames:     map[string]bool{},
+	r.registry.Register(layout.jobID, &spawnContext{
+		inputVolumes:   layout.inputVolumes,
+		inputs:         prep.inputs,
+		workspaceHost:  layout.workspaceHost,
+		outHost:        layout.outHost,
+		depth:          layout.depth,
+		usedNames:      map[string]bool{},
+		siblingOutputs: map[string]string{},
 	})
-	defer r.deregisterChild(layout.jobID)
+	defer r.registry.Deregister(layout.jobID)
 
 	wiring := r.buildMCPWiring(layout.jobID)
 
@@ -433,26 +434,14 @@ func (r *Runner) createSandbox(
 		return nil, fmt.Errorf("write agent config: %w", err)
 	}
 
-	mounts := append([]opensandbox.Volume{}, layout.inputVolumes...)
-	mounts = append(mounts, previousJobVolumes(layout.previousJobs)...)
-	mounts = append(mounts, agentVolumes(layout)...)
+	prevVols := previousJobVolumes(layout.previousJobs)
+	agentVols := agentVolumes(layout)
+	mounts := make([]opensandbox.Volume, 0, len(layout.inputVolumes)+len(prevVols)+len(agentVols))
+	mounts = append(mounts, layout.inputVolumes...)
+	mounts = append(mounts, prevVols...)
+	mounts = append(mounts, agentVols...)
 
-	timeoutSec := oneShotSandboxTTLSeconds
-	sb, err := opensandbox.CreateSandbox(ctx, r.connectionConfig(), opensandbox.SandboxCreateOptions{
-		Image:          prep.tag,
-		Volumes:        mounts,
-		NetworkPolicy:  policy,
-		TimeoutSeconds: &timeoutSec,
-		Env:            sandboxEnv(),
-		Metadata: map[string]string{
-			metadataDemesneJob:  layout.jobID,
-			metadataDemesneTool: spec.tool,
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create sandbox: %w", err)
-	}
-	return sb, nil
+	return r.launchSandbox(ctx, prep.tag, mounts, policy, oneShotSandboxTTLSeconds, layout.jobID, spec.tool)
 }
 
 // agentVolumes is the set of mounts specific to an agent run: the
@@ -585,7 +574,10 @@ type mcpWiring struct {
 // this run's jobID as its ParentJobID so the tunnel injects the
 // trusted parent-identity header on calls to it.
 func (r *Runner) buildMCPWiring(jobID string) mcpWiring {
-	var w mcpWiring
+	w := mcpWiring{
+		sidecarUpstreams: make([]proxymcp.Binding, 0, len(r.cfg.MCPServers)),
+		agentServers:     make([]agents.MCPServerInfo, 0, len(r.cfg.MCPServers)),
+	}
 	for i, name := range r.cfg.MCPServers {
 		port := proxymcp.FirstListenPort + i
 		up := proxymcp.Binding{

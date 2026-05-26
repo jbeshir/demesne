@@ -154,12 +154,12 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 // parentFor resolves the calling sandbox's spawning context from the
 // trusted identity header. An empty/unknown header means the caller
 // isn't a registered agent run (should not happen via the tunnel).
-func (r *Runner) parentFor(ctx context.Context) (*childContext, error) {
+func (r *Runner) parentFor(ctx context.Context) (*spawnContext, error) {
 	jobID, _ := ctx.Value(parentKey).(string)
 	if jobID == "" {
 		return nil, errors.New("no parent sandbox identity on request")
 	}
-	c, ok := r.lookupChild(jobID)
+	c, ok := r.registry.Lookup(jobID)
 	if !ok {
 		return nil, errors.New("calling sandbox is not a registered agent run")
 	}
@@ -311,7 +311,7 @@ func (r *Runner) handleChildDestroy(ctx context.Context, req mcp.CallToolRequest
 func (r *Runner) childSpawnParams(
 	ctx context.Context,
 	req mcp.CallToolRequest,
-) (*childContext, string, *mcp.CallToolResult) {
+) (*spawnContext, string, *mcp.CallToolResult) {
 	parent, err := r.parentFor(ctx)
 	if err != nil {
 		return nil, "", mcp.NewToolResultError(err.Error())
