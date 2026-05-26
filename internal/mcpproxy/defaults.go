@@ -19,7 +19,7 @@ const (
 //
 // When adding entries: verify upstream-by-upstream that listed
 // tools have no side effects on external systems.
-var defaultAllowlist = map[string]map[string]struct{}{
+var defaultAllowlist = map[ServerName]map[ToolName]struct{}{
 	serverAlignment: setOf(
 		"get_article",
 		"get_recommendations",
@@ -97,8 +97,8 @@ var defaultAllowlist = map[string]map[string]struct{}{
 	),
 }
 
-func setOf(names ...string) map[string]struct{} {
-	out := make(map[string]struct{}, len(names))
+func setOf(names ...ToolName) map[ToolName]struct{} {
+	out := make(map[ToolName]struct{}, len(names))
 	for _, n := range names {
 		out[n] = struct{}{}
 	}

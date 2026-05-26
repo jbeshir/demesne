@@ -17,7 +17,7 @@ func TestPool_ShutdownEmpty(t *testing.T) {
 func TestPool_AcquireUnknownServer(t *testing.T) {
 	p := NewPool([]UpstreamSpec{{Name: "known", Command: "/bin/true"}})
 	_, err := p.CallTool(context.Background(), "unknown", mcp.CallToolRequest{})
-	assert.ErrorContains(t, err, "no upstream registered")
+	assert.ErrorIs(t, err, ErrNotRegistered)
 }
 
 func TestEnvSlice(t *testing.T) {

@@ -52,7 +52,7 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -88,7 +88,7 @@ func TestProxyAllowsCountTokens(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -108,7 +108,7 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -131,7 +131,7 @@ func TestProxyDeniesUnknownMethod(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -156,7 +156,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -190,7 +190,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 
 // TestProxyShutdown confirms Start returns cleanly when its context is cancelled.
 func TestProxyShutdown(t *testing.T) {
-	p := NewProxyServerTo(testBindAddr, "http://127.0.0.1:1", testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo("http://127.0.0.1:1", testAgentToken, testUpstreamToken, nil)
 
 	startCtx, startCancel := context.WithCancel(context.Background())
 	defer startCancel()
@@ -243,7 +243,7 @@ data: {"type":"message_stop"}
 	defer upstream.Close()
 
 	tracker := NewTracker("")
-	p := NewProxyServerTo(testBindAddr, upstream.URL, testAgentToken, testUpstreamToken, tracker)
+	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, tracker)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 

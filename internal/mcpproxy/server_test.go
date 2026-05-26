@@ -186,7 +186,7 @@ func TestAggregator_DoubleStart(t *testing.T) {
 	require.NoError(t, agg.Start(ctx))
 	defer func() { _ = agg.Shutdown(context.Background()) }()
 	err = agg.Start(ctx)
-	assert.ErrorContains(t, err, "already started")
+	assert.ErrorIs(t, err, ErrAlreadyStarted)
 }
 
 func TestAggregator_NoUpstreams(t *testing.T) {
@@ -208,7 +208,7 @@ func TestNewAggregator_RequiresSocketPath(t *testing.T) {
 
 func TestFilterTools(t *testing.T) {
 	tools := []mcp.Tool{{Name: "a"}, {Name: "b"}, {Name: "c"}}
-	got := filterTools(tools, ServerAllowlist{Tools: map[string]struct{}{"a": {}, "c": {}}})
+	got := filterTools(tools, ServerAllowlist{Tools: map[ToolName]struct{}{"a": {}, "c": {}}})
 	require.Len(t, got, 2)
 	assert.Equal(t, "a", got[0].Name)
 	assert.Equal(t, "c", got[1].Name)

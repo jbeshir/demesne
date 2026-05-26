@@ -22,13 +22,11 @@ import (
 	"github.com/jbeshir/demesne/internal/proxies"
 )
 
-// UpstreamHost is the public Go module proxy. Forwarding the whole path
-// (including /sumdb/sum.golang.org/...) means GOSUMDB verification works
-// through this single endpoint with no direct sum.golang.org access.
-const UpstreamHost = "proxy.golang.org"
+// UpstreamHost is the public Go module proxy hostname.
+const UpstreamHost proxies.EgressHost = "proxy.golang.org"
 
 // UpstreamBase is the full upstream URL the proxy forwards to.
-const UpstreamBase = "https://" + UpstreamHost
+const UpstreamBase = "https://proxy.golang.org"
 
 // listenPort is the loopback port the proxy binds inside the per-sandbox
 // sidecar (below the Anthropic proxy's 8088 and the MCP tunnel's 8089+).
@@ -39,8 +37,6 @@ const listenAddr = "127.0.0.1:" + listenPort
 // Name is the registered name for the Go module proxy.
 const Name = "go-mod"
 
-const tcpNetwork = "tcp"
-
 // SumDBHost is the Go checksum database. Module *downloads* go through
 // this proxy (SO_MARK bypass, so the upstream needs no allowlist
 // entry), but `go` contacts the checksum database directly —
@@ -48,7 +44,7 @@ const tcpNetwork = "tcp"
 // itself must be allowed to reach it. EgressHosts surfaces it for the
 // runner to add to every sandbox's egress allowlist, keeping module
 // checksum verification on even under egress=none.
-const SumDBHost = "sum.golang.org"
+const SumDBHost proxies.EgressHost = "sum.golang.org"
 
 // ProxyURL is the value the runner sets as GOPROXY in every sandbox.
 func ProxyURL() string { return "http://" + listenAddr }
@@ -65,8 +61,8 @@ func init() {
 // to be in the sandbox allowlist).
 type registration struct{}
 
-func (registration) Name() string          { return Name }
-func (registration) EgressHosts() []string { return []string{SumDBHost} }
+func (registration) Name() string                      { return Name }
+func (registration) EgressHosts() []proxies.EgressHost { return []proxies.EgressHost{SumDBHost} }
 
 // ProxyServer is a forwarding proxy for proxy.golang.org.
 type ProxyServer struct {
@@ -80,10 +76,10 @@ func NewProxyServer(bindAddr string) *ProxyServer {
 	return newProxyServer(bindAddr, UpstreamBase, proxies.BypassTransport())
 }
 
-// NewProxyServerTo is the test-only constructor: forwards to the given
+// newProxyServerTo is the test-only constructor: forwards to the given
 // upstream over http.DefaultTransport, so tests don't need
 // CAP_NET_ADMIN for setsockopt(SO_MARK).
-func NewProxyServerTo(bindAddr, upstreamURL string) *ProxyServer {
+func newProxyServerTo(bindAddr, upstreamURL string) *ProxyServer {
 	return newProxyServer(bindAddr, upstreamURL, http.DefaultTransport)
 }
 
@@ -180,7 +176,7 @@ func singleJoiningSlash(a, b string) string {
 // down. Returns nil on clean shutdown.
 func (p *ProxyServer) Start(ctx context.Context) error {
 	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, tcpNetwork, p.bindAddr)
+	ln, err := lc.Listen(ctx, "tcp", p.bindAddr)
 	if err != nil {
 		return err
 	}
