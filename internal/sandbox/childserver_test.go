@@ -50,8 +50,8 @@ func TestChildMCPServer_Catalogue(t *testing.T) {
 		got[tl.Name] = true
 	}
 	for _, want := range []string{
-		toolSandboxScript, toolSandboxAgent, toolSandboxResearch,
-		toolSandboxCreate, "sandbox_exec", "sandbox_destroy",
+		ToolSandboxScript, ToolSandboxAgent, ToolSandboxResearch,
+		ToolSandboxCreate, ToolSandboxExec, ToolSandboxDestroy,
 	} {
 		assert.True(t, got[want], "missing tool %q", want)
 	}
@@ -63,7 +63,7 @@ func TestChildMCPServer_Catalogue(t *testing.T) {
 func TestParentFor(t *testing.T) {
 	r := NewRunner(Config{})
 	parent := &spawnContext{usedNames: map[string]bool{}}
-	r.registry.Register("job-7", parent)
+	r.registry.Register(JobID("job-7"), parent)
 
 	// Header → context → lookup.
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://x/demesne/mcp", nil)
@@ -90,11 +90,11 @@ func TestParentFor(t *testing.T) {
 func TestHandleChildAgent_RejectsOpenEgress(t *testing.T) {
 	r := NewRunner(Config{})
 	parent := &spawnContext{usedNames: map[string]bool{}}
-	r.registry.Register("job-9", parent)
+	r.registry.Register(JobID("job-9"), parent)
 	ctx := context.WithValue(context.Background(), parentKey, "job-9")
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = toolSandboxAgent
+	req.Params.Name = ToolSandboxAgent
 	req.Params.Arguments = map[string]any{
 		childParamName:   testChildName,
 		childParamPrompt: "do a thing",
@@ -108,11 +108,11 @@ func TestHandleChildAgent_RejectsOpenEgress(t *testing.T) {
 
 func TestHandleChildScript_RejectsOpenEgress(t *testing.T) {
 	r := NewRunner(Config{})
-	r.registry.Register("job-11", &spawnContext{usedNames: map[string]bool{}})
+	r.registry.Register(JobID("job-11"), &spawnContext{usedNames: map[string]bool{}})
 	ctx := context.WithValue(context.Background(), parentKey, "job-11")
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = toolSandboxScript
+	req.Params.Name = ToolSandboxScript
 	req.Params.Arguments = map[string]any{
 		childParamName:    testChildName,
 		childParamCommand: "echo hi",
@@ -126,11 +126,11 @@ func TestHandleChildScript_RejectsOpenEgress(t *testing.T) {
 
 func TestHandleChildCreate_RejectsOpenEgress(t *testing.T) {
 	r := NewRunner(Config{})
-	r.registry.Register("job-12", &spawnContext{usedNames: map[string]bool{}})
+	r.registry.Register(JobID("job-12"), &spawnContext{usedNames: map[string]bool{}})
 	ctx := context.WithValue(context.Background(), parentKey, "job-12")
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = toolSandboxCreate
+	req.Params.Name = ToolSandboxCreate
 	req.Params.Arguments = map[string]any{
 		childParamName:   testChildName,
 		childParamEgress: string(EgressOpen),
@@ -144,7 +144,7 @@ func TestHandleChildCreate_RejectsOpenEgress(t *testing.T) {
 func TestHandleChildScript_NoParentIdentity(t *testing.T) {
 	r := NewRunner(Config{})
 	req := mcp.CallToolRequest{}
-	req.Params.Name = toolSandboxScript
+	req.Params.Name = ToolSandboxScript
 	req.Params.Arguments = map[string]any{childParamName: "x", childParamCommand: "echo hi"}
 	res, err := r.handleChildScript(context.Background(), req)
 	require.NoError(t, err)

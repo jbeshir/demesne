@@ -156,7 +156,7 @@ func TestHandleSandboxScript_RunnerErrorSurfaced(t *testing.T) {
 func TestHandleSandboxScript_HappyPath(t *testing.T) {
 	r := &fakeRunner{
 		scriptRes: sandbox.ScriptResult{
-			JobID:      "abc-123",
+			JobID:      sandbox.JobID("abc-123"),
 			OutputPath: "/tmp/demesne/out/abc-123",
 			Stdout:     "hello\n",
 			ExitCode:   0,
@@ -200,7 +200,7 @@ func TestHandleSandboxScript_DefaultEgress(t *testing.T) {
 func TestHandleSandboxCreate_HappyPath(t *testing.T) {
 	r := &fakeRunner{
 		createRes: sandbox.CreateResult{
-			SandboxID:  "sbx-1",
+			SandboxID:  sandbox.SandboxID("sbx-1"),
 			OutputPath: "/tmp/demesne/out/job-1",
 		},
 	}
@@ -255,7 +255,7 @@ func TestHandleSandboxExec_HappyPath(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
-	assert.Equal(t, sandbox.ExecRequest{SandboxID: testSandboxID, Command: testCmdEcho}, r.gotExecReq)
+	assert.Equal(t, sandbox.ExecRequest{SandboxID: sandbox.SandboxID(testSandboxID), Command: testCmdEcho}, r.gotExecReq)
 	text := resultText(t, got)
 	for _, want := range []string{msgExitCodeZero, "hello"} {
 		assert.Contains(t, text, want)
@@ -302,7 +302,7 @@ func TestHandleSandboxUpload_HappyPath(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
-	assert.Equal(t, sandbox.UploadRequest{SandboxID: testSandboxID, HostSrc: "/host/data.txt", SandboxDst: "/tmp/data.txt"}, r.gotUploadReq)
+	assert.Equal(t, sandbox.UploadRequest{SandboxID: sandbox.SandboxID(testSandboxID), HostSrc: "/host/data.txt", SandboxDst: "/tmp/data.txt"}, r.gotUploadReq)
 	assert.Contains(t, resultText(t, got), "uploaded: data.txt -> /tmp/data.txt")
 }
 
@@ -334,7 +334,7 @@ func TestHandleSandboxDownload_HappyPath(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
-	assert.Equal(t, sandbox.DownloadRequest{SandboxID: testSandboxID, SandboxSrc: "/sandbox/a.txt"}, r.gotDownloadReq)
+	assert.Equal(t, sandbox.DownloadRequest{SandboxID: sandbox.SandboxID(testSandboxID), SandboxSrc: "/sandbox/a.txt"}, r.gotDownloadReq)
 	assert.Contains(t, resultText(t, got), "downloaded: /sandbox/a.txt -> /host/out/job-1/downloads/a.txt")
 }
 
@@ -355,7 +355,7 @@ func TestHandleSandboxDestroy_HappyPath(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
-	assert.Equal(t, testSandboxID, r.gotDestroyReq.SandboxID)
+	assert.Equal(t, sandbox.SandboxID(testSandboxID), r.gotDestroyReq.SandboxID)
 	assert.Contains(t, resultText(t, got), "destroyed: "+testSandboxID)
 }
 
@@ -374,7 +374,7 @@ func TestHandleSandboxAgent_MissingPrompt(t *testing.T) {
 func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 	r := &fakeRunner{
 		agentRes: sandbox.AgentResult{
-			JobID:      "abc",
+			JobID:      sandbox.JobID("abc"),
 			OutputPath: "/tmp/demesne-out/abc",
 			Stdout:     "PONG\n",
 			ExitCode:   0,
@@ -459,7 +459,7 @@ func TestHandleSandboxResearch_MissingPrompt(t *testing.T) {
 func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 	r := &fakeRunner{
 		researchRes: sandbox.AgentResult{
-			JobID:      "rsh",
+			JobID:      sandbox.JobID("rsh"),
 			OutputPath: "/tmp/demesne-out/rsh",
 			Stdout:     "DONE\n",
 			ExitCode:   0,

@@ -34,7 +34,7 @@ import (
 // (context file + MCP config). resultsHost is bind-mounted into the
 // sidecar only, so the agent can't tamper with usage.json.
 type sandboxLayout struct {
-	jobID         string
+	jobID         JobID
 	inputVolumes  []opensandbox.Volume
 	workspaceHost string
 	outHost       string
@@ -54,7 +54,7 @@ type agentPrep struct {
 	agent  agents.Agent
 	model  string
 	inputs []agents.InputInfo
-	tag    string
+	tag    ImageURI
 }
 
 // internalAgentSpec is the internal request shape runAgent takes.
@@ -98,7 +98,7 @@ func (r *Runner) Agent(ctx context.Context, req AgentRequest) (AgentResult, erro
 		files:       req.Files,
 		directories: req.Directories,
 		egress:      egressOrDefault(req.Egress, EgressNone),
-		tool:        toolSandboxAgent,
+		tool:        ToolSandboxAgent,
 	}
 	res, err := r.runAgent(ctx, spec)
 	if err != nil {
@@ -258,8 +258,8 @@ func readAgentTranscript(outHost string) []byte {
 // the /workspace mount root. Agents collaborate via absolute
 // /workspace paths while keeping their own working tree and
 // context-file symlink isolated under this subdir.
-func agentCwdSubdir(jobID string) string {
-	return ".demesne/" + jobID
+func agentCwdSubdir(jobID JobID) string {
+	return ".demesne/" + string(jobID)
 }
 
 // sandboxEnv is the environment injected into every sandbox at create
@@ -320,11 +320,11 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 			return agentPrep{}, err
 		}
 	}
-	tag, err := agent.EnsureImage(ctx)
+	imgTag, err := agent.EnsureImage(ctx)
 	if err != nil {
 		return agentPrep{}, fmt.Errorf("build agent image: %w", err)
 	}
-	return agentPrep{agent: agent, model: model, inputs: inputs, tag: tag}, nil
+	return agentPrep{agent: agent, model: model, inputs: inputs, tag: ImageURI(imgTag)}, nil
 }
 
 // buildLayout produces the host paths + mounts for an agent run,
@@ -344,8 +344,8 @@ func (r *Runner) buildRootLayout(files, directories []string) (sandboxLayout, er
 	if err != nil {
 		return sandboxLayout{}, err
 	}
-	jobID := uuid.NewString()
-	jobDir := filepath.Join(r.cfg.OutputRoot, jobID)
+	jobID := JobID(uuid.NewString())
+	jobDir := filepath.Join(r.cfg.OutputRoot, string(jobID))
 	l := sandboxLayout{
 		jobID:         jobID,
 		inputVolumes:  inputVolumes,
@@ -369,8 +369,8 @@ func (r *Runner) buildChildLayout(c *childSpawn) (sandboxLayout, error) {
 	if err := c.parent.reserveName(c.name); err != nil {
 		return sandboxLayout{}, err
 	}
-	jobID := uuid.NewString()
-	privDir := filepath.Join(r.cfg.OutputRoot, jobID)
+	jobID := JobID(uuid.NewString())
+	privDir := filepath.Join(r.cfg.OutputRoot, string(jobID))
 	l := sandboxLayout{
 		jobID:       jobID,
 		outHost:     filepath.Join(c.parent.outHost, "child", c.name),
@@ -573,7 +573,7 @@ type mcpWiring struct {
 // sandbox-local loopback. The demesne self-server's binding carries
 // this run's jobID as its ParentJobID so the tunnel injects the
 // trusted parent-identity header on calls to it.
-func (r *Runner) buildMCPWiring(jobID string) mcpWiring {
+func (r *Runner) buildMCPWiring(jobID JobID) mcpWiring {
 	w := mcpWiring{
 		sidecarUpstreams: make([]proxymcp.Binding, 0, len(r.cfg.MCPServers)),
 		agentServers:     make([]agents.MCPServerInfo, 0, len(r.cfg.MCPServers)),
@@ -586,7 +586,7 @@ func (r *Runner) buildMCPWiring(jobID string) mcpWiring {
 			Path:       "/" + name + "/mcp",
 		}
 		if name == mcpproxy.DemesneServerName {
-			up.ParentJobID = jobID
+			up.ParentJobID = string(jobID) // cast at proxies/mcp boundary (Binding.ParentJobID stays string)
 		}
 		w.sidecarUpstreams = append(w.sidecarUpstreams, up)
 		w.agentServers = append(w.agentServers, agents.MCPServerInfo{

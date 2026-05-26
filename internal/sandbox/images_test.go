@@ -10,7 +10,7 @@ import (
 func TestResolveImage(t *testing.T) {
 	tests := []struct {
 		name    string
-		want    string
+		want    ImageURI
 		wantErr bool
 	}{
 		{name: "", want: imageAnaconda},

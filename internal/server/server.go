@@ -65,7 +65,7 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) registerTools() {
-	s.mcpServer.AddTool(mcp.NewTool("sandbox_script",
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxScript,
 		mcp.WithDescription(scriptToolDescription),
 		mcp.WithString(paramCommand,
 			mcp.Required(),
@@ -86,7 +86,7 @@ func (s *Server) registerTools() {
 		),
 	), s.handleSandboxScript)
 
-	s.mcpServer.AddTool(mcp.NewTool("sandbox_create",
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxCreate,
 		mcp.WithDescription(createToolDescription),
 		mcp.WithString(paramImage, mcp.Description(imageParamDescription)),
 		mcp.WithString(paramEgress, mcp.Description(egressParamDescription)),
@@ -100,7 +100,7 @@ func (s *Server) registerTools() {
 		),
 	), s.handleSandboxCreate)
 
-	s.mcpServer.AddTool(mcp.NewTool("sandbox_exec",
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxExec,
 		mcp.WithDescription(execToolDescription),
 		mcp.WithString(paramSandboxID,
 			mcp.Required(),
@@ -115,7 +115,7 @@ func (s *Server) registerTools() {
 		),
 	), s.handleSandboxExec)
 
-	s.mcpServer.AddTool(mcp.NewTool("sandbox_upload",
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxUpload,
 		mcp.WithDescription(uploadToolDescription),
 		mcp.WithString(paramSandboxID,
 			mcp.Required(),
@@ -137,7 +137,7 @@ func (s *Server) registerTools() {
 		),
 	), s.handleSandboxUpload)
 
-	s.mcpServer.AddTool(mcp.NewTool("sandbox_download",
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxDownload,
 		mcp.WithDescription(downloadToolDescription),
 		mcp.WithString(paramSandboxID,
 			mcp.Required(),
@@ -149,7 +149,7 @@ func (s *Server) registerTools() {
 		),
 	), s.handleSandboxDownload)
 
-	s.mcpServer.AddTool(mcp.NewTool("sandbox_destroy",
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxDestroy,
 		mcp.WithDescription(destroyToolDescription),
 		mcp.WithString(paramSandboxID,
 			mcp.Required(),
@@ -157,7 +157,7 @@ func (s *Server) registerTools() {
 		),
 	), s.handleSandboxDestroy)
 
-	s.mcpServer.AddTool(mcp.NewTool("sandbox_agent",
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxAgent,
 		mcp.WithDescription(agentToolDescription),
 		mcp.WithString(paramPrompt,
 			mcp.Required(),
@@ -202,7 +202,7 @@ func (s *Server) registerTools() {
 		),
 	), s.handleSandboxAgent)
 
-	s.mcpServer.AddTool(mcp.NewTool("sandbox_research",
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxResearch,
 		mcp.WithDescription(researchToolDescription),
 		mcp.WithString(paramPrompt,
 			mcp.Required(),

@@ -101,7 +101,7 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		catalogue = append(catalogue, tool)
 	}
 
-	add(mcp.NewTool(toolSandboxScript,
+	add(mcp.NewTool(ToolSandboxScript,
 		mcp.WithDescription(childScriptDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamCommand, mcp.Required(),
@@ -110,7 +110,7 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		mcp.WithString(childParamEgress, mcp.Description(childEgressDescription)),
 	), r.handleChildScript)
 
-	add(mcp.NewTool(toolSandboxAgent,
+	add(mcp.NewTool(ToolSandboxAgent,
 		mcp.WithDescription(childAgentDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description("Task for the child agent.")),
@@ -120,7 +120,7 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		mcp.WithString(childParamEgress, mcp.Description(childEgressDescription)),
 	), r.handleChildAgent)
 
-	add(mcp.NewTool(toolSandboxResearch,
+	add(mcp.NewTool(ToolSandboxResearch,
 		mcp.WithDescription(childResearchDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description("Research task for the child agent.")),
@@ -129,20 +129,20 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		mcp.WithString(childParamPreamble, mcp.Description("Prose prepended to the child's context file.")),
 	), r.handleChildResearch)
 
-	add(mcp.NewTool(toolSandboxCreate,
+	add(mcp.NewTool(ToolSandboxCreate,
 		mcp.WithDescription(childCreateDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamImage, mcp.Description(childImageDescription)),
 		mcp.WithString(childParamEgress, mcp.Description(childEgressDescription)),
 	), r.handleChildCreate)
 
-	add(mcp.NewTool("sandbox_exec",
+	add(mcp.NewTool(ToolSandboxExec,
 		mcp.WithDescription("Run a shell command in a child sandbox created by sandbox_create. /bin/sh -c, cwd /out."),
 		mcp.WithString(childParamSandboxID, mcp.Required(), mcp.Description("Handle from sandbox_create.")),
 		mcp.WithString(childParamCommand, mcp.Required(), mcp.Description("Shell command to run.")),
 	), r.handleChildExec)
 
-	add(mcp.NewTool("sandbox_destroy",
+	add(mcp.NewTool(ToolSandboxDestroy,
 		mcp.WithDescription(childDestroyDescription),
 		mcp.WithString(childParamSandboxID, mcp.Required(), mcp.Description("Handle from sandbox_create.")),
 	), r.handleChildDestroy)
@@ -155,11 +155,11 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 // trusted identity header. An empty/unknown header means the caller
 // isn't a registered agent run (should not happen via the tunnel).
 func (r *Runner) parentFor(ctx context.Context) (*spawnContext, error) {
-	jobID, _ := ctx.Value(parentKey).(string)
-	if jobID == "" {
+	rawID, _ := ctx.Value(parentKey).(string)
+	if rawID == "" {
 		return nil, errors.New("no parent sandbox identity on request")
 	}
-	c, ok := r.registry.Lookup(jobID)
+	c, ok := r.registry.Lookup(JobID(rawID))
 	if !ok {
 		return nil, errors.New("calling sandbox is not a registered agent run")
 	}
@@ -214,7 +214,7 @@ func (r *Runner) handleChildAgent(ctx context.Context, req mcp.CallToolRequest) 
 		prompt:    prompt,
 		preamble:  req.GetString(childParamPreamble, ""),
 		egress:    EgressMode(egress),
-		tool:      toolSandboxAgent,
+		tool:      ToolSandboxAgent,
 		child:     &childSpawn{name: name, parent: parent},
 	}
 	res, err := r.runAgent(ctx, spec)
@@ -240,7 +240,7 @@ func (r *Runner) handleChildResearch(ctx context.Context, req mcp.CallToolReques
 		prompt:    prompt,
 		preamble:  req.GetString(childParamPreamble, ""),
 		egress:    EgressOpen,
-		tool:      toolSandboxResearch,
+		tool:      ToolSandboxResearch,
 		// Research is isolated like the host tool: no inherited /in or
 		// shared /workspace, just a fresh sandbox with open egress —
 		// inputs + open egress is the exfil shape we keep off the surface.
@@ -285,7 +285,7 @@ func (r *Runner) handleChildExec(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	res, err := r.Exec(ctx, ExecRequest{SandboxID: sandboxID, Command: command})
+	res, err := r.Exec(ctx, ExecRequest{SandboxID: SandboxID(sandboxID), Command: command})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -298,7 +298,7 @@ func (r *Runner) handleChildDestroy(ctx context.Context, req mcp.CallToolRequest
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	if err := r.Destroy(ctx, DestroyRequest{SandboxID: sandboxID}); err != nil {
+	if err := r.Destroy(ctx, DestroyRequest{SandboxID: SandboxID(sandboxID)}); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return mcp.NewToolResultText("destroyed: " + sandboxID), nil

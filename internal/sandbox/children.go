@@ -151,27 +151,27 @@ func validateChildName(name string) error {
 // use. Safe for concurrent access.
 type ChildRegistry struct {
 	mu      sync.Mutex
-	entries map[string]*spawnContext
+	entries map[JobID]*spawnContext
 }
 
 func newChildRegistry() *ChildRegistry {
-	return &ChildRegistry{entries: map[string]*spawnContext{}}
+	return &ChildRegistry{entries: map[JobID]*spawnContext{}}
 }
 
-func (cr *ChildRegistry) Register(jobID string, c *spawnContext) {
+func (cr *ChildRegistry) Register(jobID JobID, c *spawnContext) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	cr.entries[jobID] = c
 }
 
-func (cr *ChildRegistry) Lookup(jobID string) (*spawnContext, bool) {
+func (cr *ChildRegistry) Lookup(jobID JobID) (*spawnContext, bool) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	c, ok := cr.entries[jobID]
 	return c, ok
 }
 
-func (cr *ChildRegistry) Deregister(jobID string) {
+func (cr *ChildRegistry) Deregister(jobID JobID) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	delete(cr.entries, jobID)

@@ -19,7 +19,7 @@ func (r *Runner) Research(ctx context.Context, req ResearchRequest) (AgentResult
 		prompt:    req.Prompt,
 		preamble:  req.Preamble,
 		egress:    EgressOpen,
-		tool:      toolSandboxResearch,
+		tool:      ToolSandboxResearch,
 	}
 	res, err := r.runAgent(ctx, spec)
 	if err != nil {

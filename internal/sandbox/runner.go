@@ -38,10 +38,14 @@ const (
 )
 
 const (
-	toolSandboxScript   = "sandbox_script"
-	toolSandboxAgent    = "sandbox_agent"
-	toolSandboxResearch = "sandbox_research"
-	toolSandboxCreate   = "sandbox_create"
+	ToolSandboxScript   = "sandbox_script"
+	ToolSandboxAgent    = "sandbox_agent"
+	ToolSandboxResearch = "sandbox_research"
+	ToolSandboxCreate   = "sandbox_create"
+	ToolSandboxExec     = "sandbox_exec"
+	ToolSandboxDestroy  = "sandbox_destroy"
+	ToolSandboxUpload   = "sandbox_upload"
+	ToolSandboxDownload = "sandbox_download"
 	mountOut            = "/out"
 	mountWorkspace      = "/workspace"
 	outVolumeName       = "out"
@@ -86,7 +90,7 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 		Egress:         req.Egress,
 		Files:          req.Files,
 		Directories:    req.Directories,
-		Tool:           toolSandboxScript,
+		Tool:           ToolSandboxScript,
 		TimeoutSeconds: oneShotSandboxTTLSeconds,
 		Child:          child,
 	})
@@ -142,8 +146,8 @@ func (r *Runner) connectionConfig() opensandbox.ConnectionConfig {
 
 // attach re-binds to an existing sandbox by ID. Errors are wrapped with the
 // sandbox ID so the caller can tell which handle failed.
-func (r *Runner) attach(ctx context.Context, sandboxID string) (*opensandbox.Sandbox, error) {
-	sb, err := opensandbox.ConnectSandbox(ctx, r.connectionConfig(), sandboxID)
+func (r *Runner) attach(ctx context.Context, sandboxID SandboxID) (*opensandbox.Sandbox, error) {
+	sb, err := opensandbox.ConnectSandbox(ctx, r.connectionConfig(), string(sandboxID))
 	if err != nil {
 		return nil, fmt.Errorf("attach to sandbox %s: %w", sandboxID, err)
 	}
@@ -156,22 +160,22 @@ func (r *Runner) attach(ctx context.Context, sandboxID string) (*opensandbox.San
 // one call site for sandbox creation.
 func (r *Runner) launchSandbox(
 	ctx context.Context,
-	image string,
+	image ImageURI,
 	mounts []opensandbox.Volume,
 	policy *opensandbox.NetworkPolicy,
 	timeoutSec int,
-	jobID string,
+	jobID JobID,
 	tool string,
 ) (*opensandbox.Sandbox, error) {
 	t := timeoutSec
 	sb, err := opensandbox.CreateSandbox(ctx, r.connectionConfig(), opensandbox.SandboxCreateOptions{
-		Image:          image,
+		Image:          string(image),
 		Volumes:        mounts,
 		NetworkPolicy:  policy,
 		TimeoutSeconds: &t,
 		Env:            sandboxEnv(),
 		Metadata: map[string]string{
-			metadataDemesneJob:  jobID,
+			metadataDemesneJob:  string(jobID),
 			metadataDemesneTool: tool,
 		},
 	})
@@ -211,7 +215,7 @@ type sandboxPrepOptions struct {
 func (r *Runner) prepareSandbox(
 	ctx context.Context,
 	opts sandboxPrepOptions,
-) (*opensandbox.Sandbox, string, string, error) {
+) (*opensandbox.Sandbox, string, JobID, error) {
 	imageURI, err := ResolveImage(opts.Image)
 	if err != nil {
 		return nil, "", "", err
@@ -222,7 +226,7 @@ func (r *Runner) prepareSandbox(
 		return nil, "", "", err
 	}
 
-	jobID := uuid.NewString()
+	jobID := JobID(uuid.NewString())
 	var mounts []opensandbox.Volume
 	var outputHost string
 	if opts.Child != nil {
@@ -252,14 +256,14 @@ func (r *Runner) prepareSandbox(
 // rootMounts builds the volume set for a host-invoked sandbox:
 // caller-supplied /in mounts plus a fresh /out under OutputRoot/jobID.
 func (r *Runner) rootMounts(
-	jobID string,
+	jobID JobID,
 	files, directories []string,
 ) ([]opensandbox.Volume, string, error) {
 	mounts, err := r.resolveMounts(files, directories)
 	if err != nil {
 		return nil, "", err
 	}
-	outputHost := filepath.Join(r.cfg.OutputRoot, jobID)
+	outputHost := filepath.Join(r.cfg.OutputRoot, string(jobID))
 	if err := os.MkdirAll(outputHost, 0o750); err != nil {
 		return nil, "", fmt.Errorf("create output dir: %w", err)
 	}

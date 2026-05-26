@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+// ErrPathNotAllowed is returned by ValidateMountPath when the resolved path
+// is outside every DEMESNE_ALLOWED_PATHS entry.
+var ErrPathNotAllowed = errors.New("not within DEMESNE_ALLOWED_PATHS")
+
 // ValidateMountPath resolves host (following symlinks), then verifies the
 // resolved path is contained within at least one entry of allowed (also
 // symlink-resolved). It returns the resolved host path that should be used
@@ -40,5 +44,5 @@ func ValidateMountPath(host string, allowed []string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("mount path %s is not within DEMESNE_ALLOWED_PATHS", host)
+	return "", fmt.Errorf("mount path %s is %w", host, ErrPathNotAllowed)
 }

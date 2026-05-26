@@ -96,7 +96,7 @@ func (s *Server) handleSandboxExec(
 	}
 
 	res, err := s.runner.Exec(ctx, sandbox.ExecRequest{
-		SandboxID: sandboxID,
+		SandboxID: sandbox.SandboxID(sandboxID),
 		Command:   command,
 	})
 	if err != nil {
@@ -128,7 +128,7 @@ func (s *Server) handleSandboxUpload(
 	}
 
 	if err := s.runner.Upload(ctx, sandbox.UploadRequest{
-		SandboxID:  sandboxID,
+		SandboxID:  sandbox.SandboxID(sandboxID),
 		HostSrc:    src,
 		SandboxDst: dst,
 	}); err != nil {
@@ -156,7 +156,7 @@ func (s *Server) handleSandboxDownload(
 	}
 
 	res, err := s.runner.Download(ctx, sandbox.DownloadRequest{
-		SandboxID:  sandboxID,
+		SandboxID:  sandbox.SandboxID(sandboxID),
 		SandboxSrc: src,
 	})
 	if err != nil {
@@ -179,7 +179,7 @@ func (s *Server) handleSandboxDestroy(
 		return mcp.NewToolResultError("sandbox_id is required"), nil
 	}
 
-	if err := s.runner.Destroy(ctx, sandbox.DestroyRequest{SandboxID: sandboxID}); err != nil {
+	if err := s.runner.Destroy(ctx, sandbox.DestroyRequest{SandboxID: sandbox.SandboxID(sandboxID)}); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return mcp.NewToolResultText("destroyed: " + sandboxID), nil
@@ -275,7 +275,8 @@ func (s *Server) handleSandboxResearch(
 // total_usage_usd adds the spend of any child sandboxes the run spawned.
 func formatAgentRunResult(
 	exitCode int,
-	outputPath, jobID string,
+	outputPath string,
+	jobID sandbox.JobID,
 	costUSD, totalUsageUSD float64,
 	stdout string,
 ) string {
