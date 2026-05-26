@@ -120,6 +120,8 @@ func TestGenerateContext(t *testing.T) {
 			egress: egress.None,
 			want: []string{
 				"## Orchestrating child agents",
+				"Delivering results is your job",
+				"copy it into your own `/out` yourself",
 				"Validate with real builds/tests",
 				"including `.git`",
 				"Plan and enforce the handoff",
