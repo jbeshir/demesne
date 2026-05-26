@@ -286,6 +286,7 @@ func (r *Runner) handleChildExec(ctx context.Context, req mcp.CallToolRequest) (
 }
 
 func (r *Runner) handleChildDestroy(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	defer keepAlive(ctx)()
 	sandboxID, err := req.RequireString(childParamSandboxID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -312,9 +313,6 @@ func (r *Runner) childSpawnParams(
 	if err != nil {
 		return nil, "", mcp.NewToolResultError(err.Error())
 	}
-	if err := validateChildName(name); err != nil {
-		return nil, "", mcp.NewToolResultError(err.Error())
-	}
 	return parent, name, nil
 }
 
@@ -328,7 +326,7 @@ func formatChildAgentResult(name string, res agentRunResult) string {
 const childNameDescription = "Unique name for this child within the current sandbox. " +
 	"Its output appears at /out/child/<name> (visible to you and your ancestors). " +
 	"Allowed characters: lowercase letters, digits, and interior hyphens only " +
-	"(no dots, underscores, or uppercase)."
+	"(no dots, underscores, or uppercase); at most 40 characters."
 
 const childImageDescription = "Container image: 'node', 'python', 'go', or 'anaconda' (default)."
 

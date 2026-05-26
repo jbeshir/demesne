@@ -18,8 +18,9 @@ import (
 const ImageRepo = "demesne-sidecar"
 
 var (
-	imageBuildMu sync.Mutex
-	imageTagOnce string
+	imageBuildMu  sync.Mutex
+	imageTagOnce  sync.Once
+	imageTagValue string
 )
 
 // EnsureImage builds the sidecar image if it isn't present in the local
@@ -69,14 +70,13 @@ func EnsureImage(ctx context.Context) (string, error) {
 }
 
 func imageTag() string {
-	if imageTagOnce != "" {
-		return imageTagOnce
-	}
-	h := sha256.New()
-	h.Write(dockerfileBytes)
-	h.Write(sidecarBinary)
-	imageTagOnce = hex.EncodeToString(h.Sum(nil))[:12]
-	return imageTagOnce
+	imageTagOnce.Do(func() {
+		h := sha256.New()
+		h.Write(dockerfileBytes)
+		h.Write(sidecarBinary)
+		imageTagValue = hex.EncodeToString(h.Sum(nil))[:12]
+	})
+	return imageTagValue
 }
 
 func imagePresent(ctx context.Context, ref string) bool {

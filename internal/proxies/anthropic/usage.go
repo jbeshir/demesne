@@ -20,11 +20,7 @@ import (
 type Tracker struct {
 	mu        sync.Mutex
 	usagePath string // empty disables disk writes
-	perModel  map[string]*modelUsage
-}
-
-type modelUsage struct {
-	TokenCounts
+	perModel  map[string]*TokenCounts
 }
 
 // NewTracker constructs a Tracker. usagePath is the host-bind-mounted
@@ -33,7 +29,7 @@ type modelUsage struct {
 func NewTracker(usagePath string) *Tracker {
 	return &Tracker{
 		usagePath: usagePath,
-		perModel:  map[string]*modelUsage{},
+		perModel:  map[string]*TokenCounts{},
 	}
 }
 
@@ -49,7 +45,7 @@ func (t *Tracker) Add(modelID string, tc TokenCounts) {
 	}
 	mu, ok := t.perModel[modelID]
 	if !ok {
-		mu = &modelUsage{}
+		mu = &TokenCounts{}
 		t.perModel[modelID] = mu
 	}
 	mu.InputTokens += tc.InputTokens
@@ -63,7 +59,7 @@ func (t *Tracker) Add(modelID string, tc TokenCounts) {
 func (t *Tracker) costUSDLocked() float64 {
 	var total float64
 	for modelID, mu := range t.perModel {
-		total += CostUSD(modelID, mu.TokenCounts)
+		total += CostUSD(modelID, *mu)
 	}
 	return total
 }
@@ -105,7 +101,7 @@ func (t *Tracker) snapshotLocked() Snapshot {
 			OutputTokens:             mu.OutputTokens,
 			CacheCreationInputTokens: mu.CacheCreationInputTokens,
 			CacheReadInputTokens:     mu.CacheReadInputTokens,
-			CostUSD:                  CostUSD(m, mu.TokenCounts),
+			CostUSD:                  CostUSD(m, *mu),
 		}
 	}
 	return Snapshot{

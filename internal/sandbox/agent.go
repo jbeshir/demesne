@@ -585,7 +585,7 @@ func egressOrDefault(m, def EgressMode) EgressMode {
 // URL is completed in sidecar.Start once the egress gateway is
 // known) and the agent-facing server descriptors.
 type mcpWiring struct {
-	sidecarUpstreams []sidecar.MCPUpstream
+	sidecarUpstreams []proxymcp.Binding
 	agentServers     []agents.MCPServerInfo
 }
 
@@ -600,7 +600,7 @@ func (r *Runner) buildMCPWiring(jobID string) mcpWiring {
 	var w mcpWiring
 	for i, name := range r.cfg.MCPServers {
 		port := proxymcp.FirstListenPort + i
-		up := sidecar.MCPUpstream{
+		up := proxymcp.Binding{
 			Name:       name,
 			ListenPort: port,
 			Path:       "/" + name + "/mcp",

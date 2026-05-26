@@ -131,7 +131,7 @@ Same as `sandbox_script` minus `command`. Returns `sandbox_id` and `output_dir`.
 
 | Name          | Type             | Required | Default            | Description                                                                                                        |
 |---------------|------------------|----------|--------------------|--------------------------------------------------------------------------------------------------------------------|
-| `image`       | string           | no       | `anaconda`         | One of `node`, `python`, or `anaconda`.                                                                            |
+| `image`       | string           | no       | `anaconda`         | One of `node`, `python`, `go`, or `anaconda`.                                                                      |
 | `egress`      | string           | no       | `package-managers` | `package-managers` allows npm/PyPI/conda registries; `none` denies all egress.                                     |
 | `files`       | array of strings | no       | `[]`               | Host file paths mounted read-only at `/in/<basename>`. Each must be inside `DEMESNE_ALLOWED_PATHS`.                |
 | `directories` | array of strings | no       | `[]`               | Host directory paths mounted read-only at `/in/<basename>`. Same containment rule.                                 |
@@ -176,7 +176,7 @@ Same as `sandbox_script` minus `command`. Returns `sandbox_id` and `output_dir`.
 | `directories`  | array of strings | no       | `[]`          | Host directory paths mounted read-only at `/in/<basename>`. Same containment rule.                                                   |
 | `egress`       | string           | no       | `none`        | `none` allows only the per-vendor API proxy; `package-managers` also opens npm/PyPI/conda registries; `open` is **refused** here — use `sandbox_research`. |
 
-The agent runs in a fresh container with cwd `/workspace`. The result text contains the exit code, the host path of the `/out` mount, the job ID, the indicative `cost_usd`, and the agent's stdout. A structured `usage.json` is also written into the `/out` directory. `cost_usd` is indicative — see *Indicative cost reporting* under Key concepts.
+The agent runs in a fresh container with cwd `/workspace`. The result text contains the exit code, the host path of the `/out` mount, the job ID, the indicative `cost_usd`, the `total_usage_usd` (this run plus every descendant sandbox), and the agent's stdout. Structured `usage.json` and `results.json` files are also written into the `/out` directory. `cost_usd` is indicative — see *Indicative cost reporting* under Key concepts.
 
 ### `sandbox_research` parameters
 
