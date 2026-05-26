@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -57,6 +58,19 @@ func NewPool(specs []UpstreamSpec) *Pool {
 		clients: make(map[string]*upstreamClient),
 		timeout: idleTimeout,
 	}
+}
+
+// knownSpecs returns the upstream specs the pool was constructed
+// with, sorted by Name. Used by Aggregator.Start.
+func (p *Pool) knownSpecs() []UpstreamSpec {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]UpstreamSpec, 0, len(p.specs))
+	for _, s := range p.specs {
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 // CallTool routes a tools/call to the named upstream, spawning

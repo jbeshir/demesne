@@ -258,16 +258,3 @@ func filterTools(tools []mcp.Tool, allow ServerAllowlist) []mcp.Tool {
 	}
 	return out
 }
-
-// knownSpecs returns the upstream specs the pool was constructed
-// with, sorted by Name. Used by Aggregator.Start.
-func (p *Pool) knownSpecs() []UpstreamSpec {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	out := make([]UpstreamSpec, 0, len(p.specs))
-	for _, s := range p.specs {
-		out = append(out, s)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
-}

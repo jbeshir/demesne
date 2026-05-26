@@ -301,7 +301,7 @@ later inspection — remove it separately if no longer needed.`
 const agentToolDescription = `Run an AI agent inside a fresh sandbox against the caller's prompt.
 
 The sandbox is built from the agent's own container image (built lazily on
-first use) and torn down when the agent exits. Working directory is /out.
+first use) and torn down when the agent exits. Working directory is /workspace.
 
 The agent reads its provider-specific context file (e.g.
 /in/CLAUDE.md for claude-code) before processing the task. The file

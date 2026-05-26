@@ -42,8 +42,8 @@
   "user_config": {
     "allowed_paths": {
       "type": "string",
-      "title": "Allowed mount paths",
-      "description": "Colon-separated list of host directories under which the sandbox_script tool may mount files or directories. Anything outside is rejected.",
+      "title": "Allowed host paths for mounts and uploads",
+      "description": "Colon-separated list of host directories under which the sandbox tools (sandbox_script, sandbox_create, sandbox_agent, and sandbox_upload) may mount or copy files and directories. Anything outside is rejected.",
       "required": true
     },
     "output_root": {
