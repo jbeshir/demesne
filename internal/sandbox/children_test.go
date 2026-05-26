@@ -47,7 +47,10 @@ func TestPreviousJobNames_SortedAndEmpty(t *testing.T) {
 }
 
 func TestRecordSibling_SnapshotIndependence(t *testing.T) {
-	c := &childContext{}
+	c := &spawnContext{
+		usedNames:      map[string]bool{},
+		siblingOutputs: map[string]string{},
+	}
 
 	// First child sees no prior siblings.
 	assert.Empty(t, c.priorSiblings())
@@ -66,7 +69,7 @@ func TestRecordSibling_SnapshotIndependence(t *testing.T) {
 func TestBuildChildLayout_IsolatedVsInherited(t *testing.T) {
 	r := NewRunner(Config{OutputRoot: t.TempDir()})
 	parentOut := t.TempDir()
-	parent := &childContext{
+	parent := &spawnContext{
 		inputVolumes:   []opensandbox.Volume{{Name: "in-0", MountPath: "/in/x"}},
 		workspaceHost:  "/parent/workspace",
 		outHost:        parentOut,

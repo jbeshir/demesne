@@ -11,12 +11,12 @@ import (
 	"github.com/jbeshir/demesne/internal/agents"
 )
 
-// childContext is the spawning context an agent run exposes to its
+// spawnContext is the spawning context an agent run exposes to its
 // in-sandbox demesne tools. Every agent run registers one (keyed by
 // its jobID); children spawned from it inherit the same /in mounts and
 // /workspace, and land in <outHost>/child/<name>. depth is advisory
 // (there is intentionally no cap).
-type childContext struct {
+type spawnContext struct {
 	inputVolumes  []opensandbox.Volume
 	inputs        []agents.InputInfo
 	workspaceHost string
@@ -39,22 +39,19 @@ type childContext struct {
 // /workspace (only its /out/child/<name> links back to the parent).
 type childSpawn struct {
 	name     string
-	parent   *childContext
+	parent   *spawnContext
 	isolated bool
 }
 
 // reserveName validates name and records it, failing if another child
 // of the same parent already used it. Uniqueness is enforced per
 // parent (the workflowy spec requirement).
-func (c *childContext) reserveName(name string) error {
+func (c *spawnContext) reserveName(name string) error {
 	if err := validateChildName(name); err != nil {
 		return err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.usedNames == nil {
-		c.usedNames = map[string]bool{}
-	}
 	if c.usedNames[name] {
 		return fmt.Errorf("child name %q is already used in this sandbox", name)
 	}
@@ -65,7 +62,7 @@ func (c *childContext) reserveName(name string) error {
 // priorSiblings returns a snapshot of the siblings recorded so far as a
 // name -> outHost map. The copy is safe for the caller to iterate while
 // later spawns mutate the original.
-func (c *childContext) priorSiblings() map[string]string {
+func (c *spawnContext) priorSiblings() map[string]string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make(map[string]string, len(c.siblingOutputs))
@@ -77,12 +74,9 @@ func (c *childContext) priorSiblings() map[string]string {
 
 // recordSibling records a spawned child's name -> outHost so subsequent
 // siblings can mount its /out under /in/previous-jobs/<name>.
-func (c *childContext) recordSibling(name, outHost string) {
+func (c *spawnContext) recordSibling(name, outHost string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.siblingOutputs == nil {
-		c.siblingOutputs = map[string]string{}
-	}
 	c.siblingOutputs[name] = outHost
 }
 
@@ -152,21 +146,33 @@ func validateChildName(name string) error {
 	return nil
 }
 
-func (r *Runner) registerChild(jobID string, c *childContext) {
-	r.childMu.Lock()
-	defer r.childMu.Unlock()
-	r.children[jobID] = c
+// ChildRegistry is the live-run identity store: maps a running agent
+// sandbox's jobID to the spawning context its in-sandbox demesne tools
+// use. Safe for concurrent access.
+type ChildRegistry struct {
+	mu      sync.Mutex
+	entries map[string]*spawnContext
 }
 
-func (r *Runner) deregisterChild(jobID string) {
-	r.childMu.Lock()
-	defer r.childMu.Unlock()
-	delete(r.children, jobID)
+func newChildRegistry() *ChildRegistry {
+	return &ChildRegistry{entries: map[string]*spawnContext{}}
 }
 
-func (r *Runner) lookupChild(jobID string) (*childContext, bool) {
-	r.childMu.Lock()
-	defer r.childMu.Unlock()
-	c, ok := r.children[jobID]
+func (cr *ChildRegistry) Register(jobID string, c *spawnContext) {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+	cr.entries[jobID] = c
+}
+
+func (cr *ChildRegistry) Lookup(jobID string) (*spawnContext, bool) {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+	c, ok := cr.entries[jobID]
 	return c, ok
+}
+
+func (cr *ChildRegistry) Deregister(jobID string) {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+	delete(cr.entries, jobID)
 }

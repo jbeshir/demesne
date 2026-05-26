@@ -33,7 +33,7 @@ func TestValidateChildName(t *testing.T) {
 }
 
 func TestReserveName_Unique(t *testing.T) {
-	c := &childContext{usedNames: map[string]bool{}}
+	c := &spawnContext{usedNames: map[string]bool{}}
 	require.NoError(t, c.reserveName("alpha"))
 	require.Error(t, c.reserveName("alpha"), "duplicate must be rejected")
 	require.NoError(t, c.reserveName("beta"))
@@ -62,8 +62,8 @@ func TestChildMCPServer_Catalogue(t *testing.T) {
 
 func TestParentFor(t *testing.T) {
 	r := NewRunner(Config{})
-	parent := &childContext{usedNames: map[string]bool{}}
-	r.registerChild("job-7", parent)
+	parent := &spawnContext{usedNames: map[string]bool{}}
+	r.registry.Register("job-7", parent)
 
 	// Header → context → lookup.
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://x/demesne/mcp", nil)
@@ -89,8 +89,8 @@ func TestParentFor(t *testing.T) {
 
 func TestHandleChildAgent_RejectsOpenEgress(t *testing.T) {
 	r := NewRunner(Config{})
-	parent := &childContext{usedNames: map[string]bool{}}
-	r.registerChild("job-9", parent)
+	parent := &spawnContext{usedNames: map[string]bool{}}
+	r.registry.Register("job-9", parent)
 	ctx := context.WithValue(context.Background(), parentKey, "job-9")
 
 	req := mcp.CallToolRequest{}
@@ -108,7 +108,7 @@ func TestHandleChildAgent_RejectsOpenEgress(t *testing.T) {
 
 func TestHandleChildScript_RejectsOpenEgress(t *testing.T) {
 	r := NewRunner(Config{})
-	r.registerChild("job-11", &childContext{usedNames: map[string]bool{}})
+	r.registry.Register("job-11", &spawnContext{usedNames: map[string]bool{}})
 	ctx := context.WithValue(context.Background(), parentKey, "job-11")
 
 	req := mcp.CallToolRequest{}
@@ -126,7 +126,7 @@ func TestHandleChildScript_RejectsOpenEgress(t *testing.T) {
 
 func TestHandleChildCreate_RejectsOpenEgress(t *testing.T) {
 	r := NewRunner(Config{})
-	r.registerChild("job-12", &childContext{usedNames: map[string]bool{}})
+	r.registry.Register("job-12", &spawnContext{usedNames: map[string]bool{}})
 	ctx := context.WithValue(context.Background(), parentKey, "job-12")
 
 	req := mcp.CallToolRequest{}

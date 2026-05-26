@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	opensandbox "github.com/alibaba/OpenSandbox/sdks/sandbox/go"
@@ -53,20 +52,13 @@ const (
 // layer. One Runner serves all tools (sandbox_script, sandbox_create,
 // sandbox_exec, etc.) — methods live in sibling files in this package.
 type Runner struct {
-	cfg Config
-
-	// children maps a running agent sandbox's jobID to the context its
-	// in-sandbox demesne tools spawn children from (inherited inputs,
-	// shared workspace, output dir, depth). Populated for every agent
-	// run; the demesne MCP server looks an entry up by the trusted
-	// parent-identity header. See childserver.go / children.go.
-	childMu  sync.Mutex
-	children map[string]*childContext
+	cfg      Config
+	registry *ChildRegistry
 }
 
 // NewRunner constructs a Runner against the given configuration.
 func NewRunner(cfg Config) *Runner {
-	return &Runner{cfg: cfg, children: map[string]*childContext{}}
+	return &Runner{cfg: cfg, registry: newChildRegistry()}
 }
 
 // SetMCPWiring records the host MCP aggregator's exposed servers,
@@ -158,18 +150,45 @@ func (r *Runner) attach(ctx context.Context, sandboxID string) (*opensandbox.San
 	return sb, nil
 }
 
-// sandboxPrepOptions captures everything prepareSandbox needs. The script
-// and create paths use Image/Egress from the whitelist; the agent path
-// supplies ImageOverride (a built image tag) and ExtraEgressAllow (the
-// proxy host that must be reachable).
+// launchSandbox calls opensandbox.CreateSandbox with demesne's standard
+// envelope: metadata labels, GOPROXY env, and the given image/mounts/policy.
+// Both prepareSandbox and createSandbox delegate here so there is exactly
+// one call site for sandbox creation.
+func (r *Runner) launchSandbox(
+	ctx context.Context,
+	image string,
+	mounts []opensandbox.Volume,
+	policy *opensandbox.NetworkPolicy,
+	timeoutSec int,
+	jobID string,
+	tool string,
+) (*opensandbox.Sandbox, error) {
+	t := timeoutSec
+	sb, err := opensandbox.CreateSandbox(ctx, r.connectionConfig(), opensandbox.SandboxCreateOptions{
+		Image:          image,
+		Volumes:        mounts,
+		NetworkPolicy:  policy,
+		TimeoutSeconds: &t,
+		Env:            sandboxEnv(),
+		Metadata: map[string]string{
+			metadataDemesneJob:  jobID,
+			metadataDemesneTool: tool,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create sandbox: %w", err)
+	}
+	return sb, nil
+}
+
+// sandboxPrepOptions captures everything prepareSandbox needs. Used by
+// the script and create paths; the agent path calls createSandbox directly.
 type sandboxPrepOptions struct {
-	Image            string     // resolved via ResolveImage; ignored if ImageOverride is set
-	ImageOverride    string     // a built image tag, used verbatim when non-empty
-	Egress           EgressMode // resolved via BuildNetworkPolicy
-	ExtraEgressAllow []string   // additional allow targets unioned with the egress mode
-	Files            []string
-	Directories      []string
-	Tool             string // value of the demesne.tool metadata label
+	Image       string     // resolved via ResolveImage
+	Egress      EgressMode // resolved via BuildNetworkPolicy
+	Files       []string
+	Directories []string
+	Tool        string // value of the demesne.tool metadata label
 	// TimeoutSeconds is the sandbox's OpenSandbox TTL. The SDK default
 	// is 600s which is too short for long-running agent or research
 	// runs; callers must set this explicitly.
@@ -193,21 +212,12 @@ func (r *Runner) prepareSandbox(
 	ctx context.Context,
 	opts sandboxPrepOptions,
 ) (*opensandbox.Sandbox, string, string, error) {
-	imageURI := opts.ImageOverride
-	if imageURI == "" {
-		resolved, err := ResolveImage(opts.Image)
-		if err != nil {
-			return nil, "", "", err
-		}
-		imageURI = resolved
+	imageURI, err := ResolveImage(opts.Image)
+	if err != nil {
+		return nil, "", "", err
 	}
 
-	// Every sandbox gets the registered proxies' egress hosts (e.g. the
-	// Go checksum DB) on top of any caller-supplied extras, matching the
-	// agent path. Go module downloads still go through the sidecar proxy
-	// (SO_MARK), not this allowlist.
-	extraAllow := append(append([]string{}, opts.ExtraEgressAllow...), proxies.EgressHosts()...)
-	policy, err := BuildNetworkPolicy(opts.Egress, extraAllow)
+	policy, err := BuildNetworkPolicy(opts.Egress, proxies.EgressHosts())
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -227,20 +237,9 @@ func (r *Runner) prepareSandbox(
 	if opts.TimeoutSeconds <= 0 {
 		return nil, "", "", fmt.Errorf("sandboxPrepOptions: TimeoutSeconds must be set for %s", opts.Tool)
 	}
-	timeoutSec := opts.TimeoutSeconds
-	sb, err := opensandbox.CreateSandbox(ctx, r.connectionConfig(), opensandbox.SandboxCreateOptions{
-		Image:          imageURI,
-		Volumes:        mounts,
-		NetworkPolicy:  policy,
-		TimeoutSeconds: &timeoutSec,
-		Env:            sandboxEnv(),
-		Metadata: map[string]string{
-			metadataDemesneJob:  jobID,
-			metadataDemesneTool: opts.Tool,
-		},
-	})
+	sb, err := r.launchSandbox(ctx, imageURI, mounts, policy, opts.TimeoutSeconds, jobID, opts.Tool)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("create sandbox: %w", err)
+		return nil, "", "", err
 	}
 	// Record this child as a sibling only after a successful create, so a
 	// failed spawn never poisons later siblings' /in/previous-jobs mounts.
@@ -285,8 +284,10 @@ func (r *Runner) childMounts(c *childSpawn) ([]opensandbox.Volume, string, error
 	if err := os.MkdirAll(outputHost, 0o750); err != nil {
 		return nil, "", fmt.Errorf("create child output dir: %w", err)
 	}
-	mounts := append([]opensandbox.Volume{}, c.parent.inputVolumes...)
-	mounts = append(mounts, previousJobVolumes(prior)...)
+	prevVols := previousJobVolumes(prior)
+	mounts := make([]opensandbox.Volume, 0, len(c.parent.inputVolumes)+len(prevVols)+2)
+	mounts = append(mounts, c.parent.inputVolumes...)
+	mounts = append(mounts, prevVols...)
 	mounts = append(mounts,
 		opensandbox.Volume{
 			Name:      "workspace",
