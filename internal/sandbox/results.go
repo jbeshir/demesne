@@ -13,7 +13,7 @@ import (
 // nest under <out>/child/<name>), so the root's results.json carries
 // the whole tree's cost.
 type Results struct {
-	JobID         string   `json:"job_id"`
+	JobID         JobID    `json:"job_id"`
 	Tool          string   `json:"tool"`
 	Name          string   `json:"name,omitempty"`
 	Depth         int      `json:"depth"`

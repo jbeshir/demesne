@@ -12,6 +12,14 @@ const (
 	EgressOpen            = egress.Open
 )
 
+// JobID is the demesne-internal UUID minted per run, stored in sandbox
+// metadata and used to correlate /out dirs with their creating sandbox.
+type JobID string
+
+// SandboxID is the OpenSandbox UUID returned by sandbox_create, used to
+// re-attach to a persistent sandbox via exec/upload/download/destroy.
+type SandboxID string
+
 // ScriptRequest captures the inputs to a single sandbox_script invocation.
 type ScriptRequest struct {
 	Command     string
@@ -23,7 +31,7 @@ type ScriptRequest struct {
 
 // ScriptResult captures the outputs of a single sandbox_script invocation.
 type ScriptResult struct {
-	JobID      string
+	JobID      JobID
 	OutputPath string
 	Stdout     string
 	ExitCode   int
@@ -39,13 +47,13 @@ type CreateRequest struct {
 
 // CreateResult captures the outputs of sandbox_create.
 type CreateResult struct {
-	SandboxID  string
+	SandboxID  SandboxID
 	OutputPath string
 }
 
 // ExecRequest captures the inputs to sandbox_exec.
 type ExecRequest struct {
-	SandboxID string
+	SandboxID SandboxID
 	Command   string
 }
 
@@ -57,14 +65,14 @@ type ExecResult struct {
 
 // UploadRequest captures the inputs to sandbox_upload.
 type UploadRequest struct {
-	SandboxID  string
+	SandboxID  SandboxID
 	HostSrc    string
 	SandboxDst string
 }
 
 // DownloadRequest captures the inputs to sandbox_download.
 type DownloadRequest struct {
-	SandboxID  string
+	SandboxID  SandboxID
 	SandboxSrc string
 }
 
@@ -75,7 +83,7 @@ type DownloadResult struct {
 
 // DestroyRequest captures the inputs to sandbox_destroy.
 type DestroyRequest struct {
-	SandboxID string
+	SandboxID SandboxID
 }
 
 // AgentRequest captures the inputs to sandbox_agent.
@@ -91,7 +99,7 @@ type AgentRequest struct {
 
 // AgentResult captures the outputs of sandbox_agent.
 type AgentResult struct {
-	JobID         string
+	JobID         JobID
 	OutputPath    string // host path mounted at /out (output-only)
 	WorkspacePath string // host path mounted at /workspace (the agent's scratch area)
 	Stdout        string

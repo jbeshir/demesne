@@ -20,7 +20,7 @@ func (r *Runner) create(ctx context.Context, req CreateRequest, child *childSpaw
 		Egress:         req.Egress,
 		Files:          req.Files,
 		Directories:    req.Directories,
-		Tool:           toolSandboxCreate,
+		Tool:           ToolSandboxCreate,
 		TimeoutSeconds: persistentSandboxTTLSeconds,
 		Child:          child,
 	})
@@ -36,7 +36,7 @@ func (r *Runner) create(ctx context.Context, req CreateRequest, child *childSpaw
 		return CreateResult{}, fmt.Errorf("start sidecar: %w", err)
 	}
 	return CreateResult{
-		SandboxID:  sb.ID(),
+		SandboxID:  SandboxID(sb.ID()),
 		OutputPath: outputHost,
 	}, nil
 }

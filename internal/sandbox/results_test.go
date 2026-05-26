@@ -26,14 +26,14 @@ func TestWriteResults_RollsUpChildren(t *testing.T) {
 	writeChildResults(t, out, testChildAlpha, 0.20)
 	writeChildResults(t, out, testChildBeta, 0.05)
 
-	layout := sandboxLayout{jobID: "job-1", outHost: out}
+	layout := sandboxLayout{jobID: JobID("job-1"), outHost: out}
 	total := writeResults(layout, "sandbox_agent", 0, 0.10)
 
 	assert.InDelta(t, 0.35, total, 1e-9)
 
 	r, ok := readResultsFile(out)
 	require.True(t, ok)
-	assert.Equal(t, "job-1", r.JobID)
+	assert.Equal(t, JobID("job-1"), r.JobID)
 	assert.Equal(t, "sandbox_agent", r.Tool)
 	assert.InDelta(t, 0.10, r.OwnUsageUSD, 1e-9)
 	assert.InDelta(t, 0.35, r.TotalUsageUSD, 1e-9)
@@ -42,7 +42,7 @@ func TestWriteResults_RollsUpChildren(t *testing.T) {
 
 func TestWriteResults_NoChildren(t *testing.T) {
 	out := t.TempDir()
-	layout := sandboxLayout{jobID: "job-2", outHost: out, childName: "leaf", depth: 2}
+	layout := sandboxLayout{jobID: JobID("job-2"), outHost: out, childName: "leaf", depth: 2}
 	total := writeResults(layout, "sandbox_research", 0, 0.42)
 
 	assert.InDelta(t, 0.42, total, 1e-9)

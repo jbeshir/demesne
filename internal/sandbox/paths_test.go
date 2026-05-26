@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const errNotWithin = "not within"
-
 func TestValidateMountPath(t *testing.T) {
 	root := t.TempDir()
 	allowed := filepath.Join(root, "allowed")
@@ -33,23 +31,29 @@ func TestValidateMountPath(t *testing.T) {
 	tests := []struct {
 		name    string
 		host    string
-		wantErr string
+		wantErr string // substring check; empty means no error expected
+		errIs   error  // if non-nil, use errors.Is instead of substring
 	}{
 		{name: "exact match", host: allowed},
 		{name: "nested file", host: nestedFile},
 		{name: "symlink within allowed", host: innerSymlink},
-		{name: "symlink escapes allowed", host: escapeSymlink, wantErr: errNotWithin},
-		{name: "outside allowed", host: outside, wantErr: errNotWithin},
-		{name: "sibling-prefix not allowed", host: sibling, wantErr: errNotWithin},
+		{name: "symlink escapes allowed", host: escapeSymlink, errIs: ErrPathNotAllowed},
+		{name: "outside allowed", host: outside, errIs: ErrPathNotAllowed},
+		{name: "sibling-prefix not allowed", host: sibling, errIs: ErrPathNotAllowed},
 		{name: "relative path rejected", host: "relative/path", wantErr: "absolute"},
 		{name: "empty rejected", host: "", wantErr: "empty"},
-		{name: "dotdot rejected", host: filepath.Join(allowed, "..", "outside"), wantErr: errNotWithin},
+		{name: "dotdot rejected", host: filepath.Join(allowed, "..", "outside"), errIs: ErrPathNotAllowed},
 		{name: "missing path rejected", host: filepath.Join(allowed, "does-not-exist"), wantErr: "resolve"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ValidateMountPath(tt.host, allowedList)
+			if tt.errIs != nil {
+				require.Error(t, err, "resolved=%s", got)
+				assert.ErrorIs(t, err, tt.errIs)
+				return
+			}
 			if tt.wantErr != "" {
 				require.Error(t, err, "resolved=%s", got)
 				assert.Contains(t, err.Error(), tt.wantErr)
