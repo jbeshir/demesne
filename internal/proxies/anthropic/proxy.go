@@ -17,7 +17,7 @@ import (
 const APIHost proxies.EgressHost = "api.anthropic.com"
 
 // APIBase is the full upstream URL the proxy forwards to.
-const APIBase = "https://api.anthropic.com"
+const APIBase = "https://" + string(APIHost)
 
 // listenPort is the loopback port the proxy binds inside the per-sandbox
 // sidecar. The sidecar's network namespace is isolated, so the port is

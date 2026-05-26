@@ -167,12 +167,11 @@ func (r *Runner) launchSandbox(
 	jobID JobID,
 	tool string,
 ) (*opensandbox.Sandbox, error) {
-	t := timeoutSec
 	sb, err := opensandbox.CreateSandbox(ctx, r.connectionConfig(), opensandbox.SandboxCreateOptions{
 		Image:          string(image),
 		Volumes:        mounts,
 		NetworkPolicy:  policy,
-		TimeoutSeconds: &t,
+		TimeoutSeconds: &timeoutSec,
 		Env:            sandboxEnv(),
 		Metadata: map[string]string{
 			metadataDemesneJob:  string(jobID),
@@ -221,12 +220,7 @@ func (r *Runner) prepareSandbox(
 		return nil, "", "", err
 	}
 
-	egressHosts := proxies.EgressHosts()
-	egressStrs := make([]string, len(egressHosts))
-	for i, h := range egressHosts {
-		egressStrs[i] = string(h)
-	}
-	policy, err := BuildNetworkPolicy(opts.Egress, egressStrs)
+	policy, err := BuildNetworkPolicy(opts.Egress, proxies.EgressHostStrings())
 	if err != nil {
 		return nil, "", "", err
 	}

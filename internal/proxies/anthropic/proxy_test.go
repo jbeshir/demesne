@@ -16,7 +16,6 @@ import (
 const (
 	testAgentToken    = "test-agent-token"
 	testUpstreamToken = "test-upstream-token"
-	testBindAddr      = "127.0.0.1:0"
 )
 
 // TestProxyAllowedRequestSwapsToken confirms that an allowed

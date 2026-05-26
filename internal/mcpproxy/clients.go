@@ -15,7 +15,7 @@ import (
 
 // ErrNotRegistered is returned when a tool call targets an upstream
 // that was not in the pool's spec set.
-var ErrNotRegistered = errors.New("mcpproxy: no upstream registered")
+var ErrNotRegistered = errors.New("no upstream registered")
 
 // idleTimeout is how long an upstream stdio MCP server is kept
 // alive after its most recent activity. Beyond this the client
@@ -127,7 +127,7 @@ func (p *Pool) acquire(ctx context.Context, server string) (*client.Client, erro
 	defer p.mu.Unlock()
 	spec, ok := p.specs[server]
 	if !ok {
-		return nil, fmt.Errorf("mcpproxy: no upstream registered for %q: %w", server, ErrNotRegistered)
+		return nil, fmt.Errorf("mcpproxy: upstream %q: %w", server, ErrNotRegistered)
 	}
 	if uc, ok := p.clients[server]; ok {
 		p.resetIdleTimerLocked(server, uc)

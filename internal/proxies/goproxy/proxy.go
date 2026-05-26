@@ -26,7 +26,7 @@ import (
 const UpstreamHost proxies.EgressHost = "proxy.golang.org"
 
 // UpstreamBase is the full upstream URL the proxy forwards to.
-const UpstreamBase = "https://proxy.golang.org"
+const UpstreamBase = "https://" + string(UpstreamHost)
 
 // listenPort is the loopback port the proxy binds inside the per-sandbox
 // sidecar (below the Anthropic proxy's 8088 and the MCP tunnel's 8089+).
