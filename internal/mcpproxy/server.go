@@ -19,7 +19,7 @@ import (
 
 // ErrAlreadyStarted is returned when Start is called on an Aggregator
 // that has already been started.
-var ErrAlreadyStarted = errors.New("mcpproxy: aggregator already started")
+var ErrAlreadyStarted = errors.New("mcpproxy: Aggregator already started")
 
 // Config configures an Aggregator.
 type Config struct {

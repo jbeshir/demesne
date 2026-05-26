@@ -126,3 +126,14 @@ func EgressHosts() []EgressHost {
 	}
 	return hosts
 }
+
+// EgressHostStrings is EgressHosts flattened to plain strings, for the
+// OpenSandbox allowlist boundary which speaks untyped host strings.
+func EgressHostStrings() []string {
+	hosts := EgressHosts()
+	out := make([]string, len(hosts))
+	for i, h := range hosts {
+		out[i] = string(h)
+	}
+	return out
+}
