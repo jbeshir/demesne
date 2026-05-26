@@ -116,6 +116,12 @@ func writeOrchestration(b *strings.Builder) {
 		"at `/in/previous-jobs/<name>`. " +
 		"(Exception: `sandbox_research` children get a fresh private workspace " +
 		"with no `/in` mounts — they do NOT inherit `/in` or share `/workspace`.)\n\n")
+	b.WriteString("- **Delivering results is your job, not a child's.** " +
+		"`/out/child/<name>` is that child's own output dir — files a child writes " +
+		"there do NOT appear in your `/out`. To hand a child-produced or `/workspace` " +
+		"artefact back to the caller, copy it into your own `/out` yourself with plain " +
+		"`cp` (that needs no toolchain). Never delegate the copy-into-`/out` step to a " +
+		"`sandbox_script` child — it would just write to its own `/out/child/<name>`.\n")
 	b.WriteString("- **Validate with real builds/tests.** To compile, test, or lint " +
 		"code, spawn a `sandbox_script` child — or a persistent " +
 		"`sandbox_create`+`sandbox_exec` sandbox for repeated runs — with the " +
