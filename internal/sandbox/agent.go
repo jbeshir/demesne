@@ -52,7 +52,7 @@ type sandboxLayout struct {
 // sandbox runtime: provider, model, inputs, image tag.
 type agentPrep struct {
 	agent  agents.Agent
-	model  string
+	model  agents.ModelName
 	inputs []agents.InputInfo
 	tag    ImageURI
 }
@@ -422,10 +422,14 @@ func (r *Runner) createSandbox(
 		return nil, err
 	}
 	ctxName := prep.agent.ContextFileName()
-	body := prep.agent.GenerateContext(
-		spec.preamble, spec.prompt, spec.egress, prep.inputs, mcpServers,
-		previousJobNames(layout.previousJobs),
-	)
+	body := prep.agent.GenerateContext(agents.ContextParams{
+		Preamble:     spec.preamble,
+		Prompt:       spec.prompt,
+		Egress:       spec.egress,
+		Inputs:       prep.inputs,
+		MCPServers:   mcpServers,
+		PreviousJobs: previousJobNames(layout.previousJobs),
+	})
 	contextHost := filepath.Join(layout.configDir, ctxName)
 	if err := os.WriteFile(contextHost, []byte(body), 0o600); err != nil {
 		return nil, fmt.Errorf("write %s: %w", contextHost, err)

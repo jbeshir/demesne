@@ -4,12 +4,21 @@ import (
 	"context"
 
 	"github.com/jbeshir/demesne/internal/agents"
-	"github.com/jbeshir/demesne/internal/egress"
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
 )
 
 // AgentName is the caller-facing identifier for the Claude Code agent.
 const AgentName = "claude-code"
+
+// Environment variable names injected into the agent container. These
+// are what Claude Code reads to reach the in-sidecar proxy and to
+// authenticate. Defined as constants so a name change is compile-checked.
+const (
+	envOAuthToken = "CLAUDE_CODE_OAUTH_TOKEN" //nolint:gosec // env var name, not a credential value
+	envBaseURL    = "ANTHROPIC_BASE_URL"
+	envModel      = "ANTHROPIC_MODEL"
+	envIsSandbox  = "IS_SANDBOX"
+)
 
 // claudeCodeAgent implements agents.Agent for the Claude Code CLI.
 type claudeCodeAgent struct{}
@@ -29,14 +38,8 @@ func (claudeCodeAgent) EnsureImage(ctx context.Context) (string, error) {
 	return ensureImage(ctx)
 }
 
-func (claudeCodeAgent) GenerateContext(
-	preamble, prompt string,
-	egress egress.Mode,
-	inputs []agents.InputInfo,
-	mcpServers []agents.MCPServerInfo,
-	previousJobs []string,
-) string {
-	return generateContext(preamble, prompt, egress, inputs, mcpServers, previousJobs)
+func (claudeCodeAgent) GenerateContext(p agents.ContextParams) string {
+	return generateContext(p)
 }
 
 func (claudeCodeAgent) WriteAgentConfig(configDir string, cfg agents.AgentConfig) error {
@@ -48,18 +51,18 @@ func (claudeCodeAgent) WriteAgentConfig(configDir string, cfg agents.AgentConfig
 
 func (claudeCodeAgent) ContextFileName() string { return "CLAUDE.md" }
 
-func (claudeCodeAgent) ResolveModel(name string) (string, error) {
+func (claudeCodeAgent) ResolveModel(name string) (ModelName, error) {
 	return ResolveModel(name)
 }
 
-func (claudeCodeAgent) Command(prompt, model string) []string {
+func (claudeCodeAgent) Command(prompt string, model ModelName) []string {
 	return []string{
 		// sh retryScriptPath claude: the wrapper relaunches claude on quota
 		// exhaustion; everything after "claude" is the argv it runs (and
 		// re-runs with --resume on a rate-limit reset). $1=claude.
 		"sh", retryScriptPath, "claude",
 		"-p", prompt,
-		"--model", model,
+		"--model", string(model),
 		// stream-json emits the full NDJSON event stream (messages, tool
 		// calls, the final result) on stdout. The runner redirects that
 		// to /out so the structured transcript streams to the host live;
@@ -78,11 +81,11 @@ func (claudeCodeAgent) Command(prompt, model string) []string {
 	}
 }
 
-func (claudeCodeAgent) EnvVars(oauthToken, model string) map[string]string {
+func (claudeCodeAgent) EnvVars(oauthToken string, model ModelName) map[string]string {
 	return map[string]string{
-		"CLAUDE_CODE_OAUTH_TOKEN": oauthToken,
-		"ANTHROPIC_BASE_URL":      proxyanthropic.ListenURL(),
-		"ANTHROPIC_MODEL":         model,
-		"IS_SANDBOX":              "1",
+		envOAuthToken: oauthToken,
+		envBaseURL:    proxyanthropic.ListenURL(),
+		envModel:      string(model),
+		envIsSandbox:  "1",
 	}
 }

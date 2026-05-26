@@ -163,7 +163,14 @@ func TestGenerateContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := generateContext(tt.preamble, tt.prompt, tt.egress, tt.inputs, tt.mcpServers, tt.previousJobs)
+			got := generateContext(agents.ContextParams{
+				Preamble:     tt.preamble,
+				Prompt:       tt.prompt,
+				Egress:       tt.egress,
+				Inputs:       tt.inputs,
+				MCPServers:   tt.mcpServers,
+				PreviousJobs: tt.previousJobs,
+			})
 			for _, s := range tt.want {
 				assert.Contains(t, got, s)
 			}

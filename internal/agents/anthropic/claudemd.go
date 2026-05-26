@@ -20,16 +20,10 @@ import (
 // incremental notes to /out. mcpServers, when non-empty, are listed
 // under their native tool names so the model knows what host tools it
 // can call.
-func generateContext(
-	preamble, prompt string,
-	mode egress.Mode,
-	inputs []agents.InputInfo,
-	mcpServers []agents.MCPServerInfo,
-	previousJobs []string,
-) string {
+func generateContext(p agents.ContextParams) string {
 	var b strings.Builder
-	if preamble != "" {
-		b.WriteString(strings.TrimSpace(preamble))
+	if p.Preamble != "" {
+		b.WriteString(strings.TrimSpace(p.Preamble))
 		b.WriteString("\n\n")
 	}
 
@@ -45,9 +39,9 @@ func generateContext(
 	b.WriteString("- `/out` is writable but **output only** — write your final " +
 		"artefacts (results, reports, generated files) here. The caller reads " +
 		"this back from the host after you exit.\n")
-	if len(inputs) > 0 {
+	if len(p.Inputs) > 0 {
 		b.WriteString("- Read-only inputs under `/in/`:\n")
-		for _, in := range inputs {
+		for _, in := range p.Inputs {
 			kind := "file"
 			if in.IsDir {
 				kind = "dir"
@@ -61,22 +55,22 @@ func generateContext(
 	} else {
 		b.WriteString("- No caller-supplied inputs were mounted under `/in/`.\n")
 	}
-	if len(previousJobs) > 0 {
+	if len(p.PreviousJobs) > 0 {
 		b.WriteString("- Completed sibling jobs' outputs are mounted read-only under " +
 			"`/in/previous-jobs/<name>` — read earlier siblings' results there.\n")
 	}
-	b.WriteString("- " + egressDescription(mode) + "\n")
-	if mode == egress.Open {
+	b.WriteString("- " + egressDescription(p.Egress) + "\n")
+	if p.Egress == egress.Open {
 		b.WriteString("- **This is a long-running research task.** Flush " +
 			"partial findings to `/out` as you go so progress survives " +
 			"interruption.\n")
 	}
 
-	writeHostTools(&b, mcpServers)
+	writeHostTools(&b, p.MCPServers)
 	writeOrchestration(&b)
 
 	b.WriteString("\n## Task\n\n")
-	b.WriteString(strings.TrimSpace(prompt))
+	b.WriteString(strings.TrimSpace(p.Prompt))
 	b.WriteString("\n")
 	return b.String()
 }
