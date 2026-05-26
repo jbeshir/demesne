@@ -18,7 +18,7 @@ import (
 func freePort(t *testing.T) int {
 	t.Helper()
 	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), tcpNetwork, "127.0.0.1:0")
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	port := ln.Addr().(*net.TCPAddr).Port
 	require.NoError(t, ln.Close())
@@ -31,7 +31,7 @@ func waitListening(t *testing.T, addr string) {
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		conn, err := d.DialContext(ctx, tcpNetwork, addr)
+		conn, err := d.DialContext(ctx, "tcp", addr)
 		cancel()
 		if err == nil {
 			_ = conn.Close()
@@ -45,7 +45,7 @@ func waitListening(t *testing.T, addr string) {
 func startProxy(t *testing.T, upstreamURL string) string {
 	t.Helper()
 	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	p := NewProxyServerTo(addr, upstreamURL)
+	p := newProxyServerTo(addr, upstreamURL)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go func() { _ = p.Start(ctx) }()

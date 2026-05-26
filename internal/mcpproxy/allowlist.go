@@ -4,11 +4,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// ToolName is the name of a tool exposed by an upstream MCP server.
+type ToolName string
+
+// ServerName is the name of an upstream MCP server.
+type ServerName string
 
 // Sentinel string values recognised in the allowlist override file.
 // Anything else must be an explicit array of tool names.
@@ -22,11 +29,11 @@ const (
 // is the explicit set otherwise. AllowAll wins when both are set.
 type ServerAllowlist struct {
 	AllowAll bool
-	Tools    map[string]struct{}
+	Tools    map[ToolName]struct{}
 }
 
 // Allowed reports whether the given tool name is permitted.
-func (a ServerAllowlist) Allowed(tool string) bool {
+func (a ServerAllowlist) Allowed(tool ToolName) bool {
 	if a.AllowAll {
 		return true
 	}
@@ -49,14 +56,14 @@ type overrideFile map[string]json.RawMessage
 func ResolveAllowlist(overridePath string) (map[string]ServerAllowlist, error) {
 	out := make(map[string]ServerAllowlist, len(defaultAllowlist))
 	for name, set := range defaultAllowlist {
-		out[name] = ServerAllowlist{Tools: cloneSet(set)}
+		out[string(name)] = ServerAllowlist{Tools: cloneSet(set)}
 	}
 	if overridePath == "" {
 		return out, nil
 	}
 	data, err := os.ReadFile(overridePath) //nolint:gosec // operator config
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return out, nil
 		}
 		return nil, fmt.Errorf("read %s: %w", overridePath, err)
@@ -100,7 +107,7 @@ func parseOverrideEntry(name string, raw json.RawMessage) (*ServerAllowlist, err
 		case allowAllSentinel:
 			return &ServerAllowlist{AllowAll: true}, nil
 		case useDefaultSentinel:
-			set, ok := defaultAllowlist[name]
+			set, ok := defaultAllowlist[ServerName(name)]
 			if !ok {
 				return nil, fmt.Errorf(
 					"allowlist override for %q says %q but demesne ships no default for that server",
@@ -122,12 +129,12 @@ func parseOverrideEntry(name string, raw json.RawMessage) (*ServerAllowlist, err
 	if len(list) == 0 {
 		return nil, nil
 	}
-	tools := make(map[string]struct{}, len(list))
+	tools := make(map[ToolName]struct{}, len(list))
 	for _, tool := range list {
 		if tool == "" {
 			return nil, errors.New("allowlist override " + name + ": tool name cannot be empty")
 		}
-		tools[tool] = struct{}{}
+		tools[ToolName(tool)] = struct{}{}
 	}
 	return &ServerAllowlist{Tools: tools}, nil
 }
@@ -142,7 +149,7 @@ func SeedOverrideFile(path string) error {
 	}
 	if _, err := os.Stat(path); err == nil {
 		return nil
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("stat %s: %w", path, err)
 	}
 	if dir := filepath.Dir(path); dir != "" {
@@ -166,8 +173,8 @@ func SeedOverrideFile(path string) error {
 	return os.WriteFile(path, []byte(b.String()), 0o600)
 }
 
-func cloneSet(in map[string]struct{}) map[string]struct{} {
-	out := make(map[string]struct{}, len(in))
+func cloneSet(in map[ToolName]struct{}) map[ToolName]struct{} {
+	out := make(map[ToolName]struct{}, len(in))
 	for k := range in {
 		out[k] = struct{}{}
 	}
@@ -177,7 +184,7 @@ func cloneSet(in map[string]struct{}) map[string]struct{} {
 func sortedDefaultNames() []string {
 	names := make([]string, 0, len(defaultAllowlist))
 	for n := range defaultAllowlist {
-		names = append(names, n)
+		names = append(names, string(n))
 	}
 	sort.Strings(names)
 	return names

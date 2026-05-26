@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -15,6 +16,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+// ErrAlreadyStarted is returned when Start is called on an Aggregator
+// that has already been started.
+var ErrAlreadyStarted = errors.New("mcpproxy: aggregator already started")
 
 // Config configures an Aggregator.
 type Config struct {
@@ -65,7 +70,6 @@ type Aggregator struct {
 	pool       *Pool
 	allow      map[string]ServerAllowlist
 	httpSrv    *http.Server
-	servers    []string
 	catalogue  ToolCatalogue
 	socketPath string
 	extra      []ExtraServer
@@ -122,7 +126,7 @@ func NewAggregator(cfg Config) (*Aggregator, error) {
 // open or if every upstream failed.
 func (a *Aggregator) Start(ctx context.Context) error {
 	if a.httpSrv != nil {
-		return errors.New("mcpproxy: Aggregator already started")
+		return ErrAlreadyStarted
 	}
 	mux := http.NewServeMux()
 	specs := a.pool.knownSpecs()
@@ -158,10 +162,6 @@ func (a *Aggregator) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for name := range a.catalogue {
-		a.servers = append(a.servers, name)
-	}
-	sort.Strings(a.servers)
 
 	a.httpSrv = &http.Server{
 		Handler:           mux,
@@ -172,7 +172,7 @@ func (a *Aggregator) Start(ctx context.Context) error {
 			log.Printf("mcpproxy: http serve: %v", err)
 		}
 	}()
-	log.Printf("mcpproxy: listening on unix:%s with %d upstreams", a.socketPath, len(a.servers))
+	log.Printf("mcpproxy: listening on unix:%s with %d upstreams", a.socketPath, len(a.catalogue))
 	return nil
 }
 
@@ -184,7 +184,7 @@ func (a *Aggregator) listenSocket() (net.Listener, error) {
 			return nil, fmt.Errorf("create %s: %w", dir, err)
 		}
 	}
-	if err := os.Remove(a.socketPath); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(a.socketPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("remove stale socket %s: %w", a.socketPath, err)
 	}
 	var lc net.ListenConfig
@@ -199,8 +199,11 @@ func (a *Aggregator) listenSocket() (net.Listener, error) {
 // tools, sorted. The runner pairs each with a sidecar listener.
 // Path convention: /{server}/mcp.
 func (a *Aggregator) Servers() []string {
-	out := make([]string, len(a.servers))
-	copy(out, a.servers)
+	out := make([]string, 0, len(a.catalogue))
+	for k := range a.catalogue {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
 }
 
@@ -251,7 +254,7 @@ func newServerForUpstream(name string, tools []mcp.Tool, pool *Pool) *server.MCP
 func filterTools(tools []mcp.Tool, allow ServerAllowlist) []mcp.Tool {
 	out := make([]mcp.Tool, 0, len(tools))
 	for _, t := range tools {
-		if !allow.Allowed(t.Name) {
+		if !allow.Allowed(ToolName(t.Name)) {
 			continue
 		}
 		out = append(out, t)

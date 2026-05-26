@@ -77,7 +77,7 @@ func TestApplyOverride(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			base := make(map[string]ServerAllowlist, len(defaultAllowlist))
 			for name, set := range defaultAllowlist {
-				base[name] = ServerAllowlist{Tools: cloneSet(set)}
+				base[string(name)] = ServerAllowlist{Tools: cloneSet(set)}
 			}
 			got, err := applyOverride(base, []byte(tt.input))
 			require.NoError(t, err)
@@ -128,7 +128,7 @@ func TestSeedOverrideFile(t *testing.T) {
 }
 
 func TestServerAllowlist_Allowed(t *testing.T) {
-	a := ServerAllowlist{Tools: map[string]struct{}{"x": {}}}
+	a := ServerAllowlist{Tools: map[ToolName]struct{}{"x": {}}}
 	assert.True(t, a.Allowed("x"))
 	assert.False(t, a.Allowed("y"))
 

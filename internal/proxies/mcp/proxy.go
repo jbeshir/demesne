@@ -32,8 +32,6 @@ import (
 // Name is the registered name for the MCP tunnel proxy.
 const Name = "mcp"
 
-const tcpNetwork = "tcp"
-
 // FirstListenPort is the loopback port the alphabetically-first
 // upstream's listener binds inside the sidecar. Subsequent
 // upstreams take FirstListenPort+1, +2, … in the order the host
@@ -100,8 +98,8 @@ func init() {
 // bindings.
 type registration struct{}
 
-func (registration) Name() string          { return Name }
-func (registration) EgressHosts() []string { return nil }
+func (registration) Name() string                      { return Name }
+func (registration) EgressHosts() []proxies.EgressHost { return nil }
 
 // Server is the sidecar MCP tunnel: a set of per-upstream reverse
 // proxies sharing one unix-socket transport to the host aggregator.
@@ -109,7 +107,6 @@ type Server struct {
 	socketPath string
 	bindings   []Binding
 	transport  http.RoundTripper
-	servers    []*http.Server
 }
 
 // NewServer builds a tunnel for the given bindings, forwarding over
@@ -136,10 +133,11 @@ func (s *Server) Start(ctx context.Context) error {
 	var lc net.ListenConfig
 	errCh := make(chan error, len(s.bindings))
 	var wg sync.WaitGroup
+	var httpServers []*http.Server
 	for _, b := range s.bindings {
 		handler := s.handlerFor(b)
 		addr := fmt.Sprintf("127.0.0.1:%d", b.ListenPort)
-		ln, err := lc.Listen(ctx, tcpNetwork, addr)
+		ln, err := lc.Listen(ctx, "tcp", addr)
 		if err != nil {
 			return fmt.Errorf("mcp tunnel listen %s: %w", addr, err)
 		}
@@ -147,7 +145,7 @@ func (s *Server) Start(ctx context.Context) error {
 			Handler:           handler,
 			ReadHeaderTimeout: 30 * time.Second,
 		}
-		s.servers = append(s.servers, srv)
+		httpServers = append(httpServers, srv)
 		log.Printf("mcp tunnel: %q on %s -> unix:%s%s", b.Name, addr, s.socketPath, b.Path)
 		wg.Add(1)
 		go func(b Binding) {
@@ -162,7 +160,7 @@ func (s *Server) Start(ctx context.Context) error {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		for _, srv := range s.servers {
+		for _, srv := range httpServers {
 			if err := srv.Shutdown(shutCtx); err != nil {
 				log.Printf("mcp tunnel: shutdown error: %v", err)
 			}

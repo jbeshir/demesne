@@ -14,10 +14,10 @@ import (
 )
 
 // APIHost is the upstream Anthropic API hostname.
-const APIHost = "api.anthropic.com"
+const APIHost proxies.EgressHost = "api.anthropic.com"
 
 // APIBase is the full upstream URL the proxy forwards to.
-const APIBase = "https://" + APIHost
+const APIBase = "https://api.anthropic.com"
 
 // listenPort is the loopback port the proxy binds inside the per-sandbox
 // sidecar. The sidecar's network namespace is isolated, so the port is
@@ -87,8 +87,8 @@ func init() {
 // Construction and serving happen in the sidecar's main via NewProxyServer.
 type registration struct{}
 
-func (registration) Name() string          { return Name }
-func (registration) EgressHosts() []string { return nil }
+func (registration) Name() string                      { return Name }
+func (registration) EgressHosts() []proxies.EgressHost { return nil }
 
 // ProxyServer is a hardened reverse proxy for api.anthropic.com.
 // It enforces an explicit endpoint allowlist, verifies that the caller
@@ -109,12 +109,12 @@ func NewProxyServer(bindAddr, agentToken, upstreamToken string, tracker *Tracker
 	return newProxyServer(bindAddr, APIBase, proxies.BypassTransport(), agentToken, upstreamToken, tracker)
 }
 
-// NewProxyServerTo is the test-only constructor: forwards to the given
+// newProxyServerTo is the test-only constructor: forwards to the given
 // upstream URL over http.DefaultTransport, so tests that exercise the
 // gating logic on a host without CAP_NET_ADMIN don't fail in
 // setsockopt(SO_MARK). Production callers must use NewProxyServer.
-func NewProxyServerTo(bindAddr, upstreamURL, agentToken, upstreamToken string, tracker *Tracker) *ProxyServer {
-	return newProxyServer(bindAddr, upstreamURL, http.DefaultTransport, agentToken, upstreamToken, tracker)
+func newProxyServerTo(upstreamURL, agentToken, upstreamToken string, tracker *Tracker) *ProxyServer { //nolint:unparam
+	return newProxyServer("127.0.0.1:0", upstreamURL, http.DefaultTransport, agentToken, upstreamToken, tracker)
 }
 
 func newProxyServer(

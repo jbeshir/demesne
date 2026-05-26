@@ -16,7 +16,7 @@ import (
 func freePort(t *testing.T) int {
 	t.Helper()
 	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), tcpNetwork, "127.0.0.1:0")
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	port := ln.Addr().(*net.TCPAddr).Port
 	require.NoError(t, ln.Close())
@@ -36,7 +36,7 @@ func waitListening(t *testing.T, port int) {
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		conn, err := d.DialContext(ctx, tcpNetwork, addr)
+		conn, err := d.DialContext(ctx, "tcp", addr)
 		cancel()
 		if err == nil {
 			_ = conn.Close()

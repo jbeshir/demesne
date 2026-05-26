@@ -417,7 +417,12 @@ func (r *Runner) createSandbox(
 	layout sandboxLayout,
 	mcpServers []agents.MCPServerInfo,
 ) (*opensandbox.Sandbox, error) {
-	policy, err := BuildNetworkPolicy(spec.egress, proxies.EgressHosts())
+	egressHosts := proxies.EgressHosts()
+	egressStrs := make([]string, len(egressHosts))
+	for i, h := range egressHosts {
+		egressStrs[i] = string(h)
+	}
+	policy, err := BuildNetworkPolicy(spec.egress, egressStrs)
 	if err != nil {
 		return nil, err
 	}

@@ -20,6 +20,10 @@ import (
 	"time"
 )
 
+// EgressHost is a DNS hostname (no scheme or port) that a proxy needs
+// to reach its upstream. Used to build the per-sandbox egress allowlist.
+type EgressHost string
+
 // BypassTransport returns an http.Transport whose outbound sockets —
 // both the TLS dial and Go-resolver DNS — carry the egress-bypass
 // SO_MARK via BypassDialerControl, so a proxy can reach its upstream
@@ -72,7 +76,7 @@ type Proxy interface {
 	// The runner adds these to the sandbox's egress allowlist; the agent
 	// itself only talks to 127.0.0.1, so it never appears in egress
 	// traffic directly.
-	EgressHosts() []string
+	EgressHosts() []EgressHost
 }
 
 var (
@@ -108,9 +112,9 @@ func All() []Proxy {
 // EgressHosts returns the union of every registered proxy's
 // EgressHosts. The sandbox runner adds these to the egress allowlist
 // alongside the caller's chosen mode.
-func EgressHosts() []string {
-	seen := map[string]struct{}{}
-	var hosts []string
+func EgressHosts() []EgressHost {
+	seen := map[EgressHost]struct{}{}
+	var hosts []EgressHost
 	for _, p := range All() {
 		for _, h := range p.EgressHosts() {
 			if _, ok := seen[h]; ok {

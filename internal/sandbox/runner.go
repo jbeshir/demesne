@@ -221,7 +221,12 @@ func (r *Runner) prepareSandbox(
 		return nil, "", "", err
 	}
 
-	policy, err := BuildNetworkPolicy(opts.Egress, proxies.EgressHosts())
+	egressHosts := proxies.EgressHosts()
+	egressStrs := make([]string, len(egressHosts))
+	for i, h := range egressHosts {
+		egressStrs[i] = string(h)
+	}
+	policy, err := BuildNetworkPolicy(opts.Egress, egressStrs)
 	if err != nil {
 		return nil, "", "", err
 	}

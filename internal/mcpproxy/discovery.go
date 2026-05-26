@@ -11,7 +11,9 @@ package mcpproxy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sort"
 )
@@ -58,7 +60,7 @@ type claudeMCPServer struct {
 func DiscoverUpstreams(path string) ([]UpstreamSpec, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // path comes from operator config
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("read %s: %w", path, err)
