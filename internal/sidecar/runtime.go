@@ -36,29 +36,36 @@ const EgressSidecarLabel = "opensandbox.io/egress-sidecar-for"
 
 const dockerCmd = "docker"
 
-// ProxyConfig carries the per-sandbox configuration the agent-vendor
-// proxy needs at sidecar startup. The agent-facing token is validated
-// by the proxy on every inbound request; the upstream token is what
-// the proxy sends to the real vendor API. Keeping both off-host
-// avoids storing them in sidecar image layers or container args
-// (visible via docker inspect) — they're passed via docker run -e
-// instead.
-//
-// ResultsHost is the host path bind-mounted to SidecarResultsDir
-// inside the sidecar; the vendor proxy writes its usage.json there.
-//
-// MCPUpstreams, when non-empty, configure the sidecar's MCP tunnel:
-// one loopback listener per upstream, all forwarding over the
-// bind-mounted aggregator unix socket (MCPSocketHost). A unix socket
-// rather than a host TCP hop is what makes this work under rootless
-// podman, where the sandbox network namespace can't reach a
-// host-process port. Empty MCPUpstreams means no MCP tunnel.
-type ProxyConfig struct {
+// AnthropicProxyConfig carries the auth values the agent-vendor proxy
+// needs. The agent-facing token is validated by the proxy on every
+// inbound request; the upstream token is what the proxy sends to the
+// real vendor API. Keeping both off-host avoids storing them in sidecar
+// image layers or container args (visible via docker inspect) — they're
+// passed via docker run -e instead. ResultsHost is the host path
+// bind-mounted to SidecarResultsDir; the vendor proxy writes its
+// usage.json there.
+type AnthropicProxyConfig struct {
 	AgentToken    string
 	UpstreamToken string
 	ResultsHost   string
-	MCPUpstreams  []proxymcp.Binding
-	MCPSocketHost string
+}
+
+// MCPTunnelConfig configures the sidecar's MCP tunnel: one loopback
+// listener per upstream, all forwarding over the bind-mounted aggregator
+// unix socket (SocketHost). A unix socket rather than a host TCP hop is
+// what makes this work under rootless podman, where the sandbox network
+// namespace can't reach a host-process port.
+type MCPTunnelConfig struct {
+	Upstreams  []proxymcp.Binding
+	SocketHost string
+}
+
+// ProxyConfig carries the per-sandbox proxy configuration for sidecar
+// startup. Anthropic == nil means the Anthropic proxy is off (not an
+// agent run). MCP == nil means the MCP tunnel is off.
+type ProxyConfig struct {
+	Anthropic *AnthropicProxyConfig
+	MCP       *MCPTunnelConfig
 }
 
 // Handle is a running demesne sidecar container attached to an
@@ -80,8 +87,7 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 	// The Go module proxy runs in every sidecar with no config. The
 	// Anthropic proxy is agent-mode only: its three values arrive
 	// together or not at all.
-	agentMode := cfg.AgentToken != ""
-	if agentMode && (cfg.UpstreamToken == "" || cfg.ResultsHost == "") {
+	if cfg.Anthropic != nil && (cfg.Anthropic.UpstreamToken == "" || cfg.Anthropic.ResultsHost == "") {
 		return nil, errors.New("sidecar.Start: UpstreamToken and ResultsHost are required when AgentToken is set")
 	}
 	egressID, err := findEgressSidecar(ctx, sandboxID)
@@ -106,11 +112,11 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 	}
 	// Anthropic proxy env + results mount only for agent runs; the
 	// sidecar binary skips that proxy when these are absent.
-	if agentMode {
+	if cfg.Anthropic != nil {
 		args = append(args,
-			"-v", cfg.ResultsHost+":"+SidecarResultsDir,
-			"-e", proxyanthropic.AuthTokenEnv+"="+cfg.AgentToken,
-			"-e", proxyanthropic.UpstreamTokenEnv+"="+cfg.UpstreamToken,
+			"-v", cfg.Anthropic.ResultsHost+":"+SidecarResultsDir,
+			"-e", proxyanthropic.AuthTokenEnv+"="+cfg.Anthropic.AgentToken,
+			"-e", proxyanthropic.UpstreamTokenEnv+"="+cfg.Anthropic.UpstreamToken,
 			"-e", proxyanthropic.UsagePathEnv+"="+SidecarUsageFile,
 		)
 	}
@@ -119,13 +125,13 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 	// rootless podman, where the sandbox network namespace can't reach
 	// a host-process TCP port (and --add-host is rejected in
 	// --network=container: mode anyway).
-	if len(cfg.MCPUpstreams) > 0 {
-		if cfg.MCPSocketHost == "" {
+	if cfg.MCP != nil {
+		if cfg.MCP.SocketHost == "" {
 			return nil, errors.New("sidecar.Start: MCPSocketHost is required when MCPUpstreams are set")
 		}
-		socketDir := filepath.Dir(cfg.MCPSocketHost)
-		inSidecarSocket := SidecarMCPDir + "/" + filepath.Base(cfg.MCPSocketHost)
-		raw, err := json.Marshal(cfg.MCPUpstreams)
+		socketDir := filepath.Dir(cfg.MCP.SocketHost)
+		inSidecarSocket := SidecarMCPDir + "/" + filepath.Base(cfg.MCP.SocketHost)
+		raw, err := json.Marshal(cfg.MCP.Upstreams)
 		if err != nil {
 			return nil, fmt.Errorf("sidecar.Start: marshal MCP bindings: %w", err)
 		}

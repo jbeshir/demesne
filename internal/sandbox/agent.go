@@ -162,13 +162,20 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	}
 	defer killSandbox(ctx, sb)
 
-	side, err := sidecar.Start(ctx, sb.ID(), sidecarImage, sidecar.ProxyConfig{
-		AgentToken:    agentToken,
-		UpstreamToken: r.cfg.ClaudeCodeOAuthToken,
-		ResultsHost:   layout.resultsHost,
-		MCPUpstreams:  wiring.sidecarUpstreams,
-		MCPSocketHost: r.cfg.MCPSocketPath,
-	})
+	proxyCfg := sidecar.ProxyConfig{
+		Anthropic: &sidecar.AnthropicProxyConfig{
+			AgentToken:    agentToken,
+			UpstreamToken: r.cfg.ClaudeCodeOAuthToken,
+			ResultsHost:   layout.resultsHost,
+		},
+	}
+	if len(wiring.sidecarUpstreams) > 0 {
+		proxyCfg.MCP = &sidecar.MCPTunnelConfig{
+			Upstreams:  wiring.sidecarUpstreams,
+			SocketHost: r.cfg.MCPSocketPath,
+		}
+	}
+	side, err := sidecar.Start(ctx, sb.ID(), sidecarImage, proxyCfg)
 	if err != nil {
 		return AgentResult{}, fmt.Errorf("start sidecar: %w", err)
 	}
