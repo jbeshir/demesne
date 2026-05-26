@@ -53,7 +53,7 @@ type fakeRunner struct {
 	agentErr       error
 	researchCalls  int
 	gotResearchReq sandbox.ResearchRequest
-	researchRes    sandbox.ResearchResult
+	researchRes    sandbox.AgentResult
 	researchErr    error
 }
 
@@ -99,7 +99,7 @@ func (f *fakeRunner) Agent(_ context.Context, req sandbox.AgentRequest) (sandbox
 	return f.agentRes, f.agentErr
 }
 
-func (f *fakeRunner) Research(_ context.Context, req sandbox.ResearchRequest) (sandbox.ResearchResult, error) {
+func (f *fakeRunner) Research(_ context.Context, req sandbox.ResearchRequest) (sandbox.AgentResult, error) {
 	f.researchCalls++
 	f.gotResearchReq = req
 	return f.researchRes, f.researchErr
@@ -458,7 +458,7 @@ func TestHandleSandboxResearch_MissingPrompt(t *testing.T) {
 
 func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 	r := &fakeRunner{
-		researchRes: sandbox.ResearchResult{
+		researchRes: sandbox.AgentResult{
 			JobID:      "rsh",
 			OutputPath: "/tmp/demesne-out/rsh",
 			Stdout:     "DONE\n",

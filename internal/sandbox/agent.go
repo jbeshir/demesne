@@ -74,18 +74,6 @@ type internalAgentSpec struct {
 	child       *childSpawn
 }
 
-// agentRunResult is runAgent's return shape. The public adapters
-// convert it to AgentResult / ResearchResult.
-type agentRunResult struct {
-	JobID         string
-	OutputPath    string
-	WorkspacePath string
-	Stdout        string
-	ExitCode      int
-	CostUSD       float64
-	TotalUsageUSD float64
-}
-
 // Agent runs an agent (e.g. claude-code) inside a fresh sandbox against
 // the caller's prompt.
 //
@@ -116,21 +104,21 @@ func (r *Runner) Agent(ctx context.Context, req AgentRequest) (AgentResult, erro
 	if err != nil {
 		return AgentResult{}, err
 	}
-	return AgentResult(res), nil
+	return res, nil
 }
 
 // runAgent is the shared implementation behind Agent and Research.
 // It does the full create→start sidecar→exec→teardown cycle and reads
 // the proxy's usage snapshot back off disk.
-func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRunResult, error) {
+func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentResult, error) {
 	prep, err := r.prepareAgent(ctx, spec)
 	if err != nil {
-		return agentRunResult{}, err
+		return AgentResult{}, err
 	}
 
 	sidecarImage, err := sidecar.EnsureImage(ctx)
 	if err != nil {
-		return agentRunResult{}, fmt.Errorf("build sidecar image: %w", err)
+		return AgentResult{}, fmt.Errorf("build sidecar image: %w", err)
 	}
 
 	// Per-sandbox fake credential. The agent never sees the real
@@ -139,12 +127,12 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 	// before forwarding.
 	agentToken, err := generateAgentToken()
 	if err != nil {
-		return agentRunResult{}, fmt.Errorf("generate agent token: %w", err)
+		return AgentResult{}, fmt.Errorf("generate agent token: %w", err)
 	}
 
 	layout, err := r.buildLayout(spec)
 	if err != nil {
-		return agentRunResult{}, err
+		return AgentResult{}, err
 	}
 
 	// Register this run so its own in-sandbox demesne tools can spawn
@@ -164,7 +152,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 
 	sb, err := r.createSandbox(ctx, spec, prep, layout, wiring.agentServers)
 	if err != nil {
-		return agentRunResult{}, err
+		return AgentResult{}, err
 	}
 	// Record this child as a sibling only after a successful create, so a
 	// failed spawn never poisons later siblings' /in/previous-jobs mounts.
@@ -181,7 +169,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		MCPSocketHost: r.cfg.MCPSocketPath,
 	})
 	if err != nil {
-		return agentRunResult{}, fmt.Errorf("start sidecar: %w", err)
+		return AgentResult{}, fmt.Errorf("start sidecar: %w", err)
 	}
 	defer func() {
 		if err := side.Stop(context.WithoutCancel(ctx)); err != nil {
@@ -215,7 +203,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 		Timeout: commandTimeout.Milliseconds(),
 	}, nil)
 	if err != nil {
-		return agentRunResult{}, fmt.Errorf("run agent: %w", err)
+		return AgentResult{}, fmt.Errorf("run agent: %w", err)
 	}
 
 	exitCode := 0
@@ -235,7 +223,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (agentRun
 	// Roll up own + descendant usage into results.json at /out.
 	total := writeResults(layout, spec.tool, exitCode, usage.CostUSD)
 
-	return agentRunResult{
+	return AgentResult{
 		JobID:         layout.jobID,
 		OutputPath:    layout.outHost,
 		WorkspacePath: layout.workspaceHost,
@@ -434,7 +422,7 @@ func (r *Runner) createSandbox(
 	}
 	ctxName := prep.agent.ContextFileName()
 	body := prep.agent.GenerateContext(
-		spec.preamble, spec.prompt, string(spec.egress), prep.inputs, mcpServers,
+		spec.preamble, spec.prompt, spec.egress, prep.inputs, mcpServers,
 		previousJobNames(layout.previousJobs),
 	)
 	contextHost := filepath.Join(layout.configDir, ctxName)
@@ -627,7 +615,7 @@ func toolInfos(tools []mcp.Tool) []agents.MCPToolInfo {
 }
 
 // usageSnapshot is the subset of the proxy's usage.json that the
-// runner needs to surface in AgentResult/ResearchResult.
+// runner needs to surface in AgentResult.
 type usageSnapshot struct {
 	CostUSD float64 `json:"cost_usd"`
 }

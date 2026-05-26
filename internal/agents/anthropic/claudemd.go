@@ -5,24 +5,24 @@ import (
 	"strings"
 
 	"github.com/jbeshir/demesne/internal/agents"
+	"github.com/jbeshir/demesne/internal/egress"
 )
-
-const egressOpen = "open"
 
 // generateContext composes the CLAUDE.md content the agent reads from
 // /in/CLAUDE.md (symlinked to ./CLAUDE.md in cwd).
 //
 // Layout: caller-supplied preamble (verbatim), then an auto-generated
 // "Environment" section, then optionally "Available host tools", then
-// "Task" with the prompt. The egress argument controls the wording of
+// "Task" with the prompt. The mode argument controls the wording of
 // the outbound-network sentence (one of "none", "package-managers",
-// "open"; empty is treated as "none"). When egress is "open" we also
+// "open"; empty is treated as "none"). When mode is egress.Open we also
 // add a long-running-research framing note so the model knows to flush
 // incremental notes to /out. mcpServers, when non-empty, are listed
 // under their native tool names so the model knows what host tools it
 // can call.
 func generateContext(
-	preamble, prompt, egress string,
+	preamble, prompt string,
+	mode egress.Mode,
 	inputs []agents.InputInfo,
 	mcpServers []agents.MCPServerInfo,
 	previousJobs []string,
@@ -65,8 +65,8 @@ func generateContext(
 		b.WriteString("- Completed sibling jobs' outputs are mounted read-only under " +
 			"`/in/previous-jobs/<name>` — read earlier siblings' results there.\n")
 	}
-	b.WriteString("- " + egressDescription(egress) + "\n")
-	if egress == egressOpen {
+	b.WriteString("- " + egressDescription(mode) + "\n")
+	if mode == egress.Open {
 		b.WriteString("- **This is a long-running research task.** Flush " +
 			"partial findings to `/out` as you go so progress survives " +
 			"interruption.\n")
@@ -132,18 +132,23 @@ func writeOrchestration(b *strings.Builder) {
 }
 
 // egressDescription returns the human-readable sentence describing
-// what the sandbox can reach over the network, given the egress mode
-// string. Unknown values fall back to the strictest case so we never
+// what the sandbox can reach over the network, given the egress mode.
+// Unknown values fall back to the strictest case so we never
 // promise more reachability than the policy allows.
-func egressDescription(egress string) string {
-	switch egress {
-	case egressOpen:
+func egressDescription(mode egress.Mode) string {
+	switch mode {
+	case egress.Open:
 		return "Outbound network access is unrestricted — you can reach any " +
 			"HTTPS endpoint on the open internet."
-	case "package-managers":
+	case egress.PackageManagers:
 		return "Outbound network access is restricted to the Anthropic API " +
 			"backing this CLI and the standard npm/PyPI/conda package registries."
+	case egress.None:
+		return "Outbound network access is restricted to the Anthropic API " +
+			"backing this CLI; nothing else is reachable."
 	default:
+		// Unknown values fall back to the strictest case so we never
+		// promise more reachability than the policy allows.
 		return "Outbound network access is restricted to the Anthropic API " +
 			"backing this CLI; nothing else is reachable."
 	}

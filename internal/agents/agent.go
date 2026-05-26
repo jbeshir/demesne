@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/jbeshir/demesne/internal/egress"
 )
 
 // InputInfo summarises one /in/<basename> mount for an agent's context
@@ -71,15 +73,15 @@ type Agent interface {
 	// GenerateContext returns the contents of the context file (e.g.
 	// CLAUDE.md) that should be written into the sandbox before the agent
 	// starts. Inputs describe each /in/<basename> mount; egress is the
-	// caller-visible egress mode string ("none", "package-managers",
-	// "open") so the provider can tell the model exactly what's
-	// reachable. Empty egress is treated as "none". mcpServers lists the
-	// host MCP servers wired into this run (empty when none); the
-	// provider documents them in the context file. previousJobs names
-	// completed sibling jobs whose /out is mounted read-only under
-	// /in/previous-jobs/<name> (empty when none).
+	// caller-visible egress.Mode so the provider can tell the model
+	// exactly what's reachable. Empty egress is treated as "none".
+	// mcpServers lists the host MCP servers wired into this run (empty
+	// when none); the provider documents them in the context file.
+	// previousJobs names completed sibling jobs whose /out is mounted
+	// read-only under /in/previous-jobs/<name> (empty when none).
 	GenerateContext(
-		preamble, prompt, egress string,
+		preamble, prompt string,
+		egress egress.Mode,
 		inputs []InputInfo,
 		mcpServers []MCPServerInfo,
 		previousJobs []string,

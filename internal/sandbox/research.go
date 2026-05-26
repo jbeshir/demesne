@@ -12,7 +12,7 @@ import "context"
 // open egress (that combination is the data-exfiltration shape we
 // want kept off the surface). Callers that need inputs use Agent
 // instead.
-func (r *Runner) Research(ctx context.Context, req ResearchRequest) (ResearchResult, error) {
+func (r *Runner) Research(ctx context.Context, req ResearchRequest) (AgentResult, error) {
 	spec := internalAgentSpec{
 		agentName: req.Agent,
 		model:     req.Model,
@@ -23,7 +23,7 @@ func (r *Runner) Research(ctx context.Context, req ResearchRequest) (ResearchRes
 	}
 	res, err := r.runAgent(ctx, spec)
 	if err != nil {
-		return ResearchResult{}, err
+		return AgentResult{}, err
 	}
-	return ResearchResult(res), nil
+	return res, nil
 }

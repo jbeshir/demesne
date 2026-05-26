@@ -338,7 +338,7 @@ func rejectOpenEgress(egress string) *mcp.CallToolResult {
 	return nil
 }
 
-func formatChildAgentResult(name string, res agentRunResult) string {
+func formatChildAgentResult(name string, res AgentResult) string {
 	return fmt.Sprintf(
 		"name: %s\nexit_code: %d\noutput_dir: %s\ncost_usd: %.4f\ntotal_usage_usd: %.4f\n---\n%s",
 		name, res.ExitCode, res.OutputPath, res.CostUSD, res.TotalUsageUSD, res.Stdout,
