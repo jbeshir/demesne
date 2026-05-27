@@ -25,6 +25,17 @@ import (
 // Command/EnvVars so those methods never see an unvalidated string.
 type ModelName string
 
+// ProxyVendor identifies the credential-holding sidecar proxy an agent's
+// CLI talks to. The runner uses it to select which host credential to hand
+// the sidecar and which proxy sub-config to populate; providers return a
+// constant and never see the real credential themselves.
+type ProxyVendor string
+
+const (
+	ProxyAnthropic ProxyVendor = "anthropic"
+	ProxyOpenAI    ProxyVendor = "openai"
+)
+
 // ErrUnknownAgent is the sentinel wrapped by Lookup when the requested
 // agent name has no registered provider. Use errors.Is to distinguish
 // this from operational (infra) errors without inspecting the text.
@@ -132,6 +143,10 @@ type Agent interface {
 	// internal/proxies/<vendor> package), so callers don't need to
 	// thread proxy URLs through this interface.
 	EnvVars(oauthToken string, model ModelName) map[string]string
+
+	// ProxyVendor reports which sidecar credential-proxy this agent's CLI
+	// requires. The runner uses it to wire the matching upstream credential.
+	ProxyVendor() ProxyVendor
 }
 
 var (
