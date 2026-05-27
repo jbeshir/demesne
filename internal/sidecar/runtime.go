@@ -94,7 +94,7 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 	if err != nil {
 		return nil, err
 	}
-	name := "demesne-sidecar-" + sandboxID
+	name := containerName(sandboxID)
 	args := []string{
 		"run", "-d", "--rm",
 		"--name", name,
@@ -160,6 +160,13 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 	return &Handle{ContainerID: containerID}, nil
 }
 
+// containerName is the deterministic name of a sandbox's demesne sidecar.
+// The persistent (sandbox_create) path discards the Handle, so teardown
+// removes the sidecar by this name instead — see Remove.
+func containerName(sandboxID string) string {
+	return "demesne-sidecar-" + sandboxID
+}
+
 // Stop force-removes the sidecar container. Errors are returned so the
 // caller can log them; cleanup never blocks the agent run.
 func (h *Handle) Stop(ctx context.Context) error {
@@ -170,6 +177,27 @@ func (h *Handle) Stop(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, dockerCmd, "rm", "-f", h.ContainerID)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker rm -f %s: %w\n%s", h.ContainerID, err, out)
+	}
+	return nil
+}
+
+// Remove force-removes a sandbox's demesne sidecar by its deterministic
+// name, for teardown paths that don't hold the Handle (sandbox_create →
+// Destroy). It MUST run before OpenSandbox tears down the egress sidecar:
+// ours shares the egress container's network and PID namespace, so podman
+// refuses to remove the egress while ours still exists, leaking both
+// containers (which accumulate until new sandbox creates fail). Idempotent
+// — a missing container is not an error.
+func Remove(ctx context.Context, sandboxID string) error {
+	name := containerName(sandboxID)
+	//nolint:gosec // name composed from a validated UUID
+	cmd := exec.CommandContext(ctx, dockerCmd, "rm", "-f", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if strings.Contains(strings.ToLower(string(out)), "no such container") {
+			return nil
+		}
+		return fmt.Errorf("docker rm -f %s: %w\n%s", name, err, out)
 	}
 	return nil
 }

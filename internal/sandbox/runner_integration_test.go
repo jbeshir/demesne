@@ -5,7 +5,9 @@ package sandbox
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/jbeshir/demesne/internal/mcpproxy"
 	_ "github.com/jbeshir/demesne/internal/proxies/anthropic"
 	_ "github.com/jbeshir/demesne/internal/proxies/mcp"
+	"github.com/jbeshir/demesne/internal/sidecar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -182,6 +185,53 @@ func mustExec(t *testing.T, r *Runner, ctx context.Context, sandboxID SandboxID,
 	require.NoError(t, err, "Exec %q", cmd)
 	require.Equal(t, 0, res.ExitCode, "Exec %q stdout=%q", cmd, res.Stdout)
 	return res
+}
+
+// containerExists reports whether a container named name exists in any
+// state, via the same docker-compat CLI the sidecar package uses.
+func containerExists(t *testing.T, name string) bool {
+	t.Helper()
+	out, err := exec.Command("docker", "ps", "-a", "--filter", "name="+name, "--format", "{{.Names}}").Output()
+	require.NoError(t, err)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == name {
+			return true
+		}
+	}
+	return false
+}
+
+// egressSidecarExists reports whether OpenSandbox's egress sidecar for the
+// given sandbox still exists.
+func egressSidecarExists(t *testing.T, sandboxID string) bool {
+	t.Helper()
+	out, err := exec.Command("docker", "ps", "-a", "--filter",
+		"label="+sidecar.EgressSidecarLabel+"="+sandboxID, "--format", "{{.ID}}").Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(out)) != ""
+}
+
+// TestRunner_Integration_DestroyCleansUpSidecars guards the teardown leak:
+// Destroy must remove the demesne sidecar (which shares the egress
+// sidecar's namespaces) so OpenSandbox can then remove the egress sidecar.
+// Before the fix both leaked, accumulating until new creates failed.
+func TestRunner_Integration_DestroyCleansUpSidecars(t *testing.T) {
+	runner := integrationRunner(t)
+	ctx := context.Background()
+
+	created, err := runner.Create(ctx, CreateRequest{Image: "python", Egress: EgressNone})
+	require.NoError(t, err)
+	sid := string(created.SandboxID)
+	sidecarName := "demesne-sidecar-" + sid
+	require.True(t, containerExists(t, sidecarName), "demesne sidecar should run after create")
+
+	require.NoError(t, runner.Destroy(ctx, DestroyRequest{SandboxID: created.SandboxID}))
+
+	// Our sidecar is removed synchronously by Destroy.
+	assert.False(t, containerExists(t, sidecarName), "demesne sidecar leaked after destroy")
+	// With our dependent gone, OpenSandbox can remove the egress sidecar.
+	assert.Eventually(t, func() bool { return !egressSidecarExists(t, sid) },
+		20*time.Second, 500*time.Millisecond, "egress sidecar leaked after destroy")
 }
 
 func assertHostOutFiles(t *testing.T, outputDir string, names []string) {
