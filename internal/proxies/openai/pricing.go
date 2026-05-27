@@ -52,17 +52,15 @@ type OutputTokenDetails struct {
 
 const gpt55 = "gpt-5.5"
 
-// IMPORTANT: The pricing rates below are UNVERIFIED PLACEHOLDER ESTIMATES.
-// Real OpenAI pricing for the gpt-5.x model families must be confirmed at
-// https://openai.com/pricing before any cost accounting or budget
-// enforcement relies on these figures. The values here are indicative
-// only and are clearly labelled as guesses. Unknown models return 0 cost
-// so they will not break a run — they simply won't count toward any cost cap.
+// IMPORTANT: ChatGPT-OAuth billing is subscription-based, so the per-token
+// costs below are INDICATIVE ONLY and do NOT reflect what the user is
+// charged. They are useful for relative cost accounting between model
+// families but must not be used for budget enforcement or billing.
+// Unknown models return 0 cost so they will not break a run.
 //
 // modelPricingTable is ordered longest-prefix-first so LookupPricing
 // picks the most specific match without a secondary sort. "gpt-5.4-mini"
-// must appear before "gpt-5.4", and "gpt-5.3-codex-spark" before
-// "gpt-5.3-codex". Add new families here when they ship.
+// must appear before "gpt-5.4". Add new families here when they ship.
 var modelPricingTable = []pricingEntry{
 	// gpt-5.5 — placeholder estimate: $1.25/$10.00/$0.125 per MTok (in/out/cached)
 	{gpt55, Pricing{InputPerMTok: 1.25, OutputPerMTok: 10.0, CachedInputPerMTok: 0.125}},
@@ -70,8 +68,6 @@ var modelPricingTable = []pricingEntry{
 	{"gpt-5.4-mini", Pricing{InputPerMTok: 0.30, OutputPerMTok: 1.20, CachedInputPerMTok: 0.030}},
 	// gpt-5.4 — placeholder estimate
 	{"gpt-5.4", Pricing{InputPerMTok: 1.25, OutputPerMTok: 10.0, CachedInputPerMTok: 0.125}},
-	// gpt-5.3-codex-spark — placeholder estimate (lighter codex variant)
-	{"gpt-5.3-codex-spark", Pricing{InputPerMTok: 0.50, OutputPerMTok: 2.0, CachedInputPerMTok: 0.050}},
 	// gpt-5.3-codex — placeholder estimate
 	{"gpt-5.3-codex", Pricing{InputPerMTok: 1.25, OutputPerMTok: 10.0, CachedInputPerMTok: 0.125}},
 	// gpt-5.2 — placeholder estimate

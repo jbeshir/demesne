@@ -3,10 +3,12 @@ package sandbox
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
 	"github.com/jbeshir/demesne/internal/mcpproxy"
+	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
 )
 
 // Config holds the settings the sandbox runner needs. Most are
@@ -36,10 +38,12 @@ type Config struct {
 	// only when sandbox_agent is invoked.
 	ClaudeCodeOAuthToken string
 
-	// OpenAIAPIKey is the host OpenAI API key, injected into the Codex
-	// agent's sidecar proxy as the upstream credential. Required only when
-	// sandbox_agent/sandbox_research is invoked with agent="codex".
-	OpenAIAPIKey string
+	// CodexAuth is the ChatGPT OAuth token set read from the Codex auth file
+	// (default ~/.codex/auth.json, overridden by DEMESNE_CODEX_AUTH_FILE).
+	// It is passed to the per-sandbox sidecar proxy, which holds and refreshes
+	// it autonomously. Required only when sandbox_agent/sandbox_research is
+	// invoked with agent="codex"; an absent auth file leaves this zero.
+	CodexAuth proxyopenai.TokenSet
 
 	// MCPServers are the host MCP aggregator's exposed server names
 	// (sorted). Empty when no host MCP servers are available. Populated
@@ -57,6 +61,34 @@ type Config struct {
 	MCPToolCatalogue mcpproxy.ToolCatalogue
 }
 
+// loadCodexAuth resolves and parses the Codex auth file (DEMESNE_CODEX_AUTH_FILE
+// or ~/.codex/auth.json). An absent file returns a zero TokenSet without error;
+// a present but malformed file returns an error.
+func loadCodexAuth() (proxyopenai.TokenSet, error) {
+	authFile := os.Getenv("DEMESNE_CODEX_AUTH_FILE")
+	if authFile == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			authFile = home + "/.codex/auth.json"
+		}
+	}
+	if authFile == "" {
+		return proxyopenai.TokenSet{}, nil
+	}
+	data, err := os.ReadFile(authFile) //nolint:gosec // path from env or user home
+	if errors.Is(err, fs.ErrNotExist) {
+		// An absent file is not an error — Codex is simply unusable for this run.
+		return proxyopenai.TokenSet{}, nil
+	}
+	if err != nil {
+		return proxyopenai.TokenSet{}, fmt.Errorf("read Codex auth file %s: %w", authFile, err)
+	}
+	ts, parseErr := proxyopenai.ParseAuthJSON(data)
+	if parseErr != nil {
+		return proxyopenai.TokenSet{}, fmt.Errorf("parse Codex auth file %s: %w", authFile, parseErr)
+	}
+	return ts, nil
+}
+
 // LoadConfigFromEnv reads required configuration from environment variables.
 func LoadConfigFromEnv() (Config, error) {
 	cfg := Config{
@@ -65,8 +97,13 @@ func LoadConfigFromEnv() (Config, error) {
 		OpenSandboxProtocol:  envOr("OPEN_SANDBOX_PROTOCOL", "http"),
 		OpenSandboxAPIKey:    os.Getenv("OPEN_SANDBOX_API_KEY"),
 		ClaudeCodeOAuthToken: os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN"),
-		OpenAIAPIKey:         os.Getenv("DEMESNE_OPENAI_API_KEY"),
 	}
+
+	codexAuth, err := loadCodexAuth()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.CodexAuth = codexAuth
 
 	rawAllowed := os.Getenv("DEMESNE_ALLOWED_PATHS")
 	if rawAllowed == "" {

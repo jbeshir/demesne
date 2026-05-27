@@ -53,14 +53,14 @@ type AnthropicProxyConfig struct {
 
 // CodexProxyConfig carries the auth values the OpenAI/Codex credential
 // proxy needs. AgentToken is the per-sandbox fake token the proxy
-// validates on every inbound request; UpstreamKey is the real OpenAI API
-// key the proxy substitutes before forwarding. Both are passed via
-// docker run -e (kept off image layers / inspect-visible args).
-// ResultsHost is bind-mounted to SidecarResultsDir; the proxy writes its
-// usage.json there.
+// validates on every inbound request; Tokens is the ChatGPT OAuth token
+// set the proxy holds and refreshes autonomously before forwarding. Both
+// are passed via docker run -e (kept off image layers / inspect-visible
+// args). ResultsHost is bind-mounted to SidecarResultsDir; the proxy
+// writes its usage.json there.
 type CodexProxyConfig struct {
 	AgentToken  string
-	UpstreamKey string
+	Tokens      proxyopenai.TokenSet
 	ResultsHost string
 }
 
@@ -172,13 +172,19 @@ func proxyRunArgs(cfg ProxyConfig) ([]string, error) {
 	// they are mutually exclusive — only one of cfg.Anthropic/cfg.Codex is
 	// ever set for a given run.
 	if cfg.Codex != nil {
-		if cfg.Codex.UpstreamKey == "" || cfg.Codex.ResultsHost == "" {
-			return nil, errors.New("sidecar.Start: UpstreamKey and ResultsHost are required when Codex AgentToken is set")
+		if cfg.Codex.Tokens.AccessToken == "" || cfg.Codex.Tokens.RefreshToken == "" || cfg.Codex.ResultsHost == "" {
+			return nil, errors.New(
+				"sidecar.Start: Tokens (access+refresh) and ResultsHost are required when Codex AgentToken is set")
+		}
+		// Token set serialized to pass to the sidecar via env, same as the anthropic upstream token.
+		tokensJSON, err := json.Marshal(cfg.Codex.Tokens) //nolint:gosec // tokens passed to sidecar by design
+		if err != nil {
+			return nil, fmt.Errorf("sidecar.Start: marshal Codex tokens: %w", err)
 		}
 		args = append(args,
 			"-v", cfg.Codex.ResultsHost+":"+SidecarResultsDir,
 			"-e", proxyopenai.AuthTokenEnv+"="+cfg.Codex.AgentToken,
-			"-e", proxyopenai.UpstreamKeyEnv+"="+cfg.Codex.UpstreamKey,
+			"-e", proxyopenai.UpstreamTokensEnv+"="+string(tokensJSON),
 			"-e", proxyopenai.UsagePathEnv+"="+SidecarUsageFile,
 		)
 	}

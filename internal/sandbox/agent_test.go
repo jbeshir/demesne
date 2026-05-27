@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jbeshir/demesne/internal/agents"
+	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,9 +37,15 @@ func (s vendorStubAgent) ProxyVendor() agents.ProxyVendor                  { ret
 // and that the agent-facing token is the per-sandbox fake token (never the
 // real upstream credential). The unknown-vendor arm yields no proxy.
 func TestBuildProxyConfig(t *testing.T) {
+	codexAuth := proxyopenai.TokenSet{
+		AccessToken:  "access-x",
+		RefreshToken: "refresh-x",
+		IDToken:      "idtok",
+		AccountID:    "acct-x",
+	}
 	r := &Runner{cfg: Config{
 		ClaudeCodeOAuthToken: "claude-upstream",
-		OpenAIAPIKey:         "openai-upstream",
+		CodexAuth:            codexAuth,
 	}}
 	const fakeToken = "demesne-agent-fake" //nolint:gosec // test fixture, not a real credential
 	const results = "/host/results"
@@ -57,7 +64,7 @@ func TestBuildProxyConfig(t *testing.T) {
 		require.NotNil(t, cfg.Codex)
 		assert.Nil(t, cfg.Anthropic)
 		assert.Equal(t, fakeToken, cfg.Codex.AgentToken)
-		assert.Equal(t, "openai-upstream", cfg.Codex.UpstreamKey)
+		assert.Equal(t, codexAuth, cfg.Codex.Tokens)
 		assert.Equal(t, results, cfg.Codex.ResultsHost)
 	})
 

@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"os"
@@ -60,15 +61,7 @@ func run() error {
 	if anth != nil {
 		starters = append(starters, anth)
 	}
-	oai, err := buildCredentialProxy(credProxyEnv{
-		authEnv:     proxyopenai.AuthTokenEnv,
-		upstreamEnv: proxyopenai.UpstreamKeyEnv,
-		usageEnv:    proxyopenai.UsagePathEnv,
-		build: func(auth, upstream, usagePath string) starter {
-			return proxyopenai.NewProxyServer(
-				proxyopenai.BindAddr(), auth, upstream, proxyopenai.NewTracker(usagePath))
-		},
-	})
+	oai, err := buildCodexProxy()
 	if err != nil {
 		return err
 	}
@@ -118,10 +111,9 @@ func buildMCPProxy() (*proxymcp.Server, error) {
 // credProxyEnv names the env vars one credential proxy reads and how to
 // construct it. build receives the validated values and returns a ready
 // starter; it is called only when the auth token is present and the
-// upstream credential is set. Keeping the env-var names per-vendor (the
-// Anthropic upstream is an OAuth token, the OpenAI one an API key)
-// preserves each proxy's distinct contract while sharing the read →
-// validate → ensure-dir → construct boilerplate.
+// upstream credential is set. Used for the Anthropic proxy (upstream is
+// a static OAuth token); the Codex/OpenAI proxy uses buildCodexProxy
+// because its upstream is a JSON-encoded TokenSet, not a plain string.
 type credProxyEnv struct {
 	authEnv     string
 	upstreamEnv string
@@ -148,4 +140,32 @@ func buildCredentialProxy(c credProxyEnv) (starter, error) {
 		return nil, err
 	}
 	return c.build(auth, upstream, usagePath), nil
+}
+
+// buildCodexProxy wires the OpenAI/Codex credential proxy from its env vars.
+// Returns (nil, nil) when DEMESNE_OPENAI_AUTH_TOKEN is absent (not a Codex
+// agent run). When the auth token is present, UpstreamTokensEnv must also
+// be set and contain a valid JSON-encoded TokenSet.
+func buildCodexProxy() (starter, error) {
+	auth := os.Getenv(proxyopenai.AuthTokenEnv)
+	if auth == "" {
+		return nil, nil
+	}
+	tokensRaw := os.Getenv(proxyopenai.UpstreamTokensEnv)
+	if tokensRaw == "" {
+		return nil, errors.New(proxyopenai.UpstreamTokensEnv + " must be set when " + proxyopenai.AuthTokenEnv + " is")
+	}
+	var tokens proxyopenai.TokenSet
+	if err := json.Unmarshal([]byte(tokensRaw), &tokens); err != nil {
+		return nil, errors.New(proxyopenai.UpstreamTokensEnv + ": invalid JSON TokenSet: " + err.Error())
+	}
+	usagePath := os.Getenv(proxyopenai.UsagePathEnv)
+	if err := proxycommon.EnsureUsageDir(usagePath); err != nil {
+		return nil, err
+	}
+	return proxyopenai.NewProxyServer(
+		proxyopenai.BindAddr(), auth,
+		proxyopenai.NewCredential(tokens),
+		proxyopenai.NewTracker(usagePath),
+	), nil
 }
