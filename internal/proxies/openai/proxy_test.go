@@ -55,6 +55,7 @@ func TestProxyAllowedRequestRewritesHeaders(t *testing.T) {
 		accountID  string
 		originator string
 		version    string
+		userAgent  string
 		body       string
 		host       string
 	}
@@ -66,6 +67,7 @@ func TestProxyAllowedRequestRewritesHeaders(t *testing.T) {
 		got.accountID = r.Header.Get(headerAccountID)
 		got.originator = r.Header.Get(headerOriginator)
 		got.version = r.Header.Get(headerVersion)
+		got.userAgent = r.Header.Get(headerUserAgent)
 		got.host = r.Host
 		body, _ := io.ReadAll(r.Body)
 		got.body = string(body)
@@ -99,6 +101,7 @@ func TestProxyAllowedRequestRewritesHeaders(t *testing.T) {
 	assert.Equal(t, "test-account-id", got.accountID, "ChatGPT-Account-ID must be forwarded")
 	assert.Equal(t, originatorValue, got.originator)
 	assert.Equal(t, codexVersion, got.version)
+	assert.Equal(t, userAgentValue, got.userAgent)
 	assert.Equal(t, "hello body", got.body)
 	assert.True(t, strings.HasSuffix(got.host, upstreamHostPort(upstream.URL)))
 }
