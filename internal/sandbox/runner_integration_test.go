@@ -176,7 +176,7 @@ func TestRunner_Integration_PersistentLifecycle(t *testing.T) {
 	assert.Error(t, err, "Exec after Destroy succeeded; expected error")
 }
 
-func mustExec(t *testing.T, r *Runner, ctx context.Context, sandboxID, cmd string) ExecResult {
+func mustExec(t *testing.T, r *Runner, ctx context.Context, sandboxID SandboxID, cmd string) ExecResult {
 	t.Helper()
 	res, err := r.Exec(ctx, ExecRequest{SandboxID: sandboxID, Command: cmd})
 	require.NoError(t, err, "Exec %q", cmd)
