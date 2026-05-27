@@ -89,3 +89,5 @@ func (claudeCodeAgent) EnvVars(oauthToken string, model ModelName) map[string]st
 		envIsSandbox:  "1",
 	}
 }
+
+func (claudeCodeAgent) ProxyVendor() agents.ProxyVendor { return agents.ProxyAnthropic }
