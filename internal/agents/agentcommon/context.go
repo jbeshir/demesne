@@ -8,25 +8,16 @@ import (
 	"github.com/jbeshir/demesne/internal/egress"
 )
 
-// GenerateContext composes the context file (e.g. CLAUDE.md / AGENTS.md)
-// content the agent reads on startup.
-//
-// Layout: caller-supplied preamble (verbatim), then an auto-generated
-// "Environment" section, then optionally "Available host tools", then
-// "Task" with the prompt. The mode argument controls the wording of
-// the outbound-network sentence (one of "none", "package-managers",
-// "open"; empty is treated as "none"). When mode is egress.Open we also
-// add a long-running-research framing note so the model knows to flush
-// incremental notes to /out. mcpServers, when non-empty, are listed
-// under their native tool names so the model knows what host tools it
-// can call.
-func GenerateContext(p agents.ContextParams, egressDesc func(egress.Mode) string) string {
-	var b strings.Builder
-	if p.Preamble != "" {
-		b.WriteString(strings.TrimSpace(p.Preamble))
+// WritePreamble appends the caller-supplied preamble section; no-op when empty.
+func WritePreamble(b *strings.Builder, preamble string) {
+	if preamble != "" {
+		b.WriteString(strings.TrimSpace(preamble))
 		b.WriteString("\n\n")
 	}
+}
 
+// WriteEnvironment appends the full "## Environment" section with sandbox context.
+func WriteEnvironment(b *strings.Builder, p agents.ContextParams, egressSentence string) {
 	b.WriteString("## Environment\n\n")
 	b.WriteString("You are running inside a demesne-managed sandbox.\n\n")
 	b.WriteString("- `IS_SANDBOX=1` is set; long-running side effects and prompts for " +
@@ -50,7 +41,7 @@ func GenerateContext(p agents.ContextParams, egressDesc func(egress.Mode) string
 			if !in.IsDir && in.Size >= 0 {
 				size = fmt.Sprintf(" (%d bytes)", in.Size)
 			}
-			fmt.Fprintf(&b, "    - `/in/%s` — %s%s\n", in.Basename, kind, size)
+			fmt.Fprintf(b, "    - `/in/%s` — %s%s\n", in.Basename, kind, size)
 		}
 	} else {
 		b.WriteString("- No caller-supplied inputs were mounted under `/in/`.\n")
@@ -59,26 +50,17 @@ func GenerateContext(p agents.ContextParams, egressDesc func(egress.Mode) string
 		b.WriteString("- Completed sibling jobs' outputs are mounted read-only under " +
 			"`/in/previous-jobs/<name>` — read earlier siblings' results there.\n")
 	}
-	b.WriteString("- " + egressDesc(p.Egress) + "\n")
+	b.WriteString("- " + egressSentence + "\n")
 	if p.Egress == egress.Open {
 		b.WriteString("- **This is a long-running research task.** Flush " +
 			"partial findings to `/out` as you go so progress survives " +
 			"interruption.\n")
 	}
-
-	writeHostTools(&b, p.MCPServers)
-	writeOrchestration(&b)
-
-	b.WriteString("\n## Task\n\n")
-	b.WriteString(strings.TrimSpace(p.Prompt))
-	b.WriteString("\n")
-	return b.String()
 }
 
-// writeHostTools appends the "Available host tools" section listing
-// each server's allowlisted tools under their native names. No-op
-// when no MCP servers are wired in.
-func writeHostTools(b *strings.Builder, mcpServers []agents.MCPServerInfo) {
+// WriteHostTools appends the "Available host tools" section listing each server's tools.
+// No-op when no MCP servers are wired in.
+func WriteHostTools(b *strings.Builder, mcpServers []agents.MCPServerInfo) {
 	if len(mcpServers) == 0 {
 		return
 	}
@@ -97,10 +79,8 @@ func writeHostTools(b *strings.Builder, mcpServers []agents.MCPServerInfo) {
 	}
 }
 
-// writeOrchestration appends guidance for agents that spawn child
-// sandboxes via the demesne MCP server. Every agent run has that
-// server wired in, so this is always emitted.
-func writeOrchestration(b *strings.Builder) {
+// WriteOrchestration appends guidance for agents that spawn child sandboxes.
+func WriteOrchestration(b *strings.Builder) {
 	b.WriteString("\n## Orchestrating child agents\n\n")
 	b.WriteString("You can spawn child sandboxes via the `demesne` MCP server " +
 		"(`sandbox_agent`, `sandbox_research`, `sandbox_script`, and " +
@@ -129,4 +109,11 @@ func writeOrchestration(b *strings.Builder) {
 	b.WriteString("- **Plan and enforce the handoff.** Before implementing in phases, " +
 		"decide what each phase produces, where, and in what format — appropriate to " +
 		"your task — and follow that contract strictly across every phase.\n")
+}
+
+// WriteTask appends the "## Task" section with the caller-supplied prompt.
+func WriteTask(b *strings.Builder, prompt string) {
+	b.WriteString("\n## Task\n\n")
+	b.WriteString(strings.TrimSpace(prompt))
+	b.WriteString("\n")
 }
