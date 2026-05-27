@@ -6,18 +6,24 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/jbeshir/demesne/internal/proxies"
 	"github.com/jbeshir/demesne/internal/proxies/proxycommon"
 )
 
-// APIHost is the upstream OpenAI API hostname.
-const APIHost proxies.EgressHost = "api.openai.com"
+// ChatGPTHost is the upstream ChatGPT API hostname. The proxy connects
+// to it over proxies.BypassTransport() (SO_MARK egress bypass) rather
+// than listing it in the egress allowlist, so EgressHosts returns nil.
+const ChatGPTHost proxies.EgressHost = "chatgpt.com"
 
-// APIBase is the full upstream URL the proxy forwards to.
-const APIBase = "https://" + string(APIHost)
+// ChatGPTBase is the full upstream URL the proxy forwards to.
+const ChatGPTBase = "https://" + string(ChatGPTHost)
+
+// chatgptResponsesPath is the path on the ChatGPT backend that handles
+// the Codex Responses-wire-API POST. The incoming path /v1/responses is
+// rewritten to this before forwarding.
+const chatgptResponsesPath = "/backend-api/codex/responses"
 
 // listenPort is the loopback port the proxy binds inside the per-sandbox
 // sidecar. The sidecar's network namespace is isolated, so the port is
@@ -27,23 +33,24 @@ const listenPort = "8086"
 // listenAddr is the 127.0.0.1:<port> the proxy binds.
 const listenAddr = "127.0.0.1:" + listenPort
 
-// Name is the registered name for the OpenAI API proxy.
+// Name is the registered name for the OpenAI/Codex proxy.
 const Name = "openai"
 
-// Env-var names the sidecar passes through to the OpenAI proxy.
+// Env-var names the sidecar passes through to the OpenAI/Codex proxy.
 // Constants live next to the implementation so the contract is
 // documented in one place, but the *reads* happen in the sidecar's
 // main (see cmd/demesne-sidecar/main.go) — the proxy itself receives
 // its config as explicit arguments.
 const (
 	// AuthTokenEnv carries the per-sandbox agent-facing token. The
-	// agent receives the same value in its API key env var; the proxy
+	// agent receives the same value in its env_key env var; the proxy
 	// rejects any request whose Authorization header doesn't match.
 	AuthTokenEnv = "DEMESNE_OPENAI_AUTH_TOKEN" //nolint:gosec // env var name, not a credential
-	// UpstreamKeyEnv carries the real OpenAI API key. The proxy
-	// substitutes this for the agent token before forwarding to
-	// api.openai.com. The agent never sees this value.
-	UpstreamKeyEnv = "DEMESNE_OPENAI_UPSTREAM_KEY"
+	// UpstreamTokensEnv carries the ChatGPT OAuth token set as a
+	// JSON-encoded TokenSet. The proxy holds this set, refreshes it
+	// autonomously, and swaps in a fresh access token on each request.
+	// The agent never sees these values.
+	UpstreamTokensEnv = "DEMESNE_OPENAI_UPSTREAM_TOKENS" //nolint:gosec // env var name, not a credential
 	// UsagePathEnv is the host-bind-mounted file path the proxy
 	// rewrites with a usage snapshot after every request. Empty means
 	// "track in memory only" (used in tests).
@@ -51,32 +58,33 @@ const (
 )
 
 const (
-	headerAuthorization  = "Authorization"
-	bearerPrefix         = "Bearer "
-	pathResponses        = "/v1/responses"
-	pathResponsesCompact = "/v1/responses/compact"
+	headerAuthorization = "Authorization"
+	headerAccountID     = "ChatGPT-Account-ID"
+	headerOriginator    = "originator"
+	headerVersion       = "version"
+	headerUserAgent     = "User-Agent"
+
+	bearerPrefix  = "Bearer "
+	pathResponses = "/v1/responses"
+
+	originatorValue = "codex_cli_rs"
+	codexVersion    = "0.134.0"
+	userAgentValue  = "codex_cli_rs/0.134.0 (demesne)"
 )
 
 // allowedEndpoints is the explicit (method, path) allowlist the proxy
-// will forward. Everything else returns 403. Kept to the bare minimum
-// Codex needs for inference — POST to /v1/responses and /v1/responses/compact,
-// plus GET /v1/responses for WebSocket upgrades (the gating handler
-// enforces the Upgrade header for the GET case).
+// will forward. Only POST /v1/responses is permitted — the ChatGPT
+// Codex backend uses SSE over POST, not WebSockets.
 var allowedEndpoints = map[string]map[string]struct{}{
 	http.MethodPost: {
-		pathResponses:        {},
-		pathResponsesCompact: {},
-	},
-	// GET /v1/responses is only permitted as a WebSocket upgrade;
-	// the gating handler enforces the Connection and Upgrade headers.
-	http.MethodGet: {
 		pathResponses: {},
 	},
 }
 
 // ListenURL is what agent providers wire into the base_url config field.
-// It returns the scheme+host:port only — NO path suffix. The caller
-// (Codex provider config) appends /v1 before writing to config.toml.
+// It returns the scheme+host:port only — NO path suffix. The Codex
+// provider config appends /v1, giving base_url="http://127.0.0.1:8086/v1",
+// and the client POSTs to base_url+"/responses" = host:port/v1/responses.
 func ListenURL() string { return "http://" + listenAddr }
 
 // BindAddr is the 127.0.0.1:<port> the proxy binds inside the sidecar.
@@ -89,44 +97,47 @@ func init() {
 
 // registration is the discovery-only registry entry: it exposes Name
 // and EgressHosts so the sandbox runner can collect the proxy's egress
-// hosts (none, in this case — SO_MARK bypasses the egress filter).
-// Construction and serving happen in the sidecar's main via NewProxyServer.
+// hosts (none here — SO_MARK bypass handles reachability to chatgpt.com
+// and auth.openai.com without listing them in the egress allowlist).
 type registration struct{}
 
 func (registration) Name() string                      { return Name }
 func (registration) EgressHosts() []proxies.EgressHost { return nil }
 
-// ProxyServer is a hardened reverse proxy for api.openai.com.
-// It enforces an explicit endpoint allowlist, verifies that the caller
-// presents the per-sandbox agent token, and substitutes the real
-// upstream key before forwarding.
+// ProxyServer is a hardened reverse proxy for the ChatGPT Codex endpoint.
+// It enforces an explicit endpoint allowlist, verifies the per-sandbox
+// agent token, refreshes the OAuth credential as needed, and rewrites
+// the request to the real ChatGPT backend.
 type ProxyServer struct {
 	bindAddr string
 	server   *http.Server
 }
 
 // NewProxyServer constructs the production proxy: bound to bindAddr,
-// forwarding to APIBase over a transport that sets the egress-bypass
+// forwarding to ChatGPTBase over a transport that sets the egress-bypass
 // SO_MARK on every outbound socket. agentToken is the value the agent
-// must present; upstreamKey is what the proxy sends to OpenAI.
-// tracker accumulates usage (cost reported indicatively); pass nil to
-// disable tracking.
-func NewProxyServer(bindAddr, agentToken, upstreamKey string, tracker *Tracker) *ProxyServer {
-	return newProxyServer(bindAddr, APIBase, proxies.BypassTransport(), agentToken, upstreamKey, tracker)
+// must present; creds holds and autonomously refreshes the real OAuth
+// token set. tracker accumulates usage (indicative only — ChatGPT-OAuth
+// billing is subscription-based); pass nil to disable tracking.
+func NewProxyServer(bindAddr, agentToken string, creds *Credential, tracker *Tracker) *ProxyServer {
+	return newProxyServer(bindAddr, ChatGPTBase, proxies.BypassTransport(), agentToken, creds, tracker)
 }
 
 // newProxyServerTo is the test-only constructor: forwards to the given
-// upstream URL over http.DefaultTransport, so tests that exercise the
+// backend URL over http.DefaultTransport, so tests that exercise the
 // gating logic on a host without CAP_NET_ADMIN don't fail in
 // setsockopt(SO_MARK). Production callers must use NewProxyServer.
-func newProxyServerTo(upstreamURL, agentToken, upstreamKey string, tracker *Tracker) *ProxyServer { //nolint:unparam
-	return newProxyServer("127.0.0.1:0", upstreamURL, http.DefaultTransport, agentToken, upstreamKey, tracker)
+//
+//nolint:unparam // agentToken is fixed in tests but kept explicit for clarity
+func newProxyServerTo(backendURL, agentToken string, creds *Credential, tracker *Tracker) *ProxyServer {
+	return newProxyServer("127.0.0.1:0", backendURL, http.DefaultTransport, agentToken, creds, tracker)
 }
 
 func newProxyServer(
 	bindAddr, upstreamURL string,
 	transport http.RoundTripper,
-	agentToken, upstreamKey string,
+	agentToken string,
+	creds *Credential,
 	tracker *Tracker,
 ) *ProxyServer {
 	target, err := url.Parse(upstreamURL)
@@ -138,19 +149,19 @@ func newProxyServer(
 			r.SetURL(target)
 			// Make the upstream see the right virtual host.
 			r.Out.Host = target.Host
+			// Rewrite the path: the client sends /v1/responses but the
+			// ChatGPT backend endpoint is /backend-api/codex/responses.
+			r.Out.URL.Path = chatgptResponsesPath
 			if tracker != nil {
-				// Force identity so the usage parser sees raw SSE/JSON
-				// bytes — OpenAI otherwise responds with gzip and the
-				// parser would silently miss every usage block.
+				// Force identity so the usage parser sees raw SSE bytes —
+				// the backend may otherwise respond with gzip, silently
+				// breaking every usage parse.
 				r.Out.Header.Set("Accept-Encoding", "identity")
 			}
-			// Do NOT touch Connection or Upgrade headers: ReverseProxy
-			// handles WebSocket upgrades automatically when these are
-			// left intact.
 		},
 		Transport:     transport,
 		ErrorLog:      log.New(log.Writer(), "openai-proxy: ", log.LstdFlags),
-		FlushInterval: -1, // stream SSE events and WebSocket frames immediately
+		FlushInterval: -1, // stream SSE events immediately
 	}
 	if tracker != nil {
 		rp.ModifyResponse = func(resp *http.Response) error {
@@ -163,19 +174,19 @@ func newProxyServer(
 		bindAddr: bindAddr,
 		server: &http.Server{
 			Addr:              bindAddr,
-			Handler:           gatingHandler(rp, agentToken, upstreamKey),
+			Handler:           gatingHandler(rp, agentToken, creds),
 			ReadHeaderTimeout: 30 * time.Second,
 		},
 	}
 }
 
-// gatingHandler wraps the reverse proxy with the endpoint allowlist
-// and the agent-token check. Accepted requests have their Authorization
-// header rewritten to the real upstream key. GET /v1/responses is only
-// forwarded when it carries a valid WebSocket Upgrade.
-func gatingHandler(next http.Handler, agentToken, upstreamKey string) http.Handler {
+// gatingHandler wraps the reverse proxy with the endpoint allowlist, the
+// agent-token check, and OAuth token resolution. Only POST /v1/responses
+// is permitted. On a valid request the handler fetches a fresh access token
+// from creds (refreshing if needed) and stamps all outbound auth and routing
+// headers before forwarding to the reverse proxy.
+func gatingHandler(next http.Handler, agentToken string, creds *Credential) http.Handler {
 	expectedAuth := bearerPrefix + agentToken
-	upstreamAuth := bearerPrefix + upstreamKey
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths, ok := allowedEndpoints[r.Method]
 		if !ok {
@@ -186,21 +197,22 @@ func gatingHandler(next http.Handler, agentToken, upstreamKey string) http.Handl
 			proxycommon.Deny(w, r, http.StatusForbidden, "path not allowed", "openai proxy")
 			return
 		}
-		// GET /v1/responses is only permitted as a WebSocket upgrade.
-		if r.Method == http.MethodGet {
-			upgradeHdr := r.Header.Get("Upgrade")
-			connHdr := r.Header.Get("Connection")
-			if !strings.EqualFold(upgradeHdr, "websocket") ||
-				!strings.Contains(strings.ToLower(connHdr), "upgrade") {
-				proxycommon.Deny(w, r, http.StatusForbidden, "GET only permitted as WebSocket upgrade", "openai proxy")
-				return
-			}
-		}
 		if r.Header.Get(headerAuthorization) != expectedAuth {
 			proxycommon.Deny(w, r, http.StatusUnauthorized, "agent token mismatch", "openai proxy")
 			return
 		}
-		r.Header.Set(headerAuthorization, upstreamAuth)
+		tok, err := creds.AccessToken(r.Context())
+		if err != nil {
+			proxycommon.Deny(w, r, http.StatusBadGateway, "upstream auth refresh failed", "openai proxy")
+			return
+		}
+		r.Header.Set(headerAuthorization, bearerPrefix+tok)
+		if id := creds.AccountID(); id != "" {
+			r.Header.Set(headerAccountID, id)
+		}
+		r.Header.Set(headerOriginator, originatorValue)
+		r.Header.Set(headerVersion, codexVersion)
+		r.Header.Set(headerUserAgent, userAgentValue)
 		next.ServeHTTP(w, r)
 	})
 }

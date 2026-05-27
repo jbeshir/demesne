@@ -27,18 +27,6 @@ func TestLookupPricing_MiniBeforeBase(t *testing.T) {
 	assert.InDelta(t, 1.25, float64(baseP.InputPerMTok), 1e-9)
 }
 
-func TestLookupPricing_CodexSparkBeforeCodex(t *testing.T) {
-	// gpt-5.3-codex-spark must match the spark entry, not the shorter gpt-5.3-codex.
-	sparkP, ok := LookupPricing("gpt-5.3-codex-spark")
-	require.True(t, ok)
-	codexP, ok2 := LookupPricing("gpt-5.3-codex-20260101")
-	require.True(t, ok2)
-	assert.NotEqual(t, sparkP.InputPerMTok, codexP.InputPerMTok,
-		"gpt-5.3-codex-spark must resolve to the spark entry, not the codex entry")
-	assert.InDelta(t, 0.50, float64(sparkP.InputPerMTok), 1e-9)
-	assert.InDelta(t, 1.25, float64(codexP.InputPerMTok), 1e-9)
-}
-
 func TestLookupPricing_Unknown(t *testing.T) {
 	_, ok := LookupPricing("claude-sonnet-4-6")
 	assert.False(t, ok)

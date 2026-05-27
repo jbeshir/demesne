@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,29 +14,58 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	testAgentToken  = "test-agent-token"
-	testUpstreamKey = "test-upstream-key"
-)
+const testAgentToken = "test-agent-token"
 
-// TestProxyAllowedRequestSwapsToken confirms that an allowed
-// (method, path) pair authenticated with the agent token is forwarded
-// upstream with the real upstream key and the Host rewritten.
-func TestProxyAllowedRequestSwapsToken(t *testing.T) {
+// testCreds returns a Credential with a fresh token set wired to a
+// non-existent token endpoint. Any accidental refresh will fail fast
+// rather than hang. Use expiredCredsWithEndpoint to exercise refresh.
+func testCreds(accessToken string) *Credential {
+	ts := TokenSet{
+		AccessToken:  accessToken,
+		RefreshToken: "test-refresh",
+		IDToken:      makeJWT(time.Now().Add(2 * time.Hour).Unix()),
+		AccountID:    "test-account-id",
+		LastRefresh:  time.Now(),
+	}
+	return newCredential(ts, "http://127.0.0.1:1/token", http.DefaultClient)
+}
+
+// expiredCredsWithEndpoint returns a Credential with an expired id_token
+// and the given token endpoint URL.
+func expiredCredsWithEndpoint(tokenEndpointURL string) *Credential {
+	ts := TokenSet{
+		AccessToken:  "access-token-old",
+		RefreshToken: "test-refresh-old",
+		IDToken:      makeJWT(time.Now().Add(-1 * time.Hour).Unix()),
+		AccountID:    "test-account-id",
+		LastRefresh:  time.Now(),
+	}
+	return newCredential(ts, tokenEndpointURL, http.DefaultClient)
+}
+
+// TestProxyAllowedRequestRewritesHeaders confirms that a valid POST
+// /v1/responses is forwarded with the rewritten backend path,
+// Authorization swapped to the real OAuth token, and routing headers set.
+func TestProxyAllowedRequestRewritesHeaders(t *testing.T) {
+	const realToken = "real-access-token"
 	var got struct {
-		path        string
-		method      string
-		authHeader  string
-		body        string
-		host        string
-		gotAuthSeen bool
+		path       string
+		method     string
+		authHeader string
+		accountID  string
+		originator string
+		version    string
+		body       string
+		host       string
 	}
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got.path = r.URL.Path
 		got.method = r.Method
 		got.authHeader = r.Header.Get(headerAuthorization)
-		_, got.gotAuthSeen = r.Header[headerAuthorization]
+		got.accountID = r.Header.Get(headerAccountID)
+		got.originator = r.Header.Get(headerOriginator)
+		got.version = r.Header.Get(headerVersion)
 		got.host = r.Host
 		body, _ := io.ReadAll(r.Body)
 		got.body = string(body)
@@ -44,7 +74,8 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamKey, nil)
+	creds := testCreds(realToken)
+	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -62,33 +93,19 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	respBody, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, "upstream response", string(respBody))
 
-	assert.Equal(t, pathResponses, got.path)
+	assert.Equal(t, chatgptResponsesPath, got.path, "path must be rewritten to the ChatGPT backend path")
 	assert.Equal(t, http.MethodPost, got.method)
-	assert.Equal(t, bearerPrefix+testUpstreamKey, got.authHeader, "agent token must be swapped for upstream key")
+	assert.Equal(t, bearerPrefix+realToken, got.authHeader, "agent token must be replaced with real OAuth token")
+	assert.Equal(t, "test-account-id", got.accountID, "ChatGPT-Account-ID must be forwarded")
+	assert.Equal(t, originatorValue, got.originator)
+	assert.Equal(t, codexVersion, got.version)
 	assert.Equal(t, "hello body", got.body)
 	assert.True(t, strings.HasSuffix(got.host, upstreamHostPort(upstream.URL)))
 }
 
-// TestProxyAllowsCompact confirms the second whitelisted endpoint
-// (POST /v1/responses/compact) is also forwarded.
-func TestProxyAllowsCompact(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamKey, nil)
-	tsrv := httptest.NewServer(p.server.Handler)
-	defer tsrv.Close()
-
-	req := mustRequest(t, http.MethodPost, tsrv.URL+pathResponsesCompact)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-}
-
 // TestProxyDeniesUnknownPath confirms paths outside the allowlist
-// return 403 without hitting the upstream.
+// return 403 without hitting the upstream. This includes /v1/responses/compact
+// which was removed from the allowlist.
 func TestProxyDeniesUnknownPath(t *testing.T) {
 	upstreamHit := false
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -96,11 +113,16 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamKey, nil)
+
+	creds := testCreds("any-token")
+	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
-	for _, path := range []string{"/v1/chat/completions", "/v1/models", "/admin/keys", "/"} {
+	for _, path := range []string{
+		"/v1/chat/completions", "/v1/models", "/admin/keys", "/",
+		"/v1/responses/compact",
+	} {
 		req := mustRequest(t, http.MethodPost, tsrv.URL+path)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
@@ -110,8 +132,8 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 	assert.False(t, upstreamHit, "denied requests must not reach upstream")
 }
 
-// TestProxyDeniesUnknownMethod confirms that non-POST, non-WS-GET
-// methods to even whitelisted paths return 403.
+// TestProxyDeniesUnknownMethod confirms non-POST methods, including GET
+// (WebSocket upgrades no longer permitted), return 403.
 func TestProxyDeniesUnknownMethod(t *testing.T) {
 	upstreamHit := false
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -119,11 +141,13 @@ func TestProxyDeniesUnknownMethod(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamKey, nil)
+
+	creds := testCreds("any-token")
+	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
-	for _, method := range []string{http.MethodPut, http.MethodDelete, http.MethodPatch} {
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
 		req := mustRequest(t, method, tsrv.URL+pathResponses)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
@@ -131,59 +155,6 @@ func TestProxyDeniesUnknownMethod(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode, "method %s", method)
 	}
 	assert.False(t, upstreamHit)
-}
-
-// TestProxyDeniesPlainGet confirms a plain GET /v1/responses without
-// WebSocket Upgrade headers returns 403.
-func TestProxyDeniesPlainGet(t *testing.T) {
-	upstreamHit := false
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		upstreamHit = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamKey, nil)
-	tsrv := httptest.NewServer(p.server.Handler)
-	defer tsrv.Close()
-
-	req := mustRequest(t, http.MethodGet, tsrv.URL+pathResponses)
-	// No Upgrade or Connection headers.
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	_ = resp.Body.Close()
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "plain GET must be denied")
-	assert.False(t, upstreamHit)
-}
-
-// TestProxyAllowsWebSocketUpgrade confirms that a GET /v1/responses
-// carrying Connection: Upgrade and Upgrade: websocket headers passes the
-// gate and reaches the upstream. A full WebSocket handshake is not
-// exercised here — we only assert the gate does not reject the request.
-func TestProxyAllowsWebSocketUpgrade(t *testing.T) {
-	upstreamHit := false
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		upstreamHit = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamKey, nil)
-	tsrv := httptest.NewServer(p.server.Handler)
-	defer tsrv.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tsrv.URL+pathResponses, nil)
-	require.NoError(t, err)
-	req.Header.Set(headerAuthorization, bearerPrefix+testAgentToken)
-	req.Header.Set("Connection", "Upgrade")
-	req.Header.Set("Upgrade", "websocket")
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	assert.NotEqual(t, http.StatusForbidden, resp.StatusCode, "WebSocket upgrade GET must not be denied")
-	assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode)
-	assert.True(t, upstreamHit, "gate must forward the upgrade request to upstream")
 }
 
 // TestProxyDeniesWrongToken confirms a request with a non-matching
@@ -196,7 +167,9 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamKey, nil)
+
+	creds := testCreds("real-access-token")
+	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -206,7 +179,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 	}{
 		{name: "missing", header: ""},
 		{name: "wrong token", header: "Bearer not-the-token"},
-		{name: "real upstream key leaked back", header: bearerPrefix + testUpstreamKey},
+		{name: "real access token leaked back", header: bearerPrefix + "real-access-token"},
 		{name: "wrong scheme", header: "Basic " + testAgentToken},
 	}
 	for _, tc := range cases {
@@ -228,9 +201,74 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 	assert.False(t, upstreamHit)
 }
 
+// TestProxyRefreshesExpiredToken verifies that when the Credential's
+// id_token is expired at request time, the proxy refreshes first and
+// the backend receives the newly-obtained access token.
+func TestProxyRefreshesExpiredToken(t *testing.T) {
+	const refreshedAccess = "access-token-after-refresh"
+	tokenEndpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		newID := makeJWT(time.Now().Add(2 * time.Hour).Unix())
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"access_token": refreshedAccess,
+			"id_token":     newID,
+		})
+	}))
+	defer tokenEndpoint.Close()
+
+	var gotAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get(headerAuthorization)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	creds := expiredCredsWithEndpoint(tokenEndpoint.URL)
+	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
+	tsrv := httptest.NewServer(p.server.Handler)
+	defer tsrv.Close()
+
+	req := mustRequest(t, http.MethodPost, tsrv.URL+pathResponses)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, bearerPrefix+refreshedAccess, gotAuth, "backend must see the refreshed access token")
+}
+
+// TestProxyOmitsAccountIDWhenEmpty confirms ChatGPT-Account-ID is not
+// sent when the credential has no account ID.
+func TestProxyOmitsAccountIDWhenEmpty(t *testing.T) {
+	accountIDSeen := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountIDSeen = r.Header.Get(headerAccountID) != ""
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	ts := TokenSet{
+		AccessToken:  "tok",
+		RefreshToken: "ref",
+		IDToken:      makeJWT(time.Now().Add(2 * time.Hour).Unix()),
+		AccountID:    "",
+		LastRefresh:  time.Now(),
+	}
+	creds := newCredential(ts, "http://127.0.0.1:1/token", http.DefaultClient)
+	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
+	tsrv := httptest.NewServer(p.server.Handler)
+	defer tsrv.Close()
+
+	req := mustRequest(t, http.MethodPost, tsrv.URL+pathResponses)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.False(t, accountIDSeen, "ChatGPT-Account-ID must not be sent when account ID is empty")
+}
+
 // TestProxyShutdown confirms Start returns cleanly when its context is cancelled.
 func TestProxyShutdown(t *testing.T) {
-	p := newProxyServerTo("http://127.0.0.1:1", testAgentToken, testUpstreamKey, nil)
+	creds := testCreds("tok")
+	p := newProxyServerTo("http://127.0.0.1:1", testAgentToken, creds, nil)
 
 	startCtx, startCancel := context.WithCancel(context.Background())
 	defer startCancel()
@@ -258,7 +296,8 @@ func TestProxyTracksUsageFromSSE(t *testing.T) {
 	defer upstream.Close()
 
 	tracker := NewTracker("")
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamKey, tracker)
+	creds := testCreds("tok")
+	p := newProxyServerTo(upstream.URL, testAgentToken, creds, tracker)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -271,16 +310,15 @@ func TestProxyTracksUsageFromSSE(t *testing.T) {
 	assert.Contains(t, string(body), "response.completed", "body must pass through to caller")
 
 	snap := tracker.snapshot()
-	// gpt-5.5 placeholder: 200k uncached input @ $1.25/MTok + 1M cached @ $0.125/MTok + 345k output @ $10/MTok
-	// = 0.00025 + 0.000125 + 0.00345 = $0.003825 (approximate; just assert non-zero)
 	assert.Greater(t, float64(snap.CostUSD), 0.0, "cost must be recorded after SSE stream")
 }
 
-func mustRequest(t *testing.T, method, url string) *http.Request {
+// mustRequest builds a POST request with the agent token and a 5s timeout.
+func mustRequest(t *testing.T, method, rawURL string) *http.Request {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
-	req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader("{}"))
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, strings.NewReader("{}"))
 	require.NoError(t, err)
 	req.Header.Set(headerAuthorization, bearerPrefix+testAgentToken)
 	return req

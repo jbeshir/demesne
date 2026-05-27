@@ -253,7 +253,7 @@ func (r *Runner) buildProxyConfig(agent agents.Agent, agentToken, resultsHost st
 	case agents.ProxyOpenAI:
 		return sidecar.ProxyConfig{Codex: &sidecar.CodexProxyConfig{
 			AgentToken:  agentToken,
-			UpstreamKey: r.cfg.OpenAIAPIKey,
+			Tokens:      r.cfg.CodexAuth,
 			ResultsHost: resultsHost,
 		}}
 	default:
@@ -310,6 +310,29 @@ func (r *Runner) startGoproxySidecar(ctx context.Context, sandboxID string) (*si
 	return sidecar.Start(ctx, sandboxID, img, sidecar.ProxyConfig{})
 }
 
+// checkAgentCredentials verifies that the runner config contains the
+// credentials required for the agent's proxy vendor. It is extracted from
+// prepareAgent to keep that function's cyclomatic complexity below the limit.
+func (r *Runner) checkAgentCredentials(agent agents.Agent, tool string) error {
+	switch agent.ProxyVendor() {
+	case agents.ProxyAnthropic:
+		if r.cfg.ClaudeCodeOAuthToken == "" {
+			return errors.New(
+				"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for " + tool +
+					" (run `claude setup-token` to obtain one)",
+			)
+		}
+	case agents.ProxyOpenAI:
+		if r.cfg.CodexAuth.AccessToken == "" || r.cfg.CodexAuth.RefreshToken == "" {
+			return errors.New(
+				"DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) with a valid ChatGPT OAuth token set is required for " +
+					tool + " when agent=\"codex\"",
+			)
+		}
+	}
+	return nil
+}
+
 // prepareAgent validates the request, looks up the provider, resolves
 // the model, describes inputs, and ensures the provider's image is
 // built. No sandbox-runtime calls happen here.
@@ -321,20 +344,8 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 	if err != nil {
 		return agentPrep{}, err
 	}
-	switch agent.ProxyVendor() {
-	case agents.ProxyAnthropic:
-		if r.cfg.ClaudeCodeOAuthToken == "" {
-			return agentPrep{}, errors.New(
-				"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for " + spec.tool +
-					" (run `claude setup-token` to obtain one)",
-			)
-		}
-	case agents.ProxyOpenAI:
-		if r.cfg.OpenAIAPIKey == "" {
-			return agentPrep{}, errors.New(
-				"DEMESNE_OPENAI_API_KEY is required for " + spec.tool + " when agent=\"codex\"",
-			)
-		}
+	if err := r.checkAgentCredentials(agent, spec.tool); err != nil {
+		return agentPrep{}, err
 	}
 	model, err := agent.ResolveModel(spec.model)
 	if err != nil {
