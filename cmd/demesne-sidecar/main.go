@@ -21,6 +21,7 @@ import (
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
 	proxygo "github.com/jbeshir/demesne/internal/proxies/goproxy"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
+	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
 )
 
 func main() {
@@ -49,6 +50,13 @@ func run() error {
 	}
 	if anth != nil {
 		starters = append(starters, anth)
+	}
+	oai, err := buildOpenAIProxy()
+	if err != nil {
+		return err
+	}
+	if oai != nil {
+		starters = append(starters, oai)
 	}
 	mcpSrv, err := buildMCPProxy()
 	if err != nil {
@@ -88,6 +96,26 @@ func buildMCPProxy() (*proxymcp.Server, error) {
 		return nil, err
 	}
 	return proxymcp.NewServer(os.Getenv(proxymcp.SocketPathEnv), bindings), nil
+}
+
+// buildOpenAIProxy wires the OpenAI/Codex proxy from its env vars.
+// Returns nil when the auth token is absent (not a Codex agent run);
+// when present, the upstream key is required too.
+func buildOpenAIProxy() (*proxyopenai.ProxyServer, error) {
+	auth := os.Getenv(proxyopenai.AuthTokenEnv)
+	if auth == "" {
+		return nil, nil
+	}
+	upstream := os.Getenv(proxyopenai.UpstreamKeyEnv)
+	if upstream == "" {
+		return nil, errors.New(proxyopenai.UpstreamKeyEnv + " must be set when " + proxyopenai.AuthTokenEnv + " is")
+	}
+	usagePath := os.Getenv(proxyopenai.UsagePathEnv)
+	if err := proxyopenai.EnsureUsageDir(usagePath); err != nil {
+		return nil, err
+	}
+	tracker := proxyopenai.NewTracker(usagePath)
+	return proxyopenai.NewProxyServer(proxyopenai.BindAddr(), auth, upstream, tracker), nil
 }
 
 // buildAnthropicProxy wires the Anthropic proxy from its env vars.

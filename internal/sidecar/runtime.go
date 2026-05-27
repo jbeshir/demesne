@@ -11,6 +11,7 @@ import (
 
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
+	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
 )
 
 // SidecarResultsDir is the path the proxy sees inside the sidecar
@@ -50,6 +51,19 @@ type AnthropicProxyConfig struct {
 	ResultsHost   string
 }
 
+// CodexProxyConfig carries the auth values the OpenAI/Codex credential
+// proxy needs. AgentToken is the per-sandbox fake token the proxy
+// validates on every inbound request; UpstreamKey is the real OpenAI API
+// key the proxy substitutes before forwarding. Both are passed via
+// docker run -e (kept off image layers / inspect-visible args).
+// ResultsHost is bind-mounted to SidecarResultsDir; the proxy writes its
+// usage.json there.
+type CodexProxyConfig struct {
+	AgentToken  string
+	UpstreamKey string
+	ResultsHost string
+}
+
 // MCPTunnelConfig configures the sidecar's MCP tunnel: one loopback
 // listener per upstream, all forwarding over the bind-mounted aggregator
 // unix socket (SocketHost). A unix socket rather than a host TCP hop is
@@ -61,11 +75,14 @@ type MCPTunnelConfig struct {
 }
 
 // ProxyConfig carries the per-sandbox proxy configuration for sidecar
-// startup. Anthropic == nil means the Anthropic proxy is off (not an
-// agent run). MCP == nil means the MCP tunnel is off.
+// startup. Exactly one of Anthropic or Codex is set for an agent run;
+// Anthropic == nil means the Anthropic proxy is off; Codex == nil means
+// the OpenAI/Codex proxy is off. MCP == nil means the MCP tunnel is off.
 type ProxyConfig struct {
 	Anthropic *AnthropicProxyConfig
-	MCP       *MCPTunnelConfig
+	// Codex == nil means the OpenAI/Codex proxy is off.
+	Codex *CodexProxyConfig
+	MCP   *MCPTunnelConfig
 }
 
 // Handle is a running demesne sidecar container attached to an
@@ -84,12 +101,6 @@ type Handle struct {
 // OpenSandbox-issued UUID. cfg carries the per-sandbox auth values
 // and host results path the agent-vendor proxy needs.
 func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*Handle, error) {
-	// The Go module proxy runs in every sidecar with no config. The
-	// Anthropic proxy is agent-mode only: its three values arrive
-	// together or not at all.
-	if cfg.Anthropic != nil && (cfg.Anthropic.UpstreamToken == "" || cfg.Anthropic.ResultsHost == "") {
-		return nil, errors.New("sidecar.Start: UpstreamToken and ResultsHost are required when AgentToken is set")
-	}
 	egressID, err := findEgressSidecar(ctx, sandboxID)
 	if err != nil {
 		return nil, err
@@ -110,14 +121,65 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 		// without their upstream hosts being in the allowlist.
 		"--cap-add", "NET_ADMIN",
 	}
-	// Anthropic proxy env + results mount only for agent runs; the
-	// sidecar binary skips that proxy when these are absent.
+	proxyArgs, err := proxyRunArgs(cfg)
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, proxyArgs...)
+	args = append(args, imageRef)
+	//nolint:gosec // args composed from validated input
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	// Output (stdout only) — CombinedOutput would mix in Podman's
+	// "Emulate Docker CLI..." stderr banner, corrupting the container
+	// ID and silently breaking later docker rm -f calls.
+	out, err := cmd.Output()
+	if err != nil {
+		var stderr []byte
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			stderr = ee.Stderr
+		}
+		return nil, fmt.Errorf("docker run demesne sidecar: %w\nstdout: %s\nstderr: %s", err, out, stderr)
+	}
+	containerID := strings.TrimSpace(string(out))
+	return &Handle{ContainerID: containerID}, nil
+}
+
+// proxyRunArgs builds the docker run -v/-e arguments for the per-sandbox
+// proxies enabled in cfg: the agent-vendor credential proxy (Anthropic OR
+// Codex — never both, since they share the SidecarResultsDir mount) and
+// the optional MCP tunnel. The Go module proxy needs no config, so it's
+// not represented here. Validation mirrors each proxy's "all-or-nothing"
+// contract.
+func proxyRunArgs(cfg ProxyConfig) ([]string, error) {
+	var args []string
+
+	// Anthropic proxy env + results mount only for claude-code agent runs;
+	// the sidecar binary skips that proxy when these are absent.
 	if cfg.Anthropic != nil {
+		if cfg.Anthropic.UpstreamToken == "" || cfg.Anthropic.ResultsHost == "" {
+			return nil, errors.New("sidecar.Start: UpstreamToken and ResultsHost are required when AgentToken is set")
+		}
 		args = append(args,
 			"-v", cfg.Anthropic.ResultsHost+":"+SidecarResultsDir,
 			"-e", proxyanthropic.AuthTokenEnv+"="+cfg.Anthropic.AgentToken,
 			"-e", proxyanthropic.UpstreamTokenEnv+"="+cfg.Anthropic.UpstreamToken,
 			"-e", proxyanthropic.UsagePathEnv+"="+SidecarUsageFile,
+		)
+	}
+	// OpenAI/Codex proxy env + results mount only for Codex agent runs.
+	// Anthropic and Codex use the same SidecarResultsDir mount point, so
+	// they are mutually exclusive — only one of cfg.Anthropic/cfg.Codex is
+	// ever set for a given run.
+	if cfg.Codex != nil {
+		if cfg.Codex.UpstreamKey == "" || cfg.Codex.ResultsHost == "" {
+			return nil, errors.New("sidecar.Start: UpstreamKey and ResultsHost are required when Codex AgentToken is set")
+		}
+		args = append(args,
+			"-v", cfg.Codex.ResultsHost+":"+SidecarResultsDir,
+			"-e", proxyopenai.AuthTokenEnv+"="+cfg.Codex.AgentToken,
+			"-e", proxyopenai.UpstreamKeyEnv+"="+cfg.Codex.UpstreamKey,
+			"-e", proxyopenai.UsagePathEnv+"="+SidecarUsageFile,
 		)
 	}
 	// The MCP tunnel is optional. It reaches the host aggregator over a
@@ -141,23 +203,7 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 			"-e", proxymcp.BindingsEnv+"="+string(raw),
 		)
 	}
-	args = append(args, imageRef)
-	//nolint:gosec // args composed from validated input
-	cmd := exec.CommandContext(ctx, dockerCmd, args...)
-	// Output (stdout only) — CombinedOutput would mix in Podman's
-	// "Emulate Docker CLI..." stderr banner, corrupting the container
-	// ID and silently breaking later docker rm -f calls.
-	out, err := cmd.Output()
-	if err != nil {
-		var stderr []byte
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			stderr = ee.Stderr
-		}
-		return nil, fmt.Errorf("docker run demesne sidecar: %w\nstdout: %s\nstderr: %s", err, out, stderr)
-	}
-	containerID := strings.TrimSpace(string(out))
-	return &Handle{ContainerID: containerID}, nil
+	return args, nil
 }
 
 // containerName is the deterministic name of a sandbox's demesne sidecar.
