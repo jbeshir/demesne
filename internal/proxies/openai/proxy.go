@@ -2,9 +2,7 @@ package openai
 
 import (
 	"context"
-	"errors"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -12,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jbeshir/demesne/internal/proxies"
+	"github.com/jbeshir/demesne/internal/proxies/proxycommon"
 )
 
 // APIHost is the upstream OpenAI API hostname.
@@ -180,11 +179,11 @@ func gatingHandler(next http.Handler, agentToken, upstreamKey string) http.Handl
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths, ok := allowedEndpoints[r.Method]
 		if !ok {
-			deny(w, r, http.StatusForbidden, "method not allowed")
+			proxycommon.Deny(w, r, http.StatusForbidden, "method not allowed", "openai proxy")
 			return
 		}
 		if _, ok := paths[r.URL.Path]; !ok {
-			deny(w, r, http.StatusForbidden, "path not allowed")
+			proxycommon.Deny(w, r, http.StatusForbidden, "path not allowed", "openai proxy")
 			return
 		}
 		// GET /v1/responses is only permitted as a WebSocket upgrade.
@@ -193,12 +192,12 @@ func gatingHandler(next http.Handler, agentToken, upstreamKey string) http.Handl
 			connHdr := r.Header.Get("Connection")
 			if !strings.EqualFold(upgradeHdr, "websocket") ||
 				!strings.Contains(strings.ToLower(connHdr), "upgrade") {
-				deny(w, r, http.StatusForbidden, "GET only permitted as WebSocket upgrade")
+				proxycommon.Deny(w, r, http.StatusForbidden, "GET only permitted as WebSocket upgrade", "openai proxy")
 				return
 			}
 		}
 		if r.Header.Get(headerAuthorization) != expectedAuth {
-			deny(w, r, http.StatusUnauthorized, "agent token mismatch")
+			proxycommon.Deny(w, r, http.StatusUnauthorized, "agent token mismatch", "openai proxy")
 			return
 		}
 		r.Header.Set(headerAuthorization, upstreamAuth)
@@ -206,39 +205,9 @@ func gatingHandler(next http.Handler, agentToken, upstreamKey string) http.Handl
 	})
 }
 
-func deny(w http.ResponseWriter, r *http.Request, code int, reason string) {
-	// %q escapes control chars in the (attacker-controlled) method
-	// and path so a request can't inject fake log lines.
-	//nolint:gosec // G706: values are %q-escaped, defeating log injection
-	log.Printf("openai proxy: deny method=%q path=%q reason=%s code=%d",
-		r.Method, r.URL.Path, reason, code)
-	http.Error(w, reason, code)
-}
-
 // Start binds and serves until ctx is cancelled, then gracefully
 // shuts the server down. Returns nil on clean shutdown; other errors
 // are surfaced.
 func (p *ProxyServer) Start(ctx context.Context) error {
-	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, "tcp", p.bindAddr)
-	if err != nil {
-		return err
-	}
-	log.Printf("openai proxy: listening on %s", ln.Addr())
-
-	go func() {
-		<-ctx.Done()
-		// WithoutCancel preserves values/deadlines from ctx but drops
-		// the cancellation — Shutdown needs a live ctx to drain.
-		shutCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if err := p.server.Shutdown(shutCtx); err != nil {
-			log.Printf("openai proxy: shutdown error: %v", err)
-		}
-	}()
-
-	if err := p.server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
+	return proxycommon.Serve(ctx, p.bindAddr, p.server, "openai proxy")
 }
