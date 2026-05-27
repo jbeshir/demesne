@@ -99,7 +99,7 @@ func TestParseAuthJSON_MalformedJSON(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestCredentialRefreshesExpiredToken verifies that AccessToken triggers a
+// TestCredentialRefreshesExpiredToken verifies that EnsureFresh triggers a
 // refresh when the id_token is expired, updates the access and refresh
 // tokens, and sets LastRefresh.
 func TestCredentialRefreshesExpiredToken(t *testing.T) {
@@ -127,15 +127,16 @@ func TestCredentialRefreshesExpiredToken(t *testing.T) {
 	cred := newCredential(ts, tokenEndpoint.URL, http.DefaultClient)
 
 	before := time.Now()
-	tok, err := cred.AccessToken(context.Background())
+	didRefresh, err := cred.EnsureFresh(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, newAccess, tok, "must return the refreshed access token")
+	assert.True(t, didRefresh, "EnsureFresh must report a refresh occurred")
+	assert.Equal(t, newAccess, cred.Tokens().AccessToken, "access token must be updated")
 	assert.Equal(t, newRefresh, cred.tokens.RefreshToken, "refresh token must be rotated")
 	assert.False(t, cred.tokens.LastRefresh.IsZero())
 	assert.True(t, cred.tokens.LastRefresh.After(before) || cred.tokens.LastRefresh.Equal(before))
 }
 
-// TestCredentialNoRefreshWhenFresh verifies that AccessToken does NOT call
+// TestCredentialNoRefreshWhenFresh verifies that EnsureFresh does NOT call
 // the token endpoint when the credential is fresh.
 func TestCredentialNoRefreshWhenFresh(t *testing.T) {
 	endpointHit := false
@@ -146,9 +147,10 @@ func TestCredentialNoRefreshWhenFresh(t *testing.T) {
 	defer tokenEndpoint.Close()
 
 	cred := newCredential(freshTokenSet(), tokenEndpoint.URL, http.DefaultClient)
-	tok, err := cred.AccessToken(context.Background())
+	didRefresh, err := cred.EnsureFresh(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "access-token-original", tok)
+	assert.False(t, didRefresh)
+	assert.Equal(t, "access-token-original", cred.Tokens().AccessToken)
 	assert.False(t, endpointHit, "token endpoint must not be called for a fresh credential")
 }
 
@@ -161,7 +163,7 @@ func TestCredentialRefreshErrorSurfaces(t *testing.T) {
 	defer tokenEndpoint.Close()
 
 	cred := newCredential(expiredTokenSet(), tokenEndpoint.URL, http.DefaultClient)
-	_, err := cred.AccessToken(context.Background())
+	_, err := cred.EnsureFresh(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "401")
 }
@@ -186,8 +188,9 @@ func TestCredentialZeroLastRefreshTriggersRefresh(t *testing.T) {
 		// LastRefresh is zero
 	}
 	cred := newCredential(ts, tokenEndpoint.URL, http.DefaultClient)
-	tok, err := cred.AccessToken(context.Background())
+	didRefresh, err := cred.EnsureFresh(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, newAccess, tok)
+	assert.True(t, didRefresh)
+	assert.Equal(t, newAccess, cred.Tokens().AccessToken)
 	assert.True(t, endpointHit)
 }

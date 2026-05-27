@@ -2,7 +2,6 @@ package openai
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,33 +14,7 @@ import (
 )
 
 const testAgentToken = "test-agent-token"
-
-// testCreds returns a Credential with a fresh token set wired to a
-// non-existent token endpoint. Any accidental refresh will fail fast
-// rather than hang. Use expiredCredsWithEndpoint to exercise refresh.
-func testCreds(accessToken string) *Credential {
-	ts := TokenSet{
-		AccessToken:  accessToken,
-		RefreshToken: "test-refresh",
-		IDToken:      makeJWT(time.Now().Add(2 * time.Hour).Unix()),
-		AccountID:    "test-account-id",
-		LastRefresh:  time.Now(),
-	}
-	return newCredential(ts, "http://127.0.0.1:1/token", http.DefaultClient)
-}
-
-// expiredCredsWithEndpoint returns a Credential with an expired id_token
-// and the given token endpoint URL.
-func expiredCredsWithEndpoint(tokenEndpointURL string) *Credential {
-	ts := TokenSet{
-		AccessToken:  "access-token-old",
-		RefreshToken: "test-refresh-old",
-		IDToken:      makeJWT(time.Now().Add(-1 * time.Hour).Unix()),
-		AccountID:    "test-account-id",
-		LastRefresh:  time.Now(),
-	}
-	return newCredential(ts, tokenEndpointURL, http.DefaultClient)
-}
+const testAccountID = "test-account-id"
 
 // TestProxyAllowedRequestRewritesHeaders confirms that a valid POST
 // /v1/responses is forwarded with the rewritten backend path,
@@ -76,8 +49,7 @@ func TestProxyAllowedRequestRewritesHeaders(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	creds := testCreds(realToken)
-	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, realToken, testAccountID, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -117,8 +89,7 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	creds := testCreds("any-token")
-	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, "any-token", testAccountID, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -145,8 +116,7 @@ func TestProxyDeniesUnknownMethod(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	creds := testCreds("any-token")
-	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, "any-token", testAccountID, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -171,8 +141,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	creds := testCreds("real-access-token")
-	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, "real-access-token", testAccountID, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -204,41 +173,6 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 	assert.False(t, upstreamHit)
 }
 
-// TestProxyRefreshesExpiredToken verifies that when the Credential's
-// id_token is expired at request time, the proxy refreshes first and
-// the backend receives the newly-obtained access token.
-func TestProxyRefreshesExpiredToken(t *testing.T) {
-	const refreshedAccess = "access-token-after-refresh"
-	tokenEndpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		newID := makeJWT(time.Now().Add(2 * time.Hour).Unix())
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			fieldAccessToken: refreshedAccess,
-			fieldIDToken:     newID,
-		})
-	}))
-	defer tokenEndpoint.Close()
-
-	var gotAuth string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get(headerAuthorization)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-
-	creds := expiredCredsWithEndpoint(tokenEndpoint.URL)
-	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
-	tsrv := httptest.NewServer(p.server.Handler)
-	defer tsrv.Close()
-
-	req := mustRequest(t, http.MethodPost, tsrv.URL+pathResponses)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	_ = resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, bearerPrefix+refreshedAccess, gotAuth, "backend must see the refreshed access token")
-}
-
 // TestProxyOmitsAccountIDWhenEmpty confirms ChatGPT-Account-ID is not
 // sent when the credential has no account ID.
 func TestProxyOmitsAccountIDWhenEmpty(t *testing.T) {
@@ -249,15 +183,7 @@ func TestProxyOmitsAccountIDWhenEmpty(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	ts := TokenSet{
-		AccessToken:  "tok",
-		RefreshToken: "ref",
-		IDToken:      makeJWT(time.Now().Add(2 * time.Hour).Unix()),
-		AccountID:    "",
-		LastRefresh:  time.Now(),
-	}
-	creds := newCredential(ts, "http://127.0.0.1:1/token", http.DefaultClient)
-	p := newProxyServerTo(upstream.URL, testAgentToken, creds, nil)
+	p := newProxyServerTo(upstream.URL, testAgentToken, "tok", "", nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -270,8 +196,7 @@ func TestProxyOmitsAccountIDWhenEmpty(t *testing.T) {
 
 // TestProxyShutdown confirms Start returns cleanly when its context is cancelled.
 func TestProxyShutdown(t *testing.T) {
-	creds := testCreds("tok")
-	p := newProxyServerTo("http://127.0.0.1:1", testAgentToken, creds, nil)
+	p := newProxyServerTo("http://127.0.0.1:1", testAgentToken, "tok", testAccountID, nil)
 
 	startCtx, startCancel := context.WithCancel(context.Background())
 	defer startCancel()
@@ -299,8 +224,7 @@ func TestProxyTracksUsageFromSSE(t *testing.T) {
 	defer upstream.Close()
 
 	tracker := NewTracker("")
-	creds := testCreds("tok")
-	p := newProxyServerTo(upstream.URL, testAgentToken, creds, tracker)
+	p := newProxyServerTo(upstream.URL, testAgentToken, "tok", testAccountID, tracker)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
