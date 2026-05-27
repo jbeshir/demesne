@@ -9,8 +9,4 @@ CODEX_HOME="$PWD/.codex"
 export CODEX_HOME
 mkdir -p "$CODEX_HOME"
 cp /in/.agent/config.toml "$CODEX_HOME/config.toml"
-exec codex exec --json --skip-git-repo-check \
-    --dangerously-bypass-approvals-and-sandbox \
-    --cd "$PWD" \
-    -m "$1" \
-    -- "$2"
+exec codex exec --json -s danger-full-access --skip-git-repo-check -C "$PWD" -m "$1" -- "$2" </dev/null

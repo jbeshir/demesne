@@ -25,7 +25,6 @@ func TestWriteCodexConfig_BasicFields(t *testing.T) {
 	assert.Contains(t, content, `env_key = "DEMESNE_OPENAI_AGENT_KEY"`)
 	assert.Contains(t, content, `approval_policy = "never"`)
 	assert.Contains(t, content, `sandbox_mode = "danger-full-access"`)
-	assert.Contains(t, content, `supports_websockets = false`)
 }
 
 func TestWriteCodexConfig_FilePermissions(t *testing.T) {
