@@ -10,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/jbeshir/demesne/internal/proxies"
 )
 
 // OAuth constants for the ChatGPT token endpoint.
@@ -87,21 +85,15 @@ func jwtExpiry(idToken string) (time.Time, bool) {
 	return time.Unix(claims.Exp, 0), true
 }
 
-// Credential holds a ChatGPT OAuth token set and refreshes it autonomously.
-// It is safe for concurrent use; the proxy calls AccessToken on every request.
+// Credential holds a ChatGPT OAuth token set. It is used host-side to refresh
+// the token set before each Codex launch (see RefreshAuthFile). Safe for
+// concurrent use.
 type Credential struct {
 	mu        sync.Mutex
 	tokens    TokenSet
 	accountID string // set at construction; not returned by OAuth refresh
 	tokenURL  string
 	client    *http.Client
-}
-
-// NewCredential constructs a production Credential. The token set is
-// refreshed over proxies.BypassTransport() so the OAuth endpoint is
-// reachable inside the sidecar's isolated network namespace.
-func NewCredential(ts TokenSet) *Credential {
-	return newCredential(ts, oauthRefreshURL, &http.Client{Transport: proxies.BypassTransport()})
 }
 
 // newCredential is the test-seam constructor: it accepts an arbitrary
@@ -139,16 +131,6 @@ func (c *Credential) Tokens() TokenSet {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.tokens
-}
-
-// AccessToken returns a fresh access token, refreshing the token set first
-// if the id_token is expired/near-expiry or LastRefresh is zero or stale.
-// Safe for concurrent use.
-func (c *Credential) AccessToken(ctx context.Context) (string, error) {
-	if _, err := c.EnsureFresh(ctx); err != nil {
-		return "", err
-	}
-	return c.Tokens().AccessToken, nil
 }
 
 // needsRefreshLocked reports whether the token set needs a refresh.

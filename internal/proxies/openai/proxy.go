@@ -47,9 +47,9 @@ const (
 	// rejects any request whose Authorization header doesn't match.
 	AuthTokenEnv = "DEMESNE_OPENAI_AUTH_TOKEN" //nolint:gosec // env var name, not a credential
 	// UpstreamTokensEnv carries the ChatGPT OAuth token set as a
-	// JSON-encoded TokenSet. The proxy holds this set, refreshes it
-	// autonomously, and swaps in a fresh access token on each request.
-	// The agent never sees these values.
+	// JSON-encoded TokenSet. The host refreshes the set before each
+	// Codex launch; the proxy forwards the access token as-is and
+	// never writes the host auth file. The agent never sees these values.
 	UpstreamTokensEnv = "DEMESNE_OPENAI_UPSTREAM_TOKENS" //nolint:gosec // env var name, not a credential
 	// UsagePathEnv is the host-bind-mounted file path the proxy
 	// rewrites with a usage snapshot after every request. Empty means
@@ -106,8 +106,10 @@ func (registration) EgressHosts() []proxies.EgressHost { return nil }
 
 // ProxyServer is a hardened reverse proxy for the ChatGPT Codex endpoint.
 // It enforces an explicit endpoint allowlist, verifies the per-sandbox
-// agent token, refreshes the OAuth credential as needed, and rewrites
-// the request to the real ChatGPT backend.
+// agent token, stamps the already-fresh OAuth access token (refreshed
+// host-side before launch) onto outbound requests, and rewrites the
+// request to the real ChatGPT backend. It does not refresh credentials;
+// a mid-run token expiry surfaces as the upstream's own 401.
 type ProxyServer struct {
 	bindAddr string
 	server   *http.Server
@@ -116,11 +118,14 @@ type ProxyServer struct {
 // NewProxyServer constructs the production proxy: bound to bindAddr,
 // forwarding to ChatGPTBase over a transport that sets the egress-bypass
 // SO_MARK on every outbound socket. agentToken is the value the agent
-// must present; creds holds and autonomously refreshes the real OAuth
-// token set. tracker accumulates usage (indicative only — ChatGPT-OAuth
-// billing is subscription-based); pass nil to disable tracking.
-func NewProxyServer(bindAddr, agentToken string, creds *Credential, tracker *Tracker) *ProxyServer {
-	return newProxyServer(bindAddr, ChatGPTBase, proxies.BypassTransport(), agentToken, creds, tracker)
+// must present. accessToken is the already-refreshed OAuth access token
+// (refreshed and persisted host-side before launch); it is forwarded
+// as-is on every request and never refreshed by the proxy. accountID is
+// stamped on ChatGPT-Account-ID when non-empty. tracker accumulates usage
+// (indicative only — ChatGPT-OAuth billing is subscription-based); pass
+// nil to disable tracking.
+func NewProxyServer(bindAddr, agentToken, accessToken, accountID string, tracker *Tracker) *ProxyServer {
+	return newProxyServer(bindAddr, ChatGPTBase, proxies.BypassTransport(), agentToken, accessToken, accountID, tracker)
 }
 
 // newProxyServerTo is the test-only constructor: forwards to the given
@@ -129,15 +134,14 @@ func NewProxyServer(bindAddr, agentToken string, creds *Credential, tracker *Tra
 // setsockopt(SO_MARK). Production callers must use NewProxyServer.
 //
 //nolint:unparam // agentToken is fixed in tests but kept explicit for clarity
-func newProxyServerTo(backendURL, agentToken string, creds *Credential, tracker *Tracker) *ProxyServer {
-	return newProxyServer("127.0.0.1:0", backendURL, http.DefaultTransport, agentToken, creds, tracker)
+func newProxyServerTo(backendURL, agentToken, accessToken, accountID string, tracker *Tracker) *ProxyServer {
+	return newProxyServer("127.0.0.1:0", backendURL, http.DefaultTransport, agentToken, accessToken, accountID, tracker)
 }
 
 func newProxyServer(
 	bindAddr, upstreamURL string,
 	transport http.RoundTripper,
-	agentToken string,
-	creds *Credential,
+	agentToken, accessToken, accountID string,
 	tracker *Tracker,
 ) *ProxyServer {
 	target, err := url.Parse(upstreamURL)
@@ -174,18 +178,19 @@ func newProxyServer(
 		bindAddr: bindAddr,
 		server: &http.Server{
 			Addr:              bindAddr,
-			Handler:           gatingHandler(rp, agentToken, creds),
+			Handler:           gatingHandler(rp, agentToken, accessToken, accountID),
 			ReadHeaderTimeout: 30 * time.Second,
 		},
 	}
 }
 
-// gatingHandler wraps the reverse proxy with the endpoint allowlist, the
-// agent-token check, and OAuth token resolution. Only POST /v1/responses
-// is permitted. On a valid request the handler fetches a fresh access token
-// from creds (refreshing if needed) and stamps all outbound auth and routing
-// headers before forwarding to the reverse proxy.
-func gatingHandler(next http.Handler, agentToken string, creds *Credential) http.Handler {
+// gatingHandler wraps the reverse proxy with the endpoint allowlist and the
+// agent-token check. Only POST /v1/responses is permitted. On a valid request
+// the handler stamps accessToken onto Authorization, sets ChatGPT-Account-ID
+// when accountID is non-empty, and adds the originator/version/user-agent
+// headers before forwarding. The access token is used as-is; the handler
+// never refreshes it.
+func gatingHandler(next http.Handler, agentToken, accessToken, accountID string) http.Handler {
 	expectedAuth := bearerPrefix + agentToken
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths, ok := allowedEndpoints[r.Method]
@@ -201,14 +206,9 @@ func gatingHandler(next http.Handler, agentToken string, creds *Credential) http
 			proxycommon.Deny(w, r, http.StatusUnauthorized, "agent token mismatch", "openai proxy")
 			return
 		}
-		tok, err := creds.AccessToken(r.Context())
-		if err != nil {
-			proxycommon.Deny(w, r, http.StatusBadGateway, "upstream auth refresh failed", "openai proxy")
-			return
-		}
-		r.Header.Set(headerAuthorization, bearerPrefix+tok)
-		if id := creds.AccountID(); id != "" {
-			r.Header.Set(headerAccountID, id)
+		r.Header.Set(headerAuthorization, bearerPrefix+accessToken)
+		if accountID != "" {
+			r.Header.Set(headerAccountID, accountID)
 		}
 		r.Header.Set(headerOriginator, originatorValue)
 		r.Header.Set(headerVersion, codexVersion)

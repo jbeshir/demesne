@@ -164,8 +164,7 @@ func buildCodexProxy() (starter, error) {
 		return nil, err
 	}
 	return proxyopenai.NewProxyServer(
-		proxyopenai.BindAddr(), auth,
-		proxyopenai.NewCredential(tokens),
+		proxyopenai.BindAddr(), auth, tokens.AccessToken, tokens.AccountID,
 		proxyopenai.NewTracker(usagePath),
 	), nil
 }
