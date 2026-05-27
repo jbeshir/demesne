@@ -45,13 +45,12 @@ func TestBuildProxyConfig(t *testing.T) {
 	}
 	r := &Runner{cfg: Config{
 		ClaudeCodeOAuthToken: "claude-upstream",
-		CodexAuth:            codexAuth,
 	}}
 	const fakeToken = "demesne-agent-fake" //nolint:gosec // test fixture, not a real credential
 	const results = "/host/results"
 
 	t.Run("anthropic", func(t *testing.T) {
-		cfg := r.buildProxyConfig(vendorStubAgent{vendor: agents.ProxyAnthropic}, fakeToken, results)
+		cfg := r.buildProxyConfig(vendorStubAgent{vendor: agents.ProxyAnthropic}, fakeToken, results, proxyopenai.TokenSet{})
 		require.NotNil(t, cfg.Anthropic)
 		assert.Nil(t, cfg.Codex)
 		assert.Equal(t, fakeToken, cfg.Anthropic.AgentToken)
@@ -60,7 +59,7 @@ func TestBuildProxyConfig(t *testing.T) {
 	})
 
 	t.Run("openai", func(t *testing.T) {
-		cfg := r.buildProxyConfig(vendorStubAgent{vendor: agents.ProxyOpenAI}, fakeToken, results)
+		cfg := r.buildProxyConfig(vendorStubAgent{vendor: agents.ProxyOpenAI}, fakeToken, results, codexAuth)
 		require.NotNil(t, cfg.Codex)
 		assert.Nil(t, cfg.Anthropic)
 		assert.Equal(t, fakeToken, cfg.Codex.AgentToken)
@@ -69,7 +68,7 @@ func TestBuildProxyConfig(t *testing.T) {
 	})
 
 	t.Run("unknown vendor yields no proxy", func(t *testing.T) {
-		cfg := r.buildProxyConfig(vendorStubAgent{vendor: "nope"}, fakeToken, results)
+		cfg := r.buildProxyConfig(vendorStubAgent{vendor: "nope"}, fakeToken, results, proxyopenai.TokenSet{})
 		assert.Nil(t, cfg.Anthropic)
 		assert.Nil(t, cfg.Codex)
 	})
