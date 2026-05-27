@@ -30,10 +30,8 @@ const codexConfigBasename = "config.toml"
 // approval_policy=never and sandbox_mode=danger-full-access give full-auto
 // operation because we are already inside demesne's sandbox isolation.
 //
-// supports_websockets=false forces the HTTP/SSE path so the proxy can
-// account usage via response-body inspection. The proxy ALSO handles
-// WebSocket Upgrade, so this can be flipped to true later.
-// UNVERIFIED: the flag may not reliably force SSE in all Codex versions.
+// wire_api="responses" and url-based [mcp_servers] schema are verified
+// against Codex rust-v0.134.0 (see repo docs).
 func writeCodexConfig(configDir string, servers []agents.MCPServerInfo) error {
 	var b strings.Builder
 
@@ -47,14 +45,9 @@ func writeCodexConfig(configDir string, servers []agents.MCPServerInfo) error {
 	fmt.Fprintf(&b, "base_url = %s\n", tomlString(proxyopenai.ListenURL()+"/v1"))
 	fmt.Fprintf(&b, "wire_api = %s\n", tomlString("responses"))
 	fmt.Fprintf(&b, "env_key = %s\n", tomlString(envAgentKey))
-	fmt.Fprintf(&b, "supports_websockets = false\n")
 
 	if len(servers) > 0 {
 		fmt.Fprintf(&b, "\n")
-		// UNVERIFIED: Codex HTTP-MCP config shape is unconfirmed. The exact
-		// key name ("url" vs "transport" or "http") and the table structure
-		// may need adjustment once Codex is installed and MCP-over-HTTP
-		// support is confirmed. No-op cleanly when servers is empty.
 		for _, s := range servers {
 			fmt.Fprintf(&b, "[mcp_servers.%s]\n", s.Name)
 			fmt.Fprintf(&b, "url = %s\n", tomlString(s.URL))

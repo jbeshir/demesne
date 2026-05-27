@@ -11,16 +11,15 @@ import (
 // can write ModelGPT55/ModelGPT54/etc. without an extra import.
 type ModelName = agents.ModelName
 
-// Model constants for the current Codex model IDs. These are the full
-// model identifiers passed to `codex exec -m`. Model IDs are taken from
-// the Codex documentation; additions or removals require a whitelist update.
+// Model constants for Codex model IDs verified against rust-v0.134.0.
+// These are the full identifiers passed to `codex exec -m`.
+// Additions or removals require a whitelist update.
 const (
-	ModelGPT55           ModelName = "gpt-5.5"
-	ModelGPT54           ModelName = "gpt-5.4"
-	ModelGPT54Mini       ModelName = "gpt-5.4-mini"
-	ModelGPT53Codex      ModelName = "gpt-5.3-codex"
-	ModelGPT53CodexSpark ModelName = "gpt-5.3-codex-spark"
-	ModelGPT52           ModelName = "gpt-5.2"
+	ModelGPT55      ModelName = "gpt-5.5"
+	ModelGPT54      ModelName = "gpt-5.4"
+	ModelGPT54Mini  ModelName = "gpt-5.4-mini"
+	ModelGPT53Codex ModelName = "gpt-5.3-codex"
+	ModelGPT52      ModelName = "gpt-5.2"
 )
 
 // Models is the Codex model whitelist exposed via sandbox_agent's
@@ -30,14 +29,10 @@ var Models = []ModelName{
 	ModelGPT54,
 	ModelGPT54Mini,
 	ModelGPT53Codex,
-	ModelGPT53CodexSpark,
 	ModelGPT52,
 }
 
 // DefaultModel is the model used when the caller does not specify one.
-// UNVERIFIED: research shows gpt-5.5 as the recommended/sample default and
-// the Codex docs say "starts with gpt-5.5 for most tasks", but no hard-coded
-// default is explicitly documented.
 const DefaultModel ModelName = ModelGPT55
 
 // ErrUnknownModel is the sentinel wrapped by ResolveModel when the
