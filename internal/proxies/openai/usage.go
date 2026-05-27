@@ -3,13 +3,12 @@ package openai
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/jbeshir/demesne/internal/proxies/proxycommon"
 )
 
 // Tracker accumulates OpenAI token usage and cost across all requests
@@ -114,33 +113,7 @@ func (t *Tracker) persistLocked() {
 	if t.usagePath == "" {
 		return
 	}
-	snap := t.snapshotLocked()
-	data, err := json.MarshalIndent(snap, "", "  ")
-	if err != nil {
-		// MarshalIndent on this fixed shape can't fail in practice;
-		// log to stderr and move on so the proxy keeps serving.
-		fmt.Fprintf(os.Stderr, "openai proxy: marshal usage snapshot: %v\n", err)
-		return
-	}
-	tmp := t.usagePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "openai proxy: write usage tmp: %v\n", err)
-		return
-	}
-	if err := os.Rename(tmp, t.usagePath); err != nil {
-		fmt.Fprintf(os.Stderr, "openai proxy: rename usage: %v\n", err)
-	}
-}
-
-// EnsureUsageDir creates the parent directory for usagePath if missing.
-// Caller invokes this once at startup so per-request writes can't fail
-// on a missing dir.
-func EnsureUsageDir(usagePath string) error {
-	if usagePath == "" {
-		return nil
-	}
-	dir := filepath.Dir(usagePath)
-	return os.MkdirAll(dir, 0o750)
+	proxycommon.WriteUsageAtomic(t.usagePath, "openai proxy", t.snapshotLocked())
 }
 
 const contentTypeEventStream = "text/event-stream"
@@ -202,25 +175,7 @@ func (s *sseInterceptor) Close() error {
 // scan consumes complete SSE lines from the buffer. When eof is true,
 // it also drains any final partial line.
 func (s *sseInterceptor) scan(eof bool) {
-	for {
-		idx := bytes.IndexByte(s.buf.Bytes(), '\n')
-		if idx < 0 {
-			if !eof {
-				return
-			}
-			if s.buf.Len() == 0 {
-				return
-			}
-			line := s.buf.String()
-			s.buf.Reset()
-			s.handleLine(line)
-			return
-		}
-		raw := s.buf.Next(idx + 1)
-		// Strip trailing \r\n or \n.
-		line := strings.TrimRight(string(raw), "\r\n")
-		s.handleLine(line)
-	}
+	proxycommon.ScanSSELines(&s.buf, eof, s.handleLine)
 }
 
 // sseEvent is the minimal shape of an OpenAI Responses API SSE event.
