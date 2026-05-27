@@ -217,7 +217,7 @@ func TestProxyShutdown(t *testing.T) {
 // Responses-API-shaped SSE events updates the tracker's cost.
 func TestProxyTracksUsageFromSSE(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", contentTypeEventStream)
+		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(sseFixture))
 	}))

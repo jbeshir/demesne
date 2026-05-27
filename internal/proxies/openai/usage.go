@@ -116,23 +116,24 @@ func (t *Tracker) persistLocked() {
 	proxycommon.WriteUsageAtomic(t.usagePath, "openai proxy", t.snapshotLocked())
 }
 
-const contentTypeEventStream = "text/event-stream"
+const contentTypeJSON = "application/json"
 
 // wrapResponseBody returns a ReadCloser that tees the upstream body
 // through a usage parser. The parser folds any usage it finds into the
 // tracker when the body is closed.
 //
-// Streaming responses (Content-Type starts with text/event-stream) are
-// parsed line-by-line as SSE; non-streaming responses are buffered and
-// parsed as a single JSON document at close.
+// The ChatGPT Codex backend streams Server-Sent Events but does NOT
+// reliably set a Content-Type header (it commonly arrives empty), so we
+// default to the SSE parser and use the single-document JSON parser only
+// when the response is explicitly application/json.
 func wrapResponseBody(upstream io.ReadCloser, contentType string, t *Tracker) io.ReadCloser {
-	if strings.HasPrefix(contentType, contentTypeEventStream) {
-		return &sseInterceptor{
+	if strings.HasPrefix(contentType, contentTypeJSON) {
+		return &jsonInterceptor{
 			upstream: upstream,
 			tracker:  t,
 		}
 	}
-	return &jsonInterceptor{
+	return &sseInterceptor{
 		upstream: upstream,
 		tracker:  t,
 	}

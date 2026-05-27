@@ -69,7 +69,7 @@ data: [DONE]
 func TestSSEInterceptor_ResponseCompleted(t *testing.T) {
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(sseFixture)}
-	w := wrapResponseBody(r, contentTypeEventStream, tr)
+	w := wrapResponseBody(r, "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -85,11 +85,27 @@ func TestSSEInterceptor_ResponseCompleted(t *testing.T) {
 	assert.Greater(t, float64(snap.CostUSD), 0.0, "cost must be non-zero for known model")
 }
 
+// TestWrapResponseBody_DispatchesByContentType guards the real-world bug:
+// the ChatGPT Codex backend streams SSE with an EMPTY Content-Type, so the
+// body must still be parsed as SSE (not as a single JSON document).
+func TestWrapResponseBody_DispatchesByContentType(t *testing.T) {
+	for _, ct := range []string{"", "text/event-stream", "text/event-stream; charset=utf-8"} {
+		tr := NewTracker("")
+		r := &nopReadCloser{Reader: strings.NewReader(sseFixture)}
+		w := wrapResponseBody(r, ct, tr)
+		_, err := io.Copy(io.Discard, w)
+		require.NoError(t, err)
+		require.NoError(t, w.Close())
+		assert.Contains(t, tr.snapshot().PerModel, "gpt-5.5",
+			"content-type %q must be parsed as SSE", ct)
+	}
+}
+
 func TestSSEInterceptor_HandlesSplitReads(t *testing.T) {
 	// Feed one byte at a time to exercise the buffer.
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: byteByByteReader(sseFixture)}
-	w := wrapResponseBody(r, contentTypeEventStream, tr)
+	w := wrapResponseBody(r, "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -109,7 +125,7 @@ data: [DONE]
 `
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, contentTypeEventStream, tr)
+	w := wrapResponseBody(r, "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -130,7 +146,7 @@ data: [DONE]
 `
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, contentTypeEventStream, tr)
+	w := wrapResponseBody(r, "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -145,7 +161,7 @@ func TestSSEInterceptor_IgnoresGarbage(t *testing.T) {
 	body := "data: not-json-at-all\n\nfoo: bar\n\ndata: {\"type\":\"unknown\"}\n\n"
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, contentTypeEventStream, tr)
+	w := wrapResponseBody(r, "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
