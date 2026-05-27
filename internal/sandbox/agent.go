@@ -21,6 +21,7 @@ import (
 	"github.com/jbeshir/demesne/internal/proxies"
 	proxygo "github.com/jbeshir/demesne/internal/proxies/goproxy"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
+	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
 	"github.com/jbeshir/demesne/internal/sidecar"
 )
 
@@ -49,12 +50,14 @@ type sandboxLayout struct {
 }
 
 // agentPrep collects everything Agent resolves before touching the
-// sandbox runtime: provider, model, inputs, image tag.
+// sandbox runtime: provider, model, inputs, image tag, and the
+// freshly host-refreshed Codex token set (zero for non-OpenAI agents).
 type agentPrep struct {
-	agent  agents.Agent
-	model  agents.ModelName
-	inputs []agents.InputInfo
-	tag    ImageURI
+	agent       agents.Agent
+	model       agents.ModelName
+	inputs      []agents.InputInfo
+	tag         ImageURI
+	codexTokens proxyopenai.TokenSet
 }
 
 // internalAgentSpec is the internal request shape runAgent takes.
@@ -162,7 +165,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	}
 	defer killSandbox(ctx, sb)
 
-	proxyCfg := r.buildProxyConfig(prep.agent, agentToken, layout.resultsHost)
+	proxyCfg := r.buildProxyConfig(prep.agent, agentToken, layout.resultsHost, prep.codexTokens)
 	if len(wiring.sidecarUpstreams) > 0 {
 		proxyCfg.MCP = &sidecar.MCPTunnelConfig{
 			Upstreams:  wiring.sidecarUpstreams,
@@ -239,10 +242,14 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 // buildProxyConfig selects the per-sandbox credential proxy for the
 // agent's vendor: the agent never sees the real upstream credential, so
 // the runner hands it to the sidecar proxy here (validate fake token →
-// swap real). The MCP tunnel is layered on by the caller. Exactly one
-// vendor branch fires; an unrecognised vendor yields an empty config
-// (no proxy), which sidecar.Start treats as a non-agent run.
-func (r *Runner) buildProxyConfig(agent agents.Agent, agentToken, resultsHost string) sidecar.ProxyConfig {
+// swap real). codexTokens is the freshly host-refreshed token set
+// passed in by the caller for OpenAI-vendor agents. The MCP tunnel is
+// layered on by the caller. Exactly one vendor branch fires; an
+// unrecognised vendor yields an empty config (no proxy), which
+// sidecar.Start treats as a non-agent run.
+func (r *Runner) buildProxyConfig(
+	agent agents.Agent, agentToken, resultsHost string, codexTokens proxyopenai.TokenSet,
+) sidecar.ProxyConfig {
 	switch agent.ProxyVendor() {
 	case agents.ProxyAnthropic:
 		return sidecar.ProxyConfig{Anthropic: &sidecar.AnthropicProxyConfig{
@@ -253,7 +260,7 @@ func (r *Runner) buildProxyConfig(agent agents.Agent, agentToken, resultsHost st
 	case agents.ProxyOpenAI:
 		return sidecar.ProxyConfig{Codex: &sidecar.CodexProxyConfig{
 			AgentToken:  agentToken,
-			Tokens:      r.cfg.CodexAuth,
+			Tokens:      codexTokens,
 			ResultsHost: resultsHost,
 		}}
 	default:
@@ -323,9 +330,9 @@ func (r *Runner) checkAgentCredentials(agent agents.Agent, tool string) error {
 			)
 		}
 	case agents.ProxyOpenAI:
-		if r.cfg.CodexAuth.AccessToken == "" || r.cfg.CodexAuth.RefreshToken == "" {
+		if r.cfg.CodexAuthFile == "" {
 			return errors.New(
-				"DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) with a valid ChatGPT OAuth token set is required for " +
+				"DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) is required for " +
 					tool + " when agent=\"codex\"",
 			)
 		}
@@ -333,9 +340,20 @@ func (r *Runner) checkAgentCredentials(agent agents.Agent, tool string) error {
 	return nil
 }
 
+// resolveCodexTokens refreshes and persists the host-side Codex auth file
+// for an OpenAI-vendor agent, returning the fresh token set to hand to the
+// sidecar. For every other vendor it is a no-op returning a zero TokenSet.
+func (r *Runner) resolveCodexTokens(ctx context.Context, agent agents.Agent) (proxyopenai.TokenSet, error) {
+	if agent.ProxyVendor() != agents.ProxyOpenAI {
+		return proxyopenai.TokenSet{}, nil
+	}
+	return proxyopenai.RefreshAuthFile(ctx, r.cfg.CodexAuthFile)
+}
+
 // prepareAgent validates the request, looks up the provider, resolves
-// the model, describes inputs, and ensures the provider's image is
-// built. No sandbox-runtime calls happen here.
+// the model, describes inputs, refreshes+persists the Codex auth file
+// for codex runs, and ensures the provider's image is built. No
+// sandbox-runtime calls happen here.
 func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agentPrep, error) {
 	if strings.TrimSpace(spec.prompt) == "" {
 		return agentPrep{}, errors.New("prompt is required")
@@ -348,6 +366,10 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 		return agentPrep{}, err
 	}
 	model, err := agent.ResolveModel(spec.model)
+	if err != nil {
+		return agentPrep{}, err
+	}
+	codexTokens, err := r.resolveCodexTokens(ctx, agent)
 	if err != nil {
 		return agentPrep{}, err
 	}
@@ -370,7 +392,7 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 	if err != nil {
 		return agentPrep{}, fmt.Errorf("build agent image: %w", err)
 	}
-	return agentPrep{agent: agent, model: model, inputs: inputs, tag: ImageURI(imgTag)}, nil
+	return agentPrep{agent: agent, model: model, inputs: inputs, tag: ImageURI(imgTag), codexTokens: codexTokens}, nil
 }
 
 // buildLayout produces the host paths + mounts for an agent run,

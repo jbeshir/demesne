@@ -3,12 +3,10 @@ package sandbox
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"strings"
 
 	"github.com/jbeshir/demesne/internal/mcpproxy"
-	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
 )
 
 // Config holds the settings the sandbox runner needs. Most are
@@ -38,12 +36,13 @@ type Config struct {
 	// only when sandbox_agent is invoked.
 	ClaudeCodeOAuthToken string
 
-	// CodexAuth is the ChatGPT OAuth token set read from the Codex auth file
-	// (default ~/.codex/auth.json, overridden by DEMESNE_CODEX_AUTH_FILE).
-	// It is passed to the per-sandbox sidecar proxy, which holds and refreshes
-	// it autonomously. Required only when sandbox_agent/sandbox_research is
-	// invoked with agent="codex"; an absent auth file leaves this zero.
-	CodexAuth proxyopenai.TokenSet
+	// CodexAuthFile is the path to the Codex auth.json (from
+	// DEMESNE_CODEX_AUTH_FILE, default ~/.codex/auth.json). The runner
+	// reads, refreshes, and persists it per launch so the rotating
+	// single-use refresh token stays current and co-tenanted with the
+	// host's own codex process. Empty when neither the env var is set nor
+	// the home directory is resolvable.
+	CodexAuthFile string
 
 	// MCPServers are the host MCP aggregator's exposed server names
 	// (sorted). Empty when no host MCP servers are available. Populated
@@ -61,32 +60,19 @@ type Config struct {
 	MCPToolCatalogue mcpproxy.ToolCatalogue
 }
 
-// loadCodexAuth resolves and parses the Codex auth file (DEMESNE_CODEX_AUTH_FILE
-// or ~/.codex/auth.json). An absent file returns a zero TokenSet without error;
-// a present but malformed file returns an error.
-func loadCodexAuth() (proxyopenai.TokenSet, error) {
-	authFile := os.Getenv("DEMESNE_CODEX_AUTH_FILE")
-	if authFile == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			authFile = home + "/.codex/auth.json"
-		}
+// resolveCodexAuthFile returns the path to the Codex auth.json from
+// DEMESNE_CODEX_AUTH_FILE, falling back to ~/.codex/auth.json, or ""
+// when the home directory cannot be determined. It does not read or
+// parse the file.
+func resolveCodexAuthFile() string {
+	if v := os.Getenv("DEMESNE_CODEX_AUTH_FILE"); v != "" {
+		return v
 	}
-	if authFile == "" {
-		return proxyopenai.TokenSet{}, nil
-	}
-	data, err := os.ReadFile(authFile) //nolint:gosec // path from env or user home
-	if errors.Is(err, fs.ErrNotExist) {
-		// An absent file is not an error — Codex is simply unusable for this run.
-		return proxyopenai.TokenSet{}, nil
-	}
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return proxyopenai.TokenSet{}, fmt.Errorf("read Codex auth file %s: %w", authFile, err)
+		return ""
 	}
-	ts, parseErr := proxyopenai.ParseAuthJSON(data)
-	if parseErr != nil {
-		return proxyopenai.TokenSet{}, fmt.Errorf("parse Codex auth file %s: %w", authFile, parseErr)
-	}
-	return ts, nil
+	return home + "/.codex/auth.json"
 }
 
 // LoadConfigFromEnv reads required configuration from environment variables.
@@ -99,11 +85,7 @@ func LoadConfigFromEnv() (Config, error) {
 		ClaudeCodeOAuthToken: os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN"),
 	}
 
-	codexAuth, err := loadCodexAuth()
-	if err != nil {
-		return Config{}, err
-	}
-	cfg.CodexAuth = codexAuth
+	cfg.CodexAuthFile = resolveCodexAuthFile()
 
 	rawAllowed := os.Getenv("DEMESNE_ALLOWED_PATHS")
 	if rawAllowed == "" {

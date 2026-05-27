@@ -46,7 +46,7 @@ func TestRunner_Integration_CodexAgent(t *testing.T) {
 		"Codex auth file %s: tokens.refresh_token is empty; check DEMESNE_CODEX_AUTH_FILE / ~/.codex/auth.json",
 		authFile)
 
-	runner := codexAgentIntegrationRunner(t, ts)
+	runner := codexAgentIntegrationRunner(t, authFile)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -69,10 +69,10 @@ func TestRunner_Integration_CodexAgent(t *testing.T) {
 	assert.GreaterOrEqual(t, res.CostUSD, 0.0)
 }
 
-// codexAgentIntegrationRunner builds a Runner with CodexAuth wired, reading
+// codexAgentIntegrationRunner builds a Runner with CodexAuthFile wired, reading
 // the OpenSandbox config from OPEN_SANDBOX_* env vars just like
 // agentIntegrationRunner does for the Anthropic path.
-func codexAgentIntegrationRunner(t *testing.T, ts proxyopenai.TokenSet) *Runner {
+func codexAgentIntegrationRunner(t *testing.T, authFile string) *Runner {
 	t.Helper()
 	domain := os.Getenv("OPEN_SANDBOX_DOMAIN")
 	apiKey := os.Getenv("OPEN_SANDBOX_API_KEY")
@@ -84,6 +84,6 @@ func codexAgentIntegrationRunner(t *testing.T, ts proxyopenai.TokenSet) *Runner 
 		OpenSandboxDomain:   domain,
 		OpenSandboxProtocol: envOr("OPEN_SANDBOX_PROTOCOL", "http"),
 		OpenSandboxAPIKey:   apiKey,
-		CodexAuth:           ts,
+		CodexAuthFile:       authFile,
 	})
 }
