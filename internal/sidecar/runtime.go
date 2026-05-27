@@ -54,10 +54,11 @@ type AnthropicProxyConfig struct {
 // CodexProxyConfig carries the auth values the OpenAI/Codex credential
 // proxy needs. AgentToken is the per-sandbox fake token the proxy
 // validates on every inbound request; Tokens is the ChatGPT OAuth token
-// set the proxy holds and refreshes autonomously before forwarding. Both
-// are passed via docker run -e (kept off image layers / inspect-visible
-// args). ResultsHost is bind-mounted to SidecarResultsDir; the proxy
-// writes its usage.json there.
+// set, already refreshed+persisted host-side before launch — the proxy
+// forwards its access token as-is and never refreshes. Both are passed
+// via docker run -e (kept off image layers / inspect-visible args).
+// ResultsHost is bind-mounted to SidecarResultsDir; the proxy writes its
+// usage.json there.
 type CodexProxyConfig struct {
 	AgentToken  string
 	Tokens      proxyopenai.TokenSet
@@ -172,9 +173,11 @@ func proxyRunArgs(cfg ProxyConfig) ([]string, error) {
 	// they are mutually exclusive — only one of cfg.Anthropic/cfg.Codex is
 	// ever set for a given run.
 	if cfg.Codex != nil {
-		if cfg.Codex.Tokens.AccessToken == "" || cfg.Codex.Tokens.RefreshToken == "" || cfg.Codex.ResultsHost == "" {
+		// The sidecar proxy forwards the access token as-is (refresh is
+		// host-side), so only the access token + results mount are required.
+		if cfg.Codex.Tokens.AccessToken == "" || cfg.Codex.ResultsHost == "" {
 			return nil, errors.New(
-				"sidecar.Start: Tokens (access+refresh) and ResultsHost are required when Codex AgentToken is set")
+				"sidecar.Start: Tokens.AccessToken and ResultsHost are required when Codex AgentToken is set")
 		}
 		// Token set serialized to pass to the sidecar via env, same as the anthropic upstream token.
 		tokensJSON, err := json.Marshal(cfg.Codex.Tokens) //nolint:gosec // tokens passed to sidecar by design
