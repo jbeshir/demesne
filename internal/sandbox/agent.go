@@ -162,13 +162,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	}
 	defer killSandbox(ctx, sb)
 
-	proxyCfg := sidecar.ProxyConfig{
-		Anthropic: &sidecar.AnthropicProxyConfig{
-			AgentToken:    agentToken,
-			UpstreamToken: r.cfg.ClaudeCodeOAuthToken,
-			ResultsHost:   layout.resultsHost,
-		},
-	}
+	proxyCfg := r.buildProxyConfig(prep.agent, agentToken, layout.resultsHost)
 	if len(wiring.sidecarUpstreams) > 0 {
 		proxyCfg.MCP = &sidecar.MCPTunnelConfig{
 			Upstreams:  wiring.sidecarUpstreams,
@@ -242,6 +236,31 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	}, nil
 }
 
+// buildProxyConfig selects the per-sandbox credential proxy for the
+// agent's vendor: the agent never sees the real upstream credential, so
+// the runner hands it to the sidecar proxy here (validate fake token →
+// swap real). The MCP tunnel is layered on by the caller. Exactly one
+// vendor branch fires; an unrecognised vendor yields an empty config
+// (no proxy), which sidecar.Start treats as a non-agent run.
+func (r *Runner) buildProxyConfig(agent agents.Agent, agentToken, resultsHost string) sidecar.ProxyConfig {
+	switch agent.ProxyVendor() {
+	case agents.ProxyAnthropic:
+		return sidecar.ProxyConfig{Anthropic: &sidecar.AnthropicProxyConfig{
+			AgentToken:    agentToken,
+			UpstreamToken: r.cfg.ClaudeCodeOAuthToken,
+			ResultsHost:   resultsHost,
+		}}
+	case agents.ProxyOpenAI:
+		return sidecar.ProxyConfig{Codex: &sidecar.CodexProxyConfig{
+			AgentToken:  agentToken,
+			UpstreamKey: r.cfg.OpenAIAPIKey,
+			ResultsHost: resultsHost,
+		}}
+	default:
+		return sidecar.ProxyConfig{}
+	}
+}
+
 // Agent stdout/stderr are redirected to these files under /out; /out is
 // a host bind-mount so they stream to the host as the agent runs.
 const (
@@ -295,18 +314,27 @@ func (r *Runner) startGoproxySidecar(ctx context.Context, sandboxID string) (*si
 // the model, describes inputs, and ensures the provider's image is
 // built. No sandbox-runtime calls happen here.
 func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agentPrep, error) {
-	if r.cfg.ClaudeCodeOAuthToken == "" {
-		return agentPrep{}, errors.New(
-			"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for " + spec.tool +
-				" (run `claude setup-token` to obtain one)",
-		)
-	}
 	if strings.TrimSpace(spec.prompt) == "" {
 		return agentPrep{}, errors.New("prompt is required")
 	}
 	agent, err := agents.Lookup(spec.agentName)
 	if err != nil {
 		return agentPrep{}, err
+	}
+	switch agent.ProxyVendor() {
+	case agents.ProxyAnthropic:
+		if r.cfg.ClaudeCodeOAuthToken == "" {
+			return agentPrep{}, errors.New(
+				"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for " + spec.tool +
+					" (run `claude setup-token` to obtain one)",
+			)
+		}
+	case agents.ProxyOpenAI:
+		if r.cfg.OpenAIAPIKey == "" {
+			return agentPrep{}, errors.New(
+				"DEMESNE_OPENAI_API_KEY is required for " + spec.tool + " when agent=\"codex\"",
+			)
+		}
 	}
 	model, err := agent.ResolveModel(spec.model)
 	if err != nil {

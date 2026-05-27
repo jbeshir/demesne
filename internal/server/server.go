@@ -165,14 +165,14 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithString(paramAgent,
 			mcp.Description(
-				"Agent provider. Defaults to 'claude-code' (the only registered "+
-					"provider in this build).",
+				"Agent provider. 'claude-code' (default) or 'codex' "+
+					"(OpenAI Codex CLI, experimental — see README). Defaults to 'claude-code'.",
 			),
 		),
 		mcp.WithString(paramModel,
 			mcp.Description(
-				"Model for the agent. One of 'opus', 'sonnet' (default), or "+
-					"'haiku'. Specific to the claude-code provider.",
+				"Model for the agent. Provider-specific: claude-code uses "+
+					"'opus', 'sonnet' (default), or 'haiku'; codex uses the gpt-5.x family.",
 			),
 		),
 		mcp.WithString(paramPreamble,
@@ -210,14 +210,14 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithString(paramAgent,
 			mcp.Description(
-				"Agent provider. Defaults to 'claude-code' (the only registered "+
-					"provider in this build).",
+				"Agent provider. 'claude-code' (default) or 'codex' "+
+					"(OpenAI Codex CLI, experimental — see README). Defaults to 'claude-code'.",
 			),
 		),
 		mcp.WithString(paramModel,
 			mcp.Description(
-				"Model for the agent. One of 'opus', 'sonnet' (default), or "+
-					"'haiku'. Specific to the claude-code provider.",
+				"Model for the agent. Provider-specific: claude-code uses "+
+					"'opus', 'sonnet' (default), or 'haiku'; codex uses the gpt-5.x family.",
 			),
 		),
 		mcp.WithString(paramPreamble,

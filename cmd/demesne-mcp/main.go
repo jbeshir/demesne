@@ -11,10 +11,12 @@ import (
 	// Side-effect imports: register the claude-code agent and the
 	// proxies whose egress hosts must end up in the sandbox allowlist.
 	_ "github.com/jbeshir/demesne/internal/agents/anthropic"
+	_ "github.com/jbeshir/demesne/internal/agents/codex"
 	"github.com/jbeshir/demesne/internal/mcpproxy"
 	_ "github.com/jbeshir/demesne/internal/proxies/anthropic"
 	_ "github.com/jbeshir/demesne/internal/proxies/goproxy"
 	_ "github.com/jbeshir/demesne/internal/proxies/mcp"
+	_ "github.com/jbeshir/demesne/internal/proxies/openai"
 	"github.com/jbeshir/demesne/internal/sandbox"
 	"github.com/jbeshir/demesne/internal/server"
 )

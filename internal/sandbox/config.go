@@ -36,6 +36,11 @@ type Config struct {
 	// only when sandbox_agent is invoked.
 	ClaudeCodeOAuthToken string
 
+	// OpenAIAPIKey is the host OpenAI API key, injected into the Codex
+	// agent's sidecar proxy as the upstream credential. Required only when
+	// sandbox_agent/sandbox_research is invoked with agent="codex".
+	OpenAIAPIKey string
+
 	// MCPServers are the host MCP aggregator's exposed server names
 	// (sorted). Empty when no host MCP servers are available. Populated
 	// by main after the aggregator starts, not from env.
@@ -60,6 +65,7 @@ func LoadConfigFromEnv() (Config, error) {
 		OpenSandboxProtocol:  envOr("OPEN_SANDBOX_PROTOCOL", "http"),
 		OpenSandboxAPIKey:    os.Getenv("OPEN_SANDBOX_API_KEY"),
 		ClaudeCodeOAuthToken: os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN"),
+		OpenAIAPIKey:         os.Getenv("DEMESNE_OPENAI_API_KEY"),
 	}
 
 	rawAllowed := os.Getenv("DEMESNE_ALLOWED_PATHS")
