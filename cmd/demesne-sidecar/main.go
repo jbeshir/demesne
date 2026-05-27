@@ -22,6 +22,7 @@ import (
 	proxygo "github.com/jbeshir/demesne/internal/proxies/goproxy"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
+	proxycommon "github.com/jbeshir/demesne/internal/proxies/proxycommon"
 )
 
 func main() {
@@ -44,14 +45,30 @@ func run() error {
 	// their config env vars are absent (a plain script/create sandbox).
 	starters := []starter{proxygo.NewProxyServer(proxygo.BindAddr())}
 
-	anth, err := buildAnthropicProxy()
+	anth, err := buildCredentialProxy(credProxyEnv{
+		authEnv:     proxyanthropic.AuthTokenEnv,
+		upstreamEnv: proxyanthropic.UpstreamTokenEnv,
+		usageEnv:    proxyanthropic.UsagePathEnv,
+		build: func(auth, upstream, usagePath string) starter {
+			return proxyanthropic.NewProxyServer(
+				proxyanthropic.BindAddr(), auth, upstream, proxyanthropic.NewTracker(usagePath))
+		},
+	})
 	if err != nil {
 		return err
 	}
 	if anth != nil {
 		starters = append(starters, anth)
 	}
-	oai, err := buildOpenAIProxy()
+	oai, err := buildCredentialProxy(credProxyEnv{
+		authEnv:     proxyopenai.AuthTokenEnv,
+		upstreamEnv: proxyopenai.UpstreamKeyEnv,
+		usageEnv:    proxyopenai.UsagePathEnv,
+		build: func(auth, upstream, usagePath string) starter {
+			return proxyopenai.NewProxyServer(
+				proxyopenai.BindAddr(), auth, upstream, proxyopenai.NewTracker(usagePath))
+		},
+	})
 	if err != nil {
 		return err
 	}
@@ -98,42 +115,37 @@ func buildMCPProxy() (*proxymcp.Server, error) {
 	return proxymcp.NewServer(os.Getenv(proxymcp.SocketPathEnv), bindings), nil
 }
 
-// buildOpenAIProxy wires the OpenAI/Codex proxy from its env vars.
-// Returns nil when the auth token is absent (not a Codex agent run);
-// when present, the upstream key is required too.
-func buildOpenAIProxy() (*proxyopenai.ProxyServer, error) {
-	auth := os.Getenv(proxyopenai.AuthTokenEnv)
-	if auth == "" {
-		return nil, nil
-	}
-	upstream := os.Getenv(proxyopenai.UpstreamKeyEnv)
-	if upstream == "" {
-		return nil, errors.New(proxyopenai.UpstreamKeyEnv + " must be set when " + proxyopenai.AuthTokenEnv + " is")
-	}
-	usagePath := os.Getenv(proxyopenai.UsagePathEnv)
-	if err := proxyopenai.EnsureUsageDir(usagePath); err != nil {
-		return nil, err
-	}
-	tracker := proxyopenai.NewTracker(usagePath)
-	return proxyopenai.NewProxyServer(proxyopenai.BindAddr(), auth, upstream, tracker), nil
+// credProxyEnv names the env vars one credential proxy reads and how to
+// construct it. build receives the validated values and returns a ready
+// starter; it is called only when the auth token is present and the
+// upstream credential is set. Keeping the env-var names per-vendor (the
+// Anthropic upstream is an OAuth token, the OpenAI one an API key)
+// preserves each proxy's distinct contract while sharing the read →
+// validate → ensure-dir → construct boilerplate.
+type credProxyEnv struct {
+	authEnv     string
+	upstreamEnv string
+	usageEnv    string
+	build       func(auth, upstream, usagePath string) starter
 }
 
-// buildAnthropicProxy wires the Anthropic proxy from its env vars.
-// Returns nil when the auth token is absent (not an agent run); when
-// it is present, the upstream token is required too.
-func buildAnthropicProxy() (*proxyanthropic.ProxyServer, error) {
-	auth := os.Getenv(proxyanthropic.AuthTokenEnv)
+// buildCredentialProxy wires one agent-vendor credential proxy from its
+// env vars. Returns (nil, nil) when the auth token is absent (not that
+// vendor's agent run — a plain script/create sandbox, or the other
+// vendor); when the auth token is present, the upstream credential is
+// required too.
+func buildCredentialProxy(c credProxyEnv) (starter, error) {
+	auth := os.Getenv(c.authEnv)
 	if auth == "" {
 		return nil, nil
 	}
-	upstream := os.Getenv(proxyanthropic.UpstreamTokenEnv)
+	upstream := os.Getenv(c.upstreamEnv)
 	if upstream == "" {
-		return nil, errors.New(proxyanthropic.UpstreamTokenEnv + " must be set when " + proxyanthropic.AuthTokenEnv + " is")
+		return nil, errors.New(c.upstreamEnv + " must be set when " + c.authEnv + " is")
 	}
-	usagePath := os.Getenv(proxyanthropic.UsagePathEnv)
-	if err := proxyanthropic.EnsureUsageDir(usagePath); err != nil {
+	usagePath := os.Getenv(c.usageEnv)
+	if err := proxycommon.EnsureUsageDir(usagePath); err != nil {
 		return nil, err
 	}
-	tracker := proxyanthropic.NewTracker(usagePath)
-	return proxyanthropic.NewProxyServer(proxyanthropic.BindAddr(), auth, upstream, tracker), nil
+	return c.build(auth, upstream, usagePath), nil
 }
