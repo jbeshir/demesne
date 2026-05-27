@@ -213,8 +213,8 @@ func TestProxyRefreshesExpiredToken(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		newID := makeJWT(time.Now().Add(2 * time.Hour).Unix())
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"access_token": refreshedAccess,
-			"id_token":     newID,
+			fieldAccessToken: refreshedAccess,
+			fieldIDToken:     newID,
 		})
 	}))
 	defer tokenEndpoint.Close()

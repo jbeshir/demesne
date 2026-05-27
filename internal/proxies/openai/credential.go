@@ -120,18 +120,35 @@ func newCredential(ts TokenSet, tokenURL string, client *http.Client) *Credentia
 // modified by token refresh (the OAuth endpoint does not return account_id).
 func (c *Credential) AccountID() string { return c.accountID }
 
+// EnsureFresh refreshes the token set if needed and reports whether a
+// refresh actually occurred. Safe for concurrent use.
+func (c *Credential) EnsureFresh(ctx context.Context) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.needsRefreshLocked() {
+		return false, nil
+	}
+	if err := c.refreshLocked(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Tokens returns a snapshot of the current token set. Safe for concurrent use.
+func (c *Credential) Tokens() TokenSet {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.tokens
+}
+
 // AccessToken returns a fresh access token, refreshing the token set first
 // if the id_token is expired/near-expiry or LastRefresh is zero or stale.
 // Safe for concurrent use.
 func (c *Credential) AccessToken(ctx context.Context) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.needsRefreshLocked() {
-		if err := c.refreshLocked(ctx); err != nil {
-			return "", err
-		}
+	if _, err := c.EnsureFresh(ctx); err != nil {
+		return "", err
 	}
-	return c.tokens.AccessToken, nil
+	return c.Tokens().AccessToken, nil
 }
 
 // needsRefreshLocked reports whether the token set needs a refresh.
