@@ -172,12 +172,16 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 			SocketHost: r.cfg.MCPSocketPath,
 		}
 	}
-	side, err := sidecar.Start(ctx, sb.ID(), sidecarImage, proxyCfg)
-	if err != nil {
+	if _, err := sidecar.Start(ctx, sb.ID(), sidecarImage, proxyCfg); err != nil {
 		return AgentResult{}, fmt.Errorf("start sidecar: %w", err)
 	}
 	defer func() {
-		if err := side.Stop(context.WithoutCancel(ctx)); err != nil {
+		// sidecar.Remove is idempotent by deterministic name and retries
+		// on transient docker errors. It MUST run before killSandbox (LIFO):
+		// our sidecar shares the egress container's network/PID namespace,
+		// so podman refuses to remove the egress while ours still exists,
+		// leaking both containers. See internal/sidecar/runtime.go.
+		if err := sidecar.Remove(context.WithoutCancel(ctx), sb.ID()); err != nil {
 			log.Printf("%s: sidecar cleanup failed: %v", spec.tool, err)
 		}
 	}()
@@ -309,12 +313,13 @@ func sandboxEnv() map[string]string {
 // paths so every sandbox can fetch Go modules via 127.0.0.1. Agent runs
 // start their own sidecar (with the Anthropic proxy + MCP tunnel) which
 // runs the Go proxy too.
-func (r *Runner) startGoproxySidecar(ctx context.Context, sandboxID string) (*sidecar.Handle, error) {
+func (r *Runner) startGoproxySidecar(ctx context.Context, sandboxID string) error {
 	img, err := sidecar.EnsureImage(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("build sidecar image: %w", err)
+		return fmt.Errorf("build sidecar image: %w", err)
 	}
-	return sidecar.Start(ctx, sandboxID, img, sidecar.ProxyConfig{})
+	_, err = sidecar.Start(ctx, sandboxID, img, sidecar.ProxyConfig{})
+	return err
 }
 
 // checkAgentCredentials verifies that the runner config contains the

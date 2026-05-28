@@ -13,6 +13,7 @@ import (
 
 	"github.com/jbeshir/demesne/internal/mcpproxy"
 	"github.com/jbeshir/demesne/internal/proxies"
+	"github.com/jbeshir/demesne/internal/sidecar"
 )
 
 // commandTimeout caps how long a single sandbox command may run. Set
@@ -99,12 +100,11 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 	}
 	defer killSandbox(ctx, sb)
 
-	side, err := r.startGoproxySidecar(ctx, sb.ID())
-	if err != nil {
+	if err := r.startGoproxySidecar(ctx, sb.ID()); err != nil {
 		return ScriptResult{}, fmt.Errorf("start sidecar: %w", err)
 	}
 	defer func() {
-		if err := side.Stop(context.WithoutCancel(ctx)); err != nil {
+		if err := sidecar.Remove(context.WithoutCancel(ctx), sb.ID()); err != nil {
 			log.Printf("sandbox_script: sidecar cleanup failed: %v", err)
 		}
 	}()
