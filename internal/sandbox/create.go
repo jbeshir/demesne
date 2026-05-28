@@ -31,7 +31,7 @@ func (r *Runner) create(ctx context.Context, req CreateRequest, child *childSpaw
 	// the life of the sandbox; it's reaped via the shared egress-sidecar
 	// PID namespace when the sandbox is destroyed. No host-side handle to
 	// track. If it can't start, tear down the orphan sandbox.
-	if _, err := r.startGoproxySidecar(ctx, sb.ID()); err != nil {
+	if err := r.startGoproxySidecar(ctx, sb.ID()); err != nil {
 		killSandbox(ctx, sb)
 		return CreateResult{}, fmt.Errorf("start sidecar: %w", err)
 	}
