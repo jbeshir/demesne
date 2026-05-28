@@ -10,7 +10,7 @@ import (
 func TestCommand(t *testing.T) {
 	got := codexAgent{}.Command("do it", ModelGPT55)
 	assert.Equal(t, []string{"sh", wrapperScriptPath, "gpt-5.5", "do it"}, got)
-	assert.Equal(t, agents.AgentConfigDir+"/codex-exec.sh", wrapperScriptPath)
+	assert.Equal(t, agents.AgentConfigDir+"/codex-retry.sh", wrapperScriptPath)
 }
 
 func TestEnvVars_SetsAgentKeyAndSandbox(t *testing.T) {
