@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
@@ -36,6 +37,9 @@ const SidecarUsageFile = SidecarResultsDir + "/usage.json"
 const EgressSidecarLabel = "opensandbox.io/egress-sidecar-for"
 
 const dockerCmd = "docker"
+
+// execCommand is a seam to allow tests to swap the docker invocation.
+var execCommand = exec.CommandContext
 
 // AnthropicProxyConfig carries the auth values the agent-vendor proxy
 // needs. The agent-facing token is validated by the proxy on every
@@ -215,6 +219,61 @@ func proxyRunArgs(cfg ProxyConfig) ([]string, error) {
 	return args, nil
 }
 
+// dockerRemoveWithRetry runs `docker rm -f <target>` via execCommand, treats
+// "no such container" as success (idempotent), and retries on transient
+// docker/podman errors with a small bounded backoff. Toolkit-style: passive,
+// no goroutines, no env reads; caller passes the already-resolved target.
+func dockerRemoveWithRetry(ctx context.Context, target string) error {
+	const attempts = 3
+	backoff := []time.Duration{50 * time.Millisecond, 200 * time.Millisecond}
+	var lastErr error
+	for i := range attempts {
+		cmd := execCommand(ctx, dockerCmd, "rm", "-f", target)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			return nil
+		}
+		lower := strings.ToLower(string(out))
+		if strings.Contains(lower, "no such container") {
+			return nil
+		}
+		lastErr = fmt.Errorf("docker rm -f %s: %w\n%s", target, err, out)
+		if !isTransientDockerErr(lower) {
+			return lastErr
+		}
+		if i < len(backoff) {
+			select {
+			case <-ctx.Done():
+				return lastErr
+			case <-time.After(backoff[i]):
+			}
+		}
+	}
+	return lastErr
+}
+
+// isTransientDockerErr reports whether the docker/podman stderr indicates
+// a retryable failure. Pattern matches are case-insensitive — caller
+// lowercases. Conservative: false positives cost only an extra idempotent
+// `docker rm -f` call.
+func isTransientDockerErr(lowercaseOutput string) bool {
+	patterns := []string{
+		"permission denied", // observed: "rootless netns: kill network process: permission denied"
+		"temporarily unavailable",
+		"resource temporarily unavailable",
+		"device or resource busy",
+		"try again",
+		"connection refused", // podman socket transient
+		"i/o timeout",
+	}
+	for _, p := range patterns {
+		if strings.Contains(lowercaseOutput, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // containerName is the deterministic name of a sandbox's demesne sidecar.
 // The persistent (sandbox_create) path discards the Handle, so teardown
 // removes the sidecar by this name instead — see Remove.
@@ -228,12 +287,7 @@ func (h *Handle) Stop(ctx context.Context) error {
 	if h == nil || h.ContainerID == "" {
 		return nil
 	}
-	//nolint:gosec // h.ContainerID is a docker-returned ID
-	cmd := exec.CommandContext(ctx, dockerCmd, "rm", "-f", h.ContainerID)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("docker rm -f %s: %w\n%s", h.ContainerID, err, out)
-	}
-	return nil
+	return dockerRemoveWithRetry(ctx, h.ContainerID)
 }
 
 // Remove force-removes a sandbox's demesne sidecar by its deterministic
@@ -244,17 +298,7 @@ func (h *Handle) Stop(ctx context.Context) error {
 // containers (which accumulate until new sandbox creates fail). Idempotent
 // — a missing container is not an error.
 func Remove(ctx context.Context, sandboxID string) error {
-	name := containerName(sandboxID)
-	//nolint:gosec // name composed from a validated UUID
-	cmd := exec.CommandContext(ctx, dockerCmd, "rm", "-f", name)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		if strings.Contains(strings.ToLower(string(out)), "no such container") {
-			return nil
-		}
-		return fmt.Errorf("docker rm -f %s: %w\n%s", name, err, out)
-	}
-	return nil
+	return dockerRemoveWithRetry(ctx, containerName(sandboxID))
 }
 
 func findEgressSidecar(ctx context.Context, sandboxID string) (string, error) {
