@@ -6,14 +6,59 @@ import (
 
 	"github.com/jbeshir/demesne/internal/agents"
 	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
+	"github.com/jbeshir/demesne/internal/sidecar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEgressOrDefault(t *testing.T) {
-	assert.Equal(t, EgressNone, egressOrDefault("", EgressNone))
-	assert.Equal(t, EgressOpen, egressOrDefault("", EgressOpen))
-	assert.Equal(t, EgressPackageManagers, egressOrDefault(EgressPackageManagers, EgressNone))
+	tests := []struct {
+		name string
+		mode EgressMode
+		def  EgressMode
+		want EgressMode
+	}{
+		{
+			name: "empty uses none default",
+			def:  EgressNone,
+			want: EgressNone,
+		},
+		{
+			name: "empty uses open default",
+			def:  EgressOpen,
+			want: EgressOpen,
+		},
+		{
+			name: "explicit package managers wins",
+			mode: EgressPackageManagers,
+			def:  EgressNone,
+			want: EgressPackageManagers,
+		},
+		{
+			name: "explicit open wins",
+			mode: EgressOpen,
+			def:  EgressNone,
+			want: EgressOpen,
+		},
+		{
+			name: "explicit none wins",
+			mode: EgressNone,
+			def:  EgressOpen,
+			want: EgressNone,
+		},
+		{
+			name: "unknown explicit value wins",
+			mode: EgressMode("custom-egress"),
+			def:  EgressNone,
+			want: EgressMode("custom-egress"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, egressOrDefault(tt.mode, tt.def))
+		})
+	}
 }
 
 // vendorStubAgent is a minimal agents.Agent whose only meaningful method
@@ -49,27 +94,52 @@ func TestBuildProxyConfig(t *testing.T) {
 	const fakeToken = "demesne-agent-fake" //nolint:gosec // test fixture, not a real credential
 	const results = "/host/results"
 
-	t.Run("anthropic", func(t *testing.T) {
-		cfg := r.buildProxyConfig(vendorStubAgent{vendor: agents.ProxyAnthropic}, fakeToken, results, proxyopenai.TokenSet{})
-		require.NotNil(t, cfg.Anthropic)
-		assert.Nil(t, cfg.Codex)
-		assert.Equal(t, fakeToken, cfg.Anthropic.AgentToken)
-		assert.Equal(t, "claude-upstream", cfg.Anthropic.UpstreamToken)
-		assert.Equal(t, results, cfg.Anthropic.ResultsHost)
-	})
+	tests := []struct {
+		name        string
+		vendor      agents.ProxyVendor
+		codexTokens proxyopenai.TokenSet
+		check       func(*testing.T, string, proxyopenai.TokenSet, sidecar.ProxyConfig)
+	}{
+		{
+			name:   "anthropic",
+			vendor: agents.ProxyAnthropic,
+			check: func(t *testing.T, resultsHost string, _ proxyopenai.TokenSet, cfg sidecar.ProxyConfig) {
+				t.Helper()
+				require.NotNil(t, cfg.Anthropic)
+				assert.Nil(t, cfg.Codex)
+				assert.Equal(t, fakeToken, cfg.Anthropic.AgentToken)
+				assert.Equal(t, "claude-upstream", cfg.Anthropic.UpstreamToken)
+				assert.Equal(t, resultsHost, cfg.Anthropic.ResultsHost)
+			},
+		},
+		{
+			name:        "openai",
+			vendor:      agents.ProxyOpenAI,
+			codexTokens: codexAuth,
+			check: func(t *testing.T, resultsHost string, tokens proxyopenai.TokenSet, cfg sidecar.ProxyConfig) {
+				t.Helper()
+				require.NotNil(t, cfg.Codex)
+				assert.Nil(t, cfg.Anthropic)
+				assert.Equal(t, fakeToken, cfg.Codex.AgentToken)
+				assert.Equal(t, tokens, cfg.Codex.Tokens)
+				assert.Equal(t, resultsHost, cfg.Codex.ResultsHost)
+			},
+		},
+		{
+			name:   "unknown vendor yields no proxy",
+			vendor: "nope",
+			check: func(t *testing.T, _ string, _ proxyopenai.TokenSet, cfg sidecar.ProxyConfig) {
+				t.Helper()
+				assert.Nil(t, cfg.Anthropic)
+				assert.Nil(t, cfg.Codex)
+			},
+		},
+	}
 
-	t.Run("openai", func(t *testing.T) {
-		cfg := r.buildProxyConfig(vendorStubAgent{vendor: agents.ProxyOpenAI}, fakeToken, results, codexAuth)
-		require.NotNil(t, cfg.Codex)
-		assert.Nil(t, cfg.Anthropic)
-		assert.Equal(t, fakeToken, cfg.Codex.AgentToken)
-		assert.Equal(t, codexAuth, cfg.Codex.Tokens)
-		assert.Equal(t, results, cfg.Codex.ResultsHost)
-	})
-
-	t.Run("unknown vendor yields no proxy", func(t *testing.T) {
-		cfg := r.buildProxyConfig(vendorStubAgent{vendor: "nope"}, fakeToken, results, proxyopenai.TokenSet{})
-		assert.Nil(t, cfg.Anthropic)
-		assert.Nil(t, cfg.Codex)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := r.buildProxyConfig(vendorStubAgent{vendor: tt.vendor}, fakeToken, results, tt.codexTokens)
+			tt.check(t, results, tt.codexTokens, cfg)
+		})
+	}
 }
