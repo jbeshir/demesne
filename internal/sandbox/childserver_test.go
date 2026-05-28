@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -16,19 +17,104 @@ import (
 // testChildName is the child name reused across the spawn-handler tests.
 const testChildName = "child"
 
+const (
+	testExistingJobID = "job-existing"
+	testNewJobID      = "job-new"
+)
+
 func TestValidateChildName(t *testing.T) {
-	valid := []string{"a", "probe-1", "phase01", "ab-cd-3"}
-	for _, n := range valid {
-		require.NoError(t, validateChildName(n), n)
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{name: "a"},
+		{name: "probe-1"},
+		{name: "phase01"},
+		{name: "ab-cd-3"},
+		{name: strings.Repeat("a", 40)},
+		{name: "a-b"},
+		{name: "a--b"},
+		{name: "", wantErr: true},
+		{name: strings.Repeat("a", 41), wantErr: true},
+		{name: "-", wantErr: true},
+		{name: "--", wantErr: true},
+		{name: "-x", wantErr: true},
+		{name: "x-", wantErr: true},
+		{name: "..", wantErr: true},
+		{name: ".", wantErr: true},
+		{name: "a/b", wantErr: true},
+		{name: "a b", wantErr: true},
+		{name: "a:b", wantErr: true},
+		{name: "../escape", wantErr: true},
+		{name: "my_child.v2", wantErr: true},
+		{name: "ABC", wantErr: true},
+		{name: "a_b", wantErr: true},
+		{name: "a.b", wantErr: true},
 	}
-	// Uppercase, '_', '.', and leading/trailing hyphens are rejected:
-	// they'd make an invalid prevjob-<name> volume name.
-	bad := []string{
-		"", "..", ".", "a/b", "a b", "a:b", "../escape",
-		"my_child.v2", "ABC", "-x", "x-", "a_b", "a.b",
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateChildName(tt.name)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
 	}
-	for _, n := range bad {
-		require.Error(t, validateChildName(n), n)
+}
+
+func TestParentFromRequest(t *testing.T) {
+	tests := []struct {
+		name       string
+		existingID string
+		headerID   string
+		wantID     any
+		wantSame   bool
+	}{
+		{
+			name:       "absent header preserves existing context",
+			existingID: testExistingJobID,
+			wantID:     testExistingJobID,
+			wantSame:   true,
+		},
+		{
+			name:     "absent header leaves empty context unchanged",
+			wantID:   nil,
+			wantSame: true,
+		},
+		{
+			name:       "present header replaces existing parent id",
+			existingID: testExistingJobID,
+			headerID:   testNewJobID,
+			wantID:     testNewJobID,
+		},
+		{
+			name:     "present header sets parent id",
+			headerID: testNewJobID,
+			wantID:   testNewJobID,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tt.existingID != "" {
+				ctx = context.WithValue(ctx, parentKey, tt.existingID)
+			}
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://x/demesne/mcp", nil)
+			require.NoError(t, err)
+			if tt.headerID != "" {
+				req.Header.Set(proxymcp.ParentHeader, tt.headerID)
+			}
+
+			got := parentFromRequest(ctx, req)
+			assert.Equal(t, tt.wantID, got.Value(parentKey))
+			if tt.wantSame {
+				assert.Equal(t, ctx, got)
+			} else {
+				assert.NotEqual(t, ctx, got)
+			}
+		})
 	}
 }
 
