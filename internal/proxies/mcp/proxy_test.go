@@ -15,6 +15,7 @@ import (
 )
 
 const testWorkflowyPath = "/workflowy/mcp"
+const testRequiredErr = "required"
 
 func postJSON(t *testing.T, url, body string) *http.Response {
 	t.Helper()
@@ -27,28 +28,69 @@ func postJSON(t *testing.T, url, body string) *http.Response {
 }
 
 func TestParseBindings(t *testing.T) {
-	t.Run("valid", func(t *testing.T) {
-		raw := `[{"name":"workflowy","listen_port":8089,"path":"/workflowy/mcp"}]`
-		got, err := ParseBindings(raw)
-		require.NoError(t, err)
-		require.Len(t, got, 1)
-		assert.Equal(t, "workflowy", got[0].Name)
-		assert.Equal(t, 8089, got[0].ListenPort)
-		assert.Equal(t, testWorkflowyPath, got[0].Path)
-	})
-	t.Run("empty string yields nil", func(t *testing.T) {
-		got, err := ParseBindings("")
-		require.NoError(t, err)
-		assert.Nil(t, got)
-	})
-	t.Run("malformed json", func(t *testing.T) {
-		_, err := ParseBindings(`[not json]`)
-		assert.Error(t, err)
-	})
-	t.Run("missing fields", func(t *testing.T) {
-		_, err := ParseBindings(`[{"name":"x"}]`)
-		assert.ErrorContains(t, err, "required")
-	})
+	tests := []struct {
+		name    string
+		raw     string
+		want    []Binding
+		wantErr string
+	}{
+		{
+			name: "valid",
+			raw:  `[{"name":"workflowy","listen_port":8089,"path":"/workflowy/mcp"}]`,
+			want: []Binding{{Name: "workflowy", ListenPort: 8089, Path: testWorkflowyPath}},
+		},
+		{
+			name: "multiple bindings preserve order and parent id",
+			raw:  `[{"name":"workflowy","listen_port":8089,"path":"/workflowy/mcp","parent_job_id":"job-1"},{"name":"wanikani","listen_port":8090,"path":"/wanikani/mcp"}]`,
+			want: []Binding{
+				{Name: "workflowy", ListenPort: 8089, Path: testWorkflowyPath, ParentJobID: "job-1"},
+				{Name: "wanikani", ListenPort: 8090, Path: "/wanikani/mcp"},
+			},
+		},
+		{
+			name: "empty string yields nil",
+			raw:  "",
+			want: nil,
+		},
+		{
+			name: "null json yields nil",
+			raw:  `null`,
+			want: nil,
+		},
+		{
+			name:    "malformed json",
+			raw:     `[not json]`,
+			wantErr: "parse",
+		},
+		{
+			name:    "missing name",
+			raw:     `[{"listen_port":8089,"path":"/workflowy/mcp"}]`,
+			wantErr: testRequiredErr,
+		},
+		{
+			name:    "missing listen port",
+			raw:     `[{"name":"workflowy","path":"/workflowy/mcp"}]`,
+			wantErr: testRequiredErr,
+		},
+		{
+			name:    "missing path",
+			raw:     `[{"name":"workflowy","listen_port":8089}]`,
+			wantErr: testRequiredErr,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseBindings(tt.raw)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 // startUnixUpstream serves the given handler on a unix socket in a
