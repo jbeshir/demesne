@@ -15,7 +15,7 @@ import (
 // agents.AgentConfigDir, so the in-sandbox path is codexConfigPath;
 // the wrapper script copies it into CODEX_HOME before exec.
 //
-// The embedded wrapper script (codex-exec.sh) hardcodes the in-sandbox
+// The embedded wrapper script (codex-retry.sh) defaults to the in-sandbox
 // path agents.AgentConfigDir+"/config.toml" when copying this file into
 // CODEX_HOME — keep the two in sync if the basename changes.
 const codexConfigBasename = "config.toml"

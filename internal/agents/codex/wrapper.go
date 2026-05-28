@@ -12,7 +12,7 @@ import (
 // config dir. The runner mounts that dir read-only at
 // agents.AgentConfigDir, so the in-sandbox path is wrapperScriptPath;
 // the provider's Command runs codex through it via `sh <wrapperScriptPath>`.
-const wrapperScriptBasename = "codex-exec.sh"
+const wrapperScriptBasename = "codex-retry.sh"
 
 // wrapperScriptPath is the in-sandbox absolute path of the wrapper under
 // the read-only config-dir mount.
