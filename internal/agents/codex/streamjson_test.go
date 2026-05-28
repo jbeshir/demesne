@@ -25,13 +25,34 @@ func TestResultText_LastAgentMessageWins(t *testing.T) {
 	assert.Equal(t, "final answer", got)
 }
 
-func TestResultText_NonAgentMessageItemIgnored(t *testing.T) {
-	// command_execution items should not contribute to the result.
-	transcript := `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","text":"ls output"}}
+func TestResultText_IgnoresNonAnswerEvents(t *testing.T) {
+	tests := []struct {
+		name       string
+		transcript string
+		want       string
+	}{
+		{
+			name: "non agent item ignored",
+			transcript: `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","text":"ls output"}}
 {"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"the answer"}}
-`
-	got := codexAgent{}.ResultText([]byte(transcript))
-	assert.Equal(t, "the answer", got)
+`,
+			want: "the answer",
+		},
+		{
+			name: "agent looking payload on wrong event type ignored",
+			transcript: `{"type":"item.started","item":{"id":"item_1","type":"agent_message","text":"not final"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"the answer"}}
+`,
+			want: "the answer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := codexAgent{}.ResultText([]byte(tt.transcript))
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestResultText_EmptyInputReturnsEmpty(t *testing.T) {
@@ -40,5 +61,29 @@ func TestResultText_EmptyInputReturnsEmpty(t *testing.T) {
 }
 
 func TestResultText_SkipsMalformedLines(t *testing.T) {
-	assert.Empty(t, codexAgent{}.ResultText([]byte("not json\n{also not}\n")))
+	tests := []struct {
+		name       string
+		transcript string
+		want       string
+	}{
+		{
+			name:       "all malformed",
+			transcript: "not json\n{also not}\n",
+			want:       "",
+		},
+		{
+			name: "malformed followed by valid event",
+			transcript: `not json
+{also not}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"valid answer"}}
+`,
+			want: "valid answer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, codexAgent{}.ResultText([]byte(tt.transcript)))
+		})
+	}
 }
