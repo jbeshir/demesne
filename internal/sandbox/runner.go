@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	opensandbox "github.com/alibaba/OpenSandbox/sdks/sandbox/go"
@@ -51,6 +54,29 @@ const (
 	mountWorkspace      = "/workspace"
 	outVolumeName       = "out"
 )
+
+// createSandboxMaxAttempts is the maximum number of times launchSandbox will
+// call CreateSandbox before giving up on transient errors.
+const createSandboxMaxAttempts = 3
+
+// Both substrings must appear in the error to count as the buildah-copier
+// race (see FINDINGS.md §5b for why "broken pipe" alone over-matches).
+const (
+	createSandboxTransientCode    = "DOCKER::SANDBOX_EXECD_DISTRIBUTION_FAILED"
+	createSandboxTransientMessage = "passing bulk input to subprocess"
+)
+
+// createSandboxFn is the SDK call site. Tests replace this to inject failures.
+var createSandboxFn = opensandbox.CreateSandbox
+
+// createSandboxBackoffs holds the inter-attempt sleeps. Length is
+// createSandboxMaxAttempts-1 — after the final attempt we return without sleeping.
+// Production: 500ms then 1.5s. Tests shorten or zero this out.
+var createSandboxBackoffs = []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond}
+
+// dockerRemoveFn force-removes a leaked partial container by ID between
+// retry attempts. Best-effort; failure is logged and ignored. Test seam.
+var dockerRemoveFn = dockerForceRemove
 
 // Runner orchestrates sandbox operations: it validates inputs, talks to the
 // OpenSandbox lifecycle server via its SDK, and surfaces results to the MCP
@@ -154,10 +180,12 @@ func (r *Runner) attach(ctx context.Context, sandboxID SandboxID) (*opensandbox.
 	return sb, nil
 }
 
-// launchSandbox calls opensandbox.CreateSandbox with demesne's standard
-// envelope: metadata labels, GOPROXY env, and the given image/mounts/policy.
-// Both prepareSandbox and createSandbox delegate here so there is exactly
-// one call site for sandbox creation.
+// launchSandbox calls CreateSandbox with demesne's standard envelope:
+// metadata labels, GOPROXY env, and the given image/mounts/policy. It retries
+// up to createSandboxMaxAttempts times on the known buildah-copier broken-pipe
+// race, cleaning up any leaked partial container between attempts. Both
+// prepareSandbox and createSandbox delegate here so there is exactly one call
+// site for sandbox creation.
 func (r *Runner) launchSandbox(
 	ctx context.Context,
 	image ImageURI,
@@ -167,7 +195,8 @@ func (r *Runner) launchSandbox(
 	jobID JobID,
 	tool string,
 ) (*opensandbox.Sandbox, error) {
-	sb, err := opensandbox.CreateSandbox(ctx, r.connectionConfig(), opensandbox.SandboxCreateOptions{
+	conn := r.connectionConfig()
+	opts := opensandbox.SandboxCreateOptions{
 		Image:          string(image),
 		Volumes:        mounts,
 		NetworkPolicy:  policy,
@@ -177,11 +206,32 @@ func (r *Runner) launchSandbox(
 			metadataDemesneJob:  string(jobID),
 			metadataDemesneTool: tool,
 		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create sandbox: %w", err)
 	}
-	return sb, nil
+	for attempt := range createSandboxMaxAttempts {
+		sb, err := createSandboxFn(ctx, conn, opts)
+		if err == nil {
+			return sb, nil
+		}
+		if !isCreateSandboxTransient(err) {
+			return nil, fmt.Errorf("create sandbox: %w", err)
+		}
+		if attempt == createSandboxMaxAttempts-1 {
+			return nil, fmt.Errorf("create sandbox after %d attempts: %w", createSandboxMaxAttempts, err)
+		}
+		if id := containerIDFromError(err); id != "" {
+			if rmErr := dockerRemoveFn(ctx, id); rmErr != nil {
+				log.Printf("launchSandbox: cleanup of partial container %s after attempt %d failed: %v",
+					id, attempt+1, rmErr)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("create sandbox: %w", ctx.Err())
+		case <-time.After(createSandboxBackoffs[attempt]):
+		}
+	}
+	// Unreachable: loop always returns inside.
+	return nil, fmt.Errorf("create sandbox: unexpected loop exit")
 }
 
 // sandboxPrepOptions captures everything prepareSandbox needs. Used by
@@ -363,4 +413,54 @@ func (r *Runner) resolveMounts(files, directories []string) ([]opensandbox.Volum
 		}
 	}
 	return volumes, nil
+}
+
+// isCreateSandboxTransient reports whether err is the known buildah-copier
+// broken-pipe race (buildah#6573, fixed in v1.44.0 — not yet vendored into
+// any podman release). BOTH substrings must appear: the DOCKER code AND the
+// "passing bulk input to subprocess" message body. Matching on "broken pipe"
+// alone would over-match unrelated pipe errors.
+func isCreateSandboxTransient(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, createSandboxTransientCode) &&
+		strings.Contains(msg, createSandboxTransientMessage)
+}
+
+// containerIDFromError extracts the docker container ID from the URL that
+// OpenSandbox includes in the put_archive failure message:
+//
+//	500 Server Error for http+docker://localhost/v1.41/containers/<id>/archive?path=%2F
+//
+// Returns "" if no match. The ID is the hex container ID; the regex accepts
+// lowercase hex of length 8..64 to cover short and full IDs.
+func containerIDFromError(err error) string {
+	if err == nil {
+		return ""
+	}
+	m := containerIDRegexp.FindStringSubmatch(err.Error())
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+var containerIDRegexp = regexp.MustCompile(`/containers/([0-9a-f]{8,64})/archive`)
+
+// dockerForceRemove is the default dockerRemoveFn. Best-effort: a missing
+// container counts as success (idempotent); other errors are returned so the
+// caller can log them. Single docker call per invocation — the outer retry
+// loop already controls cadence.
+func dockerForceRemove(ctx context.Context, containerID string) error {
+	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", containerID) //nolint:gosec // containerID is hex-validated above
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(strings.ToLower(string(out)), "no such container") {
+		return nil
+	}
+	return fmt.Errorf("docker rm -f %s: %w\n%s", containerID, err, out)
 }
