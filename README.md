@@ -1,5 +1,9 @@
 # Demesne
 
+<!-- mcp-name: io.github.jbeshir/demesne-mcp -->
+
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jbeshir/demesne/badge)](https://scorecard.dev/viewer/?uri=github.com/jbeshir/demesne)
+
 A Go [Model Context Protocol](https://modelcontextprotocol.io/) server that lets MCP-speaking AI agents run untrusted shell commands and scripts in disposable containers via [OpenSandbox](https://github.com/alibaba/OpenSandbox). Outbound network access is restricted by default and host paths are only exposed via an explicit allowlist.
 
 ## Status

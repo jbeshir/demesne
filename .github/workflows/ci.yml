@@ -31,6 +31,19 @@ jobs:
       - name: Run tests
         run: make test-short
 
+  test-race:
+    name: Test (race detector)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run tests
+        run: make test-race
+
   build:
     name: Build
     runs-on: ubuntu-latest
