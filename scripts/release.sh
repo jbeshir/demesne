@@ -47,8 +47,13 @@ build_archive() {
   fi
 }
 
+# The sandbox-side helper binary embedded by `go:embed` is linux/amd64, so the
+# host's container runtime must run linux/amd64 containers. We ship native
+# host binaries for the OS/arch combos where that runtime path is standard:
+# linux/amd64 natively, darwin/amd64 + windows/amd64 via the Docker/Podman
+# Machine VM, darwin/arm64 via Rosetta. linux/arm64 needs `qemu-user-static`
+# binfmt and is not shipped. See README §Requirements.
 build_archive linux   amd64 bin/demesne-mcp-linux-amd64        demesne-mcp     tar
-build_archive linux   arm64 bin/demesne-mcp-linux-arm64        demesne-mcp     tar
 build_archive darwin  amd64 bin/demesne-mcp-darwin-amd64       demesne-mcp     tar
 build_archive darwin  arm64 bin/demesne-mcp-darwin-arm64       demesne-mcp     tar
 build_archive windows amd64 bin/demesne-mcp-windows-amd64.exe  demesne-mcp.exe zip
@@ -99,7 +104,6 @@ fi
 {
   printf '%s\n' "$NOTES_BODY"
   printf '\n## Caveats\n\n'
-  printf -- '- The embedded sidecar is `linux/amd64` only; macOS, Windows, and linux/arm64 builds currently ship without a working sidecar. The demesne MCP server itself runs, but features that require the per-sandbox sidecar (Anthropic proxy, MCP tunnel, GOPROXY) will fail until the calling host can run a `linux/amd64` sidecar.\n'
   printf -- '- This is a pre-1.0 release; APIs and the tool surface may change.\n'
 } > "$NOTES_FILE"
 
