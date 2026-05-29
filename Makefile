@@ -58,7 +58,6 @@ build: sidecar-binary
 .PHONY: build-all-platforms
 build-all-platforms: sidecar-binary
 	GOOS=linux GOARCH=amd64 go build -o bin/demesne-mcp-linux-amd64 ./cmd/demesne-mcp
-	GOOS=linux GOARCH=arm64 go build -o bin/demesne-mcp-linux-arm64 ./cmd/demesne-mcp
 	GOOS=darwin GOARCH=amd64 go build -o bin/demesne-mcp-darwin-amd64 ./cmd/demesne-mcp
 	GOOS=darwin GOARCH=arm64 go build -o bin/demesne-mcp-darwin-arm64 ./cmd/demesne-mcp
 	GOOS=windows GOARCH=amd64 go build -o bin/demesne-mcp-windows-amd64.exe ./cmd/demesne-mcp

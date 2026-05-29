@@ -6,6 +6,16 @@
 
 A Go [Model Context Protocol](https://modelcontextprotocol.io/) server that lets MCP-speaking AI agents run untrusted shell commands and scripts in disposable containers via [OpenSandbox](https://github.com/alibaba/OpenSandbox). Outbound network access is restricted by default and host paths are only exposed via an explicit allowlist.
 
+## Requirements
+
+Demesne embeds a `linux/amd64` helper binary that runs inside every sandbox container, so the host's container runtime must be able to execute `linux/amd64` containers. This is the standard path on:
+
+- **linux/amd64** — native.
+- **darwin/amd64** and **windows/amd64** — via the Docker/Podman Machine Linux VM.
+- **darwin/arm64 (Apple Silicon)** — via Rosetta, which Docker Desktop enables by default and Podman supports via `podman machine init --rosetta`.
+
+Releases are published for `linux/amd64`, `darwin/amd64`, `darwin/arm64`, and `windows/amd64`. **Only `linux/amd64` is actively tested**; the other platforms build cleanly but are best-effort. linux/arm64 is reachable with `qemu-user-static` binfmt but no native binary is shipped.
+
 ## Status
 
 Milestones 1–6 shipped: `sandbox_script` (single-shot), the persistent-sandbox lifecycle (`sandbox_create` / `exec` / `upload` / `download` / `destroy`), `sandbox_agent` — an AI coding agent (currently the Claude Code CLI) in a fresh sandbox with outbound HTTPS funnelled through a host-side per-vendor API proxy, and `sandbox_research` — a long-running research variant with no input mounts and unrestricted outbound internet. The proxy parses each agent-model API response for usage events and writes `usage.json` to the run's `/out` directory; the reported `cost_usd` is indicative. M5 added the **host MCP proxy**: demesne re-exposes a curated, read-only subset of the stdio MCP servers in your Claude Code config to sandboxed agents, reached through a per-sandbox tunnel under their native tool names. M6 added **child sandboxes**: demesne re-exposes its *own* tools to agents as an in-process `demesne` MCP server on that same proxy, so an agent can spawn child sandboxes that inherit its inputs and shared `/workspace` and nest their output under `/out/child/<name>`; a per-job `results.json` rolls up the tree's cost. See [ROADMAP.md](ROADMAP.md).
