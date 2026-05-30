@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": 6,
+  "method": "tools/call",
+  "params": {
+    "name": "sandbox_destroy",
+    "arguments": {
+      "sandbox_id": "SANDBOX_ID_HERE"
+    }
+  }
+}

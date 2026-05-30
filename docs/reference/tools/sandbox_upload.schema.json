@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jbeshir/demesne/docs/reference/tools/sandbox_upload.schema.json",
+  "title": "sandbox_upload input",
+  "type": "object",
+  "properties": {
+    "sandbox_id": {
+      "type": "string",
+      "description": "Sandbox handle returned by sandbox_create."
+    },
+    "src": {
+      "type": "string",
+      "description": "Host file path to upload. Must be absolute and inside DEMESNE_ALLOWED_PATHS. Symlinks are resolved before the check."
+    },
+    "dst": {
+      "type": "string",
+      "description": "Destination path inside the sandbox. Must be absolute. Parent directory must already exist."
+    }
+  },
+  "required": ["sandbox_id", "src", "dst"],
+  "additionalProperties": false
+}

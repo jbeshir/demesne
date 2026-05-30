@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jbeshir/demesne/docs/reference/tools/sandbox_create.schema.json",
+  "title": "sandbox_create input",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "string",
+      "description": "Container image. One of: 'node' (node:22), 'python' (python:3.12), 'go' (golang:1), 'anaconda' (continuumio/anaconda3:latest, default).",
+      "enum": ["node", "python", "go", "anaconda"]
+    },
+    "egress": {
+      "type": "string",
+      "description": "Outbound network policy. 'package-managers' (default) allows npm, PyPI, and conda registries; 'none' denies all egress.",
+      "enum": ["package-managers", "none"],
+      "default": "package-managers"
+    },
+    "files": {
+      "type": "array",
+      "description": "Host file paths to mount read-only into /in/<basename>. Each path must be absolute and inside DEMESNE_ALLOWED_PATHS.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "directories": {
+      "type": "array",
+      "description": "Host directory paths to mount read-only into /in/<basename>. Each path must be absolute and inside DEMESNE_ALLOWED_PATHS.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

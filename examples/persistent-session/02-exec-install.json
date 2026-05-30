@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "sandbox_exec",
+    "arguments": {
+      "sandbox_id": "SANDBOX_ID_HERE",
+      "command": "pip install --quiet pandas"
+    }
+  }
+}

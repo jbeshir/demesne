@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jbeshir/demesne/docs/reference/tools/sandbox_exec.schema.json",
+  "title": "sandbox_exec input",
+  "type": "object",
+  "properties": {
+    "sandbox_id": {
+      "type": "string",
+      "description": "Sandbox handle returned by sandbox_create."
+    },
+    "command": {
+      "type": "string",
+      "description": "Shell command to run inside the sandbox. Executed with /bin/sh -c. Working directory is /out."
+    }
+  },
+  "required": ["sandbox_id", "command"],
+  "additionalProperties": false
+}

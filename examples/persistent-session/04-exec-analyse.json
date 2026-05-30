@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "sandbox_exec",
+    "arguments": {
+      "sandbox_id": "SANDBOX_ID_HERE",
+      "command": "python -c 'import pandas as pd; df = pd.read_csv(\"/data.csv\"); print(df.describe()); df.describe().to_json(\"/results.json\")'"
+    }
+  }
+}
