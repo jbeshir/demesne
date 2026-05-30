@@ -61,7 +61,7 @@ type Config struct {
 
 	// Owner is the per-instance identity computed at startup and written
 	// into each sandbox's metadata as demesne.owner. Format:
-	// "boot_id:pid:starttime" — unique across reboots and PID reuse.
+	// "boot_id_pid_starttime" — unique across reboots and PID reuse.
 	// Populated by main via ComputeOwner(); not env-derived.
 	Owner string
 }

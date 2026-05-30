@@ -1,7 +1,9 @@
 // Package proxies defines the registry of host-side proxies that the
-// per-sandbox sidecar runs. Each upstream-specific subpackage (Anthropic
-// for the Claude API, future ones for MCP, Go modules, etc.) registers
-// itself from init.
+// per-sandbox sidecar runs. Four proxy types are currently registered:
+// Anthropic API (internal/proxies/anthropic, for the Claude API),
+// OpenAI/Codex (internal/proxies/openai, for the Codex CLI),
+// MCP tunnel (internal/proxies/mcp), and Go-module proxy
+// (internal/proxies/goproxy). Each subpackage registers itself from init.
 //
 // The demesne-mcp binary blank-imports each proxy package so its
 // EgressHosts contribute to the per-sandbox egress allowlist. The

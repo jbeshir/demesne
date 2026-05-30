@@ -95,7 +95,7 @@ func run() error {
 	}
 
 	// Register signal disposition before creating the server so that
-	// SIGHUP (reload/graceful-drain), SIGTERM, and SIGINT all cancel the
+	// SIGHUP (graceful shutdown), SIGTERM, and SIGINT all cancel the
 	// context passed to RunContext. The defers above (aggregator shutdown,
 	// socket-dir cleanup) were registered first, so they unwind AFTER
 	// stop() restores default signal handlers.

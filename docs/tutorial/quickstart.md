@@ -45,6 +45,19 @@ uvx opensandbox-server --config ~/.sandbox.toml
 Feed the lifecycle host:port and API key to Demesne via `OPEN_SANDBOX_DOMAIN`
 and `OPEN_SANDBOX_API_KEY`.
 
+OpenSandbox is **long-running** — it must stay up for the entire demesne session. The remaining steps assume it is still listening on `:8080`. Pick whichever approach suits your workflow:
+
+1. **(Recommended)** Run it in its own dedicated terminal tab and leave it there.
+2. **Background it** (logs to a file):
+   ```bash
+   nohup uvx opensandbox-server --config ~/.sandbox.toml >/tmp/opensandbox.log 2>&1 &
+   # Follow logs with: tail -f /tmp/opensandbox.log
+   ```
+3. **Use tmux/screen** (keeps it recoverable):
+   ```bash
+   tmux new-session -d -s opensandbox 'uvx opensandbox-server --config ~/.sandbox.toml'
+   ```
+
 ### Required `~/.sandbox.toml` edits
 
 The packaged docker example defaults are too permissive for use as a security
@@ -85,13 +98,11 @@ export OPEN_SANDBOX_API_KEY=your-secret-key
 export DEMESNE_ALLOWED_PATHS=/tmp
 ```
 
-Then verify the binary starts and speaks JSON-RPC over stdio:
+Optionally verify the binary starts cleanly (this is a smoke-check — Ctrl-C to exit; the real run happens in Step 4 when Claude Code spawns it):
 
 ```bash
 demesne-mcp
 ```
-
-Leave it running in a terminal or let the MCP client manage the process (see Step 4).
 
 #### Expected output
 
@@ -99,7 +110,7 @@ Leave it running in a terminal or let the MCP client manage the process (see Ste
 # (demesne-mcp blocks, waiting for JSON-RPC on stdin)
 ```
 
-No output on startup is correct — it is waiting for a client.
+No output on startup is correct — it is waiting for a client. This manual invocation is optional and just confirms the binary is functional. Step 4 (Claude Code) is what actually runs `demesne-mcp` for real.
 
 ---
 

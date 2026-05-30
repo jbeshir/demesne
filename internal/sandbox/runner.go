@@ -60,7 +60,9 @@ const (
 const createSandboxMaxAttempts = 3
 
 // Both substrings must appear in the error to count as the buildah-copier
-// race (see FINDINGS.md §5b for why "broken pipe" alone over-matches).
+// race; "broken pipe" alone over-matches unrelated pipe errors, so requiring
+// BOTH the distribution-failed code AND the bulk-input substring keeps the
+// match specific to the buildah-copier race.
 const (
 	createSandboxTransientCode    = "DOCKER::SANDBOX_EXECD_DISTRIBUTION_FAILED"
 	createSandboxTransientMessage = "passing bulk input to subprocess"

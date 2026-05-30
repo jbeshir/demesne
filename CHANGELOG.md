@@ -7,9 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- (nothing yet)
-
 ## [M6-demesne-in-sandbox]
 
 ### Added

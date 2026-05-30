@@ -30,6 +30,10 @@ test: sidecar-binary
 test-race: sidecar-binary
 	go test -v -race -short ./...
 
+.PHONY: test-cover
+test-cover: sidecar-binary
+	go test -short -coverprofile=coverage.out ./...
+
 .PHONY: test-integration
 test-integration: sidecar-binary .env
 	go tool godotenv -f .env go test -v -tags integration ./internal/sandbox/

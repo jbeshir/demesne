@@ -186,6 +186,6 @@ func Lookup(name string) (Agent, error) {
 }
 
 // DefaultAgent is the name resolved when sandbox_agent's `agent`
-// parameter is left empty. Anthropic's claude-code agent is the only
-// provider demesne ships in M3.
+// parameter is left empty. claude-code is the default provider; demesne
+// also ships codex as an experimental provider.
 const DefaultAgent = "claude-code"
