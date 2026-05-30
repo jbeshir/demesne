@@ -11,14 +11,12 @@ Run a shell command in an existing sandbox.
 
 ## Annotations
 
-| Hint | Logical value | Currently set in code? | Rationale |
-|------|--------------|------------------------|-----------|
-| `readOnlyHint` | `false` | No (not declared in tool registration) | Executes arbitrary commands that can mutate the sandbox filesystem. |
-| `destructiveHint` | `true` | No (not declared in tool registration) | Can delete files inside the sandbox and mutate persistent sandbox state; the TTL is also refreshed by 24h before the command runs. |
-| `idempotentHint` | `false` | No (not declared in tool registration) | Running the same command twice can produce different results. |
-| `openWorldHint` | `true` | No (not declared in tool registration) | The sandbox retains the egress policy set at `sandbox_create` time; with `package-managers` it can reach registries on the open internet. |
-
-These values are documented here; wiring them into the Go tool registration is a follow-up code item recorded in CHANGES.md.
+| Hint | Value | Rationale |
+|------|-------|-----------|
+| `readOnlyHint` | `false` | Executes arbitrary commands that can mutate the sandbox filesystem. |
+| `destructiveHint` | `true` | Can delete files inside the sandbox and mutate persistent sandbox state; the TTL is also refreshed by 24h before the command runs. |
+| `idempotentHint` | `false` | Running the same command twice can produce different results. |
+| `openWorldHint` | `true` | The sandbox retains the egress policy set at `sandbox_create` time; with `package-managers` it can reach registries on the open internet. |
 
 ## Sample request
 

@@ -92,6 +92,10 @@ func (s *Server) registerTools() {
 			mcp.Description(directoriesParamDescription),
 			mcp.Items(stringArrayItems()),
 		),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
 	), s.handleSandboxScript)
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxCreate,
@@ -106,6 +110,10 @@ func (s *Server) registerTools() {
 			mcp.Description(directoriesParamDescription),
 			mcp.Items(stringArrayItems()),
 		),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
 	), s.handleSandboxCreate)
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxExec,
@@ -121,6 +129,10 @@ func (s *Server) registerTools() {
 					"Executed with /bin/sh -c. Working directory is /out.",
 			),
 		),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
 	), s.handleSandboxExec)
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxUpload,
@@ -143,6 +155,10 @@ func (s *Server) registerTools() {
 					"Parent directory must already exist.",
 			),
 		),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 	), s.handleSandboxUpload)
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxDownload,
@@ -155,6 +171,10 @@ func (s *Server) registerTools() {
 			mcp.Required(),
 			mcp.Description("Absolute path inside the sandbox to download."),
 		),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 	), s.handleSandboxDownload)
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxDestroy,
@@ -163,6 +183,10 @@ func (s *Server) registerTools() {
 			mcp.Required(),
 			mcp.Description(sandboxHandleDesc),
 		),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 	), s.handleSandboxDestroy)
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxAgent,
@@ -208,6 +232,10 @@ func (s *Server) registerTools() {
 			mcp.Description(directoriesParamDescription),
 			mcp.Items(stringArrayItems()),
 		),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
 	), s.handleSandboxAgent)
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxResearch,
@@ -235,6 +263,10 @@ func (s *Server) registerTools() {
 					"auto-generated environment section.",
 			),
 		),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
 	), s.handleSandboxResearch)
 }
 

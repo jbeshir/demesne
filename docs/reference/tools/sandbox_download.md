@@ -11,14 +11,12 @@ Copy a file out of an existing sandbox to the host.
 
 ## Annotations
 
-| Hint | Logical value | Currently set in code? | Rationale |
-|------|--------------|------------------------|-----------|
-| `readOnlyHint` | `true` | No (not declared in tool registration) | Does not mutate the sandbox; only reads a file from it. The file is written to `<output_dir>/downloads/<basename>` on the host, but that directory is the sandbox's own output area that the caller already controls. Per MCP spec semantics, `readOnlyHint` concerns the tool's *environment* (the sandbox), and writing to the caller's designated scratch dir does not violate read-only intent. Note: if your client interprets `readOnlyHint` strictly as "no host filesystem writes at all", treat this tool as read-write. |
-| `destructiveHint` | `false` | No (not declared in tool registration) | Does not destroy or overwrite any data the caller did not produce. |
-| `idempotentHint` | `true` | No (not declared in tool registration) | Downloading the same `src` repeatedly overwrites the same host destination path with the same contents. |
-| `openWorldHint` | `false` | No (not declared in tool registration) | Operates sandbox-internally; no outbound network access is involved. |
-
-These values are documented here; wiring them into the Go tool registration is a follow-up code item recorded in CHANGES.md.
+| Hint | Value | Rationale |
+|------|-------|-----------|
+| `readOnlyHint` | `true` | Does not mutate the sandbox; only reads a file from it. The file is written to `<output_dir>/downloads/<basename>` on the host, but that directory is the sandbox's own output area that the caller already controls. Per MCP spec semantics, `readOnlyHint` concerns the tool's *environment* (the sandbox), and writing to the caller's designated scratch dir does not violate read-only intent. Note: if your client interprets `readOnlyHint` strictly as "no host filesystem writes at all", treat this tool as read-write. |
+| `destructiveHint` | `false` | Does not destroy or overwrite any data the caller did not produce. |
+| `idempotentHint` | `true` | Downloading the same `src` repeatedly overwrites the same host destination path with the same contents. |
+| `openWorldHint` | `false` | Operates sandbox-internally; no outbound network access is involved. |
 
 ## Sample request
 
