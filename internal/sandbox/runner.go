@@ -156,18 +156,25 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 	}, nil
 }
 
-// connectionConfig packages the Runner's OpenSandbox connection settings
-// into the SDK's shape. Used by every entry point that talks to OpenSandbox.
-func (r *Runner) connectionConfig() opensandbox.ConnectionConfig {
+// connectionConfigFor builds an OpenSandbox connection config from a Config.
+// Extracted from Runner.connectionConfig so the startup reaper can build a
+// connection without needing a Runner instance.
+func connectionConfigFor(cfg Config) opensandbox.ConnectionConfig {
 	return opensandbox.ConnectionConfig{
-		Domain:   r.cfg.OpenSandboxDomain,
-		Protocol: r.cfg.OpenSandboxProtocol,
-		APIKey:   r.cfg.OpenSandboxAPIKey,
+		Domain:   cfg.OpenSandboxDomain,
+		Protocol: cfg.OpenSandboxProtocol,
+		APIKey:   cfg.OpenSandboxAPIKey,
 		// The SDK default is 30s, which kills long-running RunCommand SSE
 		// reads (agent tasks and data jobs both). Match commandTimeout so
 		// the transport never expires before the in-sandbox command does.
 		RequestTimeout: commandTimeout,
 	}
+}
+
+// connectionConfig packages the Runner's OpenSandbox connection settings
+// into the SDK's shape. Used by every entry point that talks to OpenSandbox.
+func (r *Runner) connectionConfig() opensandbox.ConnectionConfig {
+	return connectionConfigFor(r.cfg)
 }
 
 // attach re-binds to an existing sandbox by ID. Errors are wrapped with the
@@ -196,16 +203,20 @@ func (r *Runner) launchSandbox(
 	tool string,
 ) (*opensandbox.Sandbox, error) {
 	conn := r.connectionConfig()
+	meta := map[string]string{
+		metadataDemesneJob:  string(jobID),
+		metadataDemesneTool: tool,
+	}
+	if r.cfg.Owner != "" {
+		meta[metadataDemesneOwner] = r.cfg.Owner
+	}
 	opts := opensandbox.SandboxCreateOptions{
 		Image:          string(image),
 		Volumes:        mounts,
 		NetworkPolicy:  policy,
 		TimeoutSeconds: &timeoutSec,
 		Env:            sandboxEnv(),
-		Metadata: map[string]string{
-			metadataDemesneJob:  string(jobID),
-			metadataDemesneTool: tool,
-		},
+		Metadata:       meta,
 	}
 	for attempt := range createSandboxMaxAttempts {
 		sb, err := createSandboxFn(ctx, conn, opts)

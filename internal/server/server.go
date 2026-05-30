@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"os"
 
 	"github.com/jbeshir/demesne/internal/sandbox"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -57,10 +58,17 @@ func NewServer(runner Runner) *Server {
 	return s
 }
 
-// Run starts the MCP server with stdio transport.
-func (s *Server) Run() error {
-	return server.ServeStdio(s.mcpServer)
+// RunContext starts the MCP server with stdio transport, stopping when ctx is cancelled.
+// SIGHUP (and SIGINT/SIGTERM) cancellation flows through Listen, which drains
+// in-flight tool-call workers via workerWg.Wait() before returning — so deferred
+// killSandbox / sidecar.Remove calls in the runner complete cleanly.
+func (s *Server) RunContext(ctx context.Context) error {
+	stdioSrv := server.NewStdioServer(s.mcpServer)
+	return stdioSrv.Listen(ctx, os.Stdin, os.Stdout)
 }
+
+// Run starts the MCP server with stdio transport.
+func (s *Server) Run() error { return s.RunContext(context.Background()) }
 
 func stringArrayItems() map[string]any { return map[string]any{"type": "string"} }
 
