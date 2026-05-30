@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "sandbox_download",
+    "arguments": {
+      "sandbox_id": "SANDBOX_ID_HERE",
+      "src": "/results.json"
+    }
+  }
+}

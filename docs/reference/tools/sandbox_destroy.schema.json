@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jbeshir/demesne/docs/reference/tools/sandbox_destroy.schema.json",
+  "title": "sandbox_destroy input",
+  "type": "object",
+  "properties": {
+    "sandbox_id": {
+      "type": "string",
+      "description": "Sandbox handle returned by sandbox_create."
+    }
+  },
+  "required": ["sandbox_id"],
+  "additionalProperties": false
+}

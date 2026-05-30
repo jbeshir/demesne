@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jbeshir/demesne/docs/reference/tools/sandbox_agent.schema.json",
+  "title": "sandbox_agent input",
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "description": "Task for the agent. Free-form text."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent provider. 'claude-code' (default) or 'codex' (OpenAI Codex CLI, experimental). Defaults to 'claude-code'."
+    },
+    "model": {
+      "type": "string",
+      "description": "Model for the agent. Provider-specific: claude-code uses 'opus', 'sonnet' (default), or 'haiku'; codex uses the gpt-5.x family."
+    },
+    "preamble": {
+      "type": "string",
+      "description": "Optional prose prepended verbatim to the generated agent context file (e.g. CLAUDE.md for claude-code) before the auto-generated environment section."
+    },
+    "egress": {
+      "type": "string",
+      "description": "Additional outbound network policy. 'none' (default) means only the agent-vendor API proxy; 'package-managers' also allows npm/PyPI/conda registries. 'open' is rejected.",
+      "enum": ["none", "package-managers"],
+      "default": "none"
+    },
+    "files": {
+      "type": "array",
+      "description": "Host file paths to mount read-only into /in/<basename>. Each path must be absolute and inside DEMESNE_ALLOWED_PATHS.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "directories": {
+      "type": "array",
+      "description": "Host directory paths to mount read-only into /in/<basename>. Each path must be absolute and inside DEMESNE_ALLOWED_PATHS.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["prompt"],
+  "additionalProperties": false
+}

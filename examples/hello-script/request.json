@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "sandbox_script",
+    "arguments": {
+      "command": "cat /in/greeting.txt && echo \"--- ran in $(uname -a)\"",
+      "image": "anaconda",
+      "egress": "none",
+      "files": ["/tmp/demesne-example/greeting.txt"]
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jbeshir/demesne/docs/reference/tools/sandbox_research.schema.json",
+  "title": "sandbox_research input",
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "description": "Research task for the agent. Free-form text."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent provider. 'claude-code' (default) or 'codex' (OpenAI Codex CLI, experimental). Defaults to 'claude-code'."
+    },
+    "model": {
+      "type": "string",
+      "description": "Model for the agent. Provider-specific: claude-code uses 'opus', 'sonnet' (default), or 'haiku'; codex uses the gpt-5.x family."
+    },
+    "preamble": {
+      "type": "string",
+      "description": "Optional prose prepended verbatim to the generated agent context file (e.g. CLAUDE.md for claude-code) before the auto-generated environment section."
+    }
+  },
+  "required": ["prompt"],
+  "additionalProperties": false
+}
