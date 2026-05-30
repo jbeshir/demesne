@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"sort"
 )
@@ -22,6 +23,9 @@ import (
 // skip during discovery — it is the demesne MCP server itself,
 // re-proxying it would loop.
 const DemesneServerName = "demesne"
+
+// transportStdio is the only MCP transport demesne currently supports.
+const transportStdio = "stdio"
 
 // UpstreamSpec describes one host-side stdio MCP server discovered
 // from the Claude Code MCP config.
@@ -54,8 +58,8 @@ type claudeMCPServer struct {
 // path and returns the stdio server entries demesne should be
 // willing to spawn — sorted alphabetically by Name for stable
 // downstream ordering. The "demesne" self-entry is dropped to
-// prevent self-loop. HTTP/SSE entries are dropped (out of scope
-// for M5). Missing or malformed files return an empty slice with
+// prevent self-loop. HTTP/SSE entries are dropped with a warning (only stdio is supported today).
+// Missing or malformed files return an empty slice with
 // nil error so demesne-mcp can start without host MCP tools.
 func DiscoverUpstreams(path string) ([]UpstreamSpec, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // path comes from operator config
@@ -78,6 +82,10 @@ func parseUpstreams(data []byte) ([]UpstreamSpec, error) {
 		if name == DemesneServerName {
 			continue
 		}
+		if s.Type != "" && s.Type != transportStdio {
+			log.Printf("mcpproxy: skipping MCP server %q: transport %q is not yet supported (only stdio)", name, s.Type)
+			continue
+		}
 		if !isStdio(s) {
 			continue
 		}
@@ -96,7 +104,7 @@ func isStdio(s claudeMCPServer) bool {
 	if s.Command == "" {
 		return false
 	}
-	if s.Type != "" && s.Type != "stdio" {
+	if s.Type != "" && s.Type != transportStdio {
 		return false
 	}
 	return true
