@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 
 	// Side-effect imports: register the claude-code agent and the
@@ -31,6 +34,24 @@ func run() error {
 	cfg, err := sandbox.LoadConfigFromEnv()
 	if err != nil {
 		return err
+	}
+
+	owner, err := sandbox.ComputeOwner()
+	if err != nil {
+		return fmt.Errorf("compute owner identity: %w", err)
+	}
+	cfg.Owner = owner
+
+	// Reap orphaned sandboxes from previous instances before serving.
+	// Best-effort: errors are logged but never block startup.
+	reapCtx, reapCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	reaped, reapErrs := sandbox.ReapOrphans(reapCtx, cfg)
+	reapCancel()
+	for _, e := range reapErrs {
+		log.Printf("demesne: orphan reaper: %v", e)
+	}
+	if reaped > 0 {
+		log.Printf("demesne: reaped %d orphaned sandbox(es)", reaped)
 	}
 
 	// The runner must exist before the aggregator: the aggregator
@@ -73,8 +94,17 @@ func run() error {
 		runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
 	}
 
+	// Register signal disposition before creating the server so that
+	// SIGHUP (reload/graceful-drain), SIGTERM, and SIGINT all cancel the
+	// context passed to RunContext. The defers above (aggregator shutdown,
+	// socket-dir cleanup) were registered first, so they unwind AFTER
+	// stop() restores default signal handlers.
+	ctx, stop := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer stop()
+
 	srv := server.NewServer(runner)
-	return srv.Run()
+	return srv.RunContext(ctx)
 }
 
 // startAggregator builds and starts the host MCP aggregator from
