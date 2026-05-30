@@ -609,7 +609,9 @@ func generateAgentToken() (string, error) {
 
 // shellQuote joins argv into a single string that /bin/sh -c will
 // re-tokenise identically. Each arg is single-quoted; embedded single
-// quotes are emitted as '\”.
+// quotes are emitted as the four-byte sequence:
+//
+//	'\''
 func shellQuote(args []string) string {
 	var b strings.Builder
 	for i, a := range args {
@@ -711,7 +713,7 @@ func readUsageSnapshot(resultsHost string) usageSnapshot {
 
 // copyUsageToOut copies the proxy's usage.json from the sidecar
 // results dir to the agent's /out so the caller has a single place
-// to find it. Best-effort: errors are silently dropped because the
+// to find it. Best-effort: errors are logged non-fatally because the
 // summary in AgentResult already carries the headline numbers.
 func copyUsageToOut(resultsHost, outHost string) {
 	src := filepath.Join(resultsHost, "usage.json")
@@ -721,5 +723,7 @@ func copyUsageToOut(resultsHost, outHost string) {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(filepath.Join(outHost, "usage.json"), data, 0o600) //nolint:gosec
+	if err := os.WriteFile(filepath.Join(outHost, "usage.json"), data, 0o600); err != nil { //nolint:gosec
+		log.Printf("demesne: copy usage.json to out: %v", err)
+	}
 }

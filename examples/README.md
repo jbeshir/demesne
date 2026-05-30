@@ -11,7 +11,7 @@ These are runnable example MCP calls demonstrating the three main usage patterns
 Make sure demesne is running and the following environment variables are set:
 
 ```bash
-export OPEN_SANDBOX_DOMAIN=localhost:6060   # your OpenSandbox server
+export OPEN_SANDBOX_DOMAIN=localhost:8080   # your OpenSandbox server
 export OPEN_SANDBOX_API_KEY=your-key-here
 export DEMESNE_ALLOWED_PATHS=/tmp/demesne-example
 ```

@@ -23,7 +23,7 @@ file disagrees with that node, the node wins — update this file to match.
 | **M4** — `sandbox_research`        | **Done**    | `780688b1-ba47-c04f-f754-278ea4cab2f3`                         |
 | **M5** — MCP proxy                 | **Done**    | `1bad3a63-e185-9ffb-be8e-6d739af75ce4`                         |
 | **M6** — demesne-in-sandbox        | **Done**    | `86f18069-38d6-3e93-7170-0a557b9d70b8`                         |
-| Cross-cutting additions            | Not started | `b3dceb25-b74a-98e1-508e-bb9c7d976029`                         |
+| Cross-cutting additions            | Partially shipped | `b3dceb25-b74a-98e1-508e-bb9c7d976029`                    |
 | Quality gates (descriptions/tests) | Ongoing     | `e9fa65f6`, `974e9a09`, `f23b4cd2`                             |
 
 ## M1 — `sandbox_script` (done)
