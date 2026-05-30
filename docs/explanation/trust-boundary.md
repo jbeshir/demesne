@@ -11,9 +11,7 @@ uses ChatGPT-OAuth (not an API key): demesne reads the host's OAuth token
 set from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written
 by `codex login`); the proxy holds that token set off-agent, refreshes it
 autonomously, and swaps in a fresh access token when forwarding — the
-sandboxed Codex only ever sees a per-sandbox fake bearer. The end-to-end
-agent round-trip is covered by an integration test that is left for the
-host to run. Additional providers slot in through the
+sandboxed Codex only ever sees a per-sandbox fake bearer. Additional providers slot in through the
 `internal/agents/<vendor>` package layout.
 
 `sandbox_agent` is the input-bearing variant: caller-supplied host

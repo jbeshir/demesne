@@ -18,7 +18,7 @@ This example walks through the full lifecycle of a persistent sandbox: create it
 - **`sandbox_id` threads through every call.** The `sandbox_id` returned by `sandbox_create` in step 1 must be substituted into every subsequent request. The JSON files use the placeholder string `"SANDBOX_ID_HERE"` — you must replace it with the actual ID from step 1's response before issuing steps 2–6.
 - **TTL refreshes on each `sandbox_exec`.** The sandbox has a 24-hour time-to-live from creation, and each `sandbox_exec` call resets the TTL to 24 hours from the time of that call. As long as you keep issuing commands, the sandbox stays alive.
 - **`output_dir` is preserved after `sandbox_destroy`.** The host output directory returned by `sandbox_create` is not removed when the sandbox is destroyed. Files written to `/out` inside the sandbox, and any files retrieved via `sandbox_download`, remain accessible on the host.
-- **Manual substitution.** Because these examples are static JSON files rather than a fully scripted client, you need to copy the `sandbox_id` from step 1's response and paste it into the subsequent files (or use `run.sh` which does this with `jq`). A real client would parse the JSON-RPC response and substitute automatically.
+- **Threading `sandbox_id` through.** `run.sh` extracts the `sandbox_id` from step 1's response and threads it through steps 2–6 with `jq`. The placeholder `"SANDBOX_ID_HERE"` documented in the bullet above is what `run.sh` substitutes — a hand-driven client can substitute it the same way.
 
 ## Setup
 

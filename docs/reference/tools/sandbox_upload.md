@@ -12,14 +12,12 @@ Copy a host file into an existing sandbox.
 
 ## Annotations
 
-| Hint | Logical value | Currently set in code? | Rationale |
-|------|--------------|------------------------|-----------|
-| `readOnlyHint` | `false` | No (not declared in tool registration) | Writes a file into the sandbox filesystem. |
-| `destructiveHint` | `true` | No (not declared in tool registration) | Overwrites the destination path in the sandbox if it already exists. |
-| `idempotentHint` | `true` | No (not declared in tool registration) | Uploading the same `src` to the same `dst` leaves the sandbox in the same final state. |
-| `openWorldHint` | `false` | No (not declared in tool registration) | Operates sandbox-internally; no outbound network access is involved. |
-
-These values are documented here; wiring them into the Go tool registration is a follow-up code item recorded in CHANGES.md.
+| Hint | Value | Rationale |
+|------|-------|-----------|
+| `readOnlyHint` | `false` | Writes a file into the sandbox filesystem. |
+| `destructiveHint` | `true` | Overwrites the destination path in the sandbox if it already exists. |
+| `idempotentHint` | `true` | Uploading the same `src` to the same `dst` leaves the sandbox in the same final state. |
+| `openWorldHint` | `false` | Operates sandbox-internally; no outbound network access is involved. |
 
 ## Sample request
 

@@ -10,14 +10,12 @@ Destroy an existing sandbox.
 
 ## Annotations
 
-| Hint | Logical value | Currently set in code? | Rationale |
-|------|--------------|------------------------|-----------|
-| `readOnlyHint` | `false` | No (not declared in tool registration) | Kills the sandbox container; in-container state is irrecoverably destroyed. |
-| `destructiveHint` | `true` | No (not declared in tool registration) | The sandbox container is killed and cannot be recovered. The host `output_dir` (containing `/out` artefacts and any `sandbox_download` results) is preserved on the host, but in-container state is lost. |
-| `idempotentHint` | `true` | No (not declared in tool registration) | Destroying an already-destroyed or expired sandbox surfaces an error from the `attach` call (the sandbox no longer exists in OpenSandbox), so in practice the operation is not silently idempotent — it errors on a second call. The logical intent is idempotent (the desired end-state is "sandbox gone"), but callers should expect an error on repeated calls. |
-| `openWorldHint` | `false` | No (not declared in tool registration) | Only kills the container; no outbound network access is involved. |
-
-These values are documented here; wiring them into the Go tool registration is a follow-up code item recorded in CHANGES.md.
+| Hint | Value | Rationale |
+|------|-------|-----------|
+| `readOnlyHint` | `false` | Kills the sandbox container; in-container state is irrecoverably destroyed. |
+| `destructiveHint` | `true` | The sandbox container is killed and cannot be recovered. The host `output_dir` (containing `/out` artefacts and any `sandbox_download` results) is preserved on the host, but in-container state is lost. |
+| `idempotentHint` | `true` | Destroying an already-destroyed or expired sandbox surfaces an error from the `attach` call (the sandbox no longer exists in OpenSandbox), so in practice the operation is not silently idempotent — it errors on a second call. The logical intent is idempotent (the desired end-state is "sandbox gone"), but callers should expect an error on repeated calls. |
+| `openWorldHint` | `false` | Only kills the container; no outbound network access is involved. |
 
 ## Sample request
 

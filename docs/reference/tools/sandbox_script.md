@@ -14,14 +14,12 @@ Run a single shell command in a fresh sandbox and return its stdout.
 
 ## Annotations
 
-| Hint | Logical value | Currently set in code? | Rationale |
-|------|--------------|------------------------|-----------|
-| `readOnlyHint` | `false` | No (not declared in tool registration) | The tool creates a sandbox, writes to `/out`, and tears the sandbox down. |
-| `destructiveHint` | `false` | No (not declared in tool registration) | The sandbox is created and destroyed as a unit; from the caller's perspective no persistent state is mutated. |
-| `idempotentHint` | `false` | No (not declared in tool registration) | Running the same command twice can re-fetch packages or produce different side effects. |
-| `openWorldHint` | `true` | No (not declared in tool registration) | With `egress=package-managers` (the default) the sandbox can reach npm/PyPI/conda registries on the open internet. |
-
-These values are documented here; wiring them into the Go tool registration is a follow-up code item recorded in CHANGES.md.
+| Hint | Value | Rationale |
+|------|-------|-----------|
+| `readOnlyHint` | `false` | The tool creates a sandbox, writes to `/out`, and tears the sandbox down. |
+| `destructiveHint` | `false` | The sandbox is created and destroyed as a unit; from the caller's perspective no persistent state is mutated. |
+| `idempotentHint` | `false` | Running the same command twice can re-fetch packages or produce different side effects. |
+| `openWorldHint` | `true` | With `egress=package-managers` (the default) the sandbox can reach npm/PyPI/conda registries on the open internet. |
 
 ## Sample request
 

@@ -12,7 +12,8 @@ A local-first MCP server that runs untrusted shell, scripts, and AI coding agent
 
 For developers running a single local AI coding agent and wanting a hardened sandbox boundary for untrusted code, scripts, and tool use.
 
-<!-- TODO: demo gif (plan R16) -->
+> [!WARNING]
+> **Alpha — best-effort.** demesne is early software, and is largely built using itself (its own sandboxed agents do much of the work). Expect rough edges, gaps, and breaking changes between versions. Treat it as alpha and best-effort, and review what it does before relying on it.
 
 ### Wire into Claude Code in ~30 seconds
 
@@ -33,7 +34,7 @@ For developers running a single local AI coding agent and wanting a hardened san
 }
 ```
 
-<!-- `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` is also needed when using `sandbox_agent` or `sandbox_research`. -->
+`sandbox_agent` and `sandbox_research` additionally need `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) — see [docs/how-to/wire-into-claude-code.md](docs/how-to/wire-into-claude-code.md) for the full env reference.
 
 See [docs/how-to/wire-into-claude-code.md](docs/how-to/wire-into-claude-code.md) for Claude Desktop, VS Code, and full env var reference.
 

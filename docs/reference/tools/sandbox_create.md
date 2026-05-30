@@ -13,14 +13,12 @@ Create a persistent sandbox and return its handle.
 
 ## Annotations
 
-| Hint | Logical value | Currently set in code? | Rationale |
-|------|--------------|------------------------|-----------|
-| `readOnlyHint` | `false` | No (not declared in tool registration) | Creates a new sandbox container and host output directory. |
-| `destructiveHint` | `false` | No (not declared in tool registration) | Only creates new resources; does not mutate or destroy existing state. |
-| `idempotentHint` | `false` | No (not declared in tool registration) | Each call mints a fresh sandbox with a new `sandbox_id`. |
-| `openWorldHint` | `true` | No (not declared in tool registration) | With `egress=package-managers` (the default) the sandbox can reach npm/PyPI/conda registries on the open internet. |
-
-These values are documented here; wiring them into the Go tool registration is a follow-up code item recorded in CHANGES.md.
+| Hint | Value | Rationale |
+|------|-------|-----------|
+| `readOnlyHint` | `false` | Creates a new sandbox container and host output directory. |
+| `destructiveHint` | `false` | Only creates new resources; does not mutate or destroy existing state. |
+| `idempotentHint` | `false` | Each call mints a fresh sandbox with a new `sandbox_id`. |
+| `openWorldHint` | `true` | With `egress=package-managers` (the default) the sandbox can reach npm/PyPI/conda registries on the open internet. |
 
 ## Sample request
 

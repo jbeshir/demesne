@@ -4,7 +4,6 @@
 #
 # Because the sandbox_id is minted dynamically by sandbox_create, this script uses jq to
 # extract the ID from step 1's response and substitute it into the subsequent calls.
-# A real MCP client would parse the JSON-RPC response automatically.
 #
 # Prerequisites:
 #   - jq installed and on $PATH

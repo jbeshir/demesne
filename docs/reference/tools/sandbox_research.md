@@ -13,14 +13,12 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 
 ## Annotations
 
-| Hint | Logical value | Currently set in code? | Rationale |
-|------|--------------|------------------------|-----------|
-| `readOnlyHint` | `false` | No (not declared in tool registration) | Creates a sandbox and writes artefacts to `/out`. |
-| `destructiveHint` | `false` | No (not declared in tool registration) | The agent runs in its own fresh sandbox with no `/in` mounts; it does not mutate the caller's state. |
-| `idempotentHint` | `false` | No (not declared in tool registration) | LLM runs are non-deterministic; the agent also fetches live data from the open internet. |
-| `openWorldHint` | `true` | No (not declared in tool registration) | Egress is always fully open — any public HTTPS endpoint is reachable. The agent-vendor proxy still gates model API calls. |
-
-These values are documented here; wiring them into the Go tool registration is a follow-up code item recorded in CHANGES.md.
+| Hint | Value | Rationale |
+|------|-------|-----------|
+| `readOnlyHint` | `false` | Creates a sandbox and writes artefacts to `/out`. |
+| `destructiveHint` | `false` | The agent runs in its own fresh sandbox with no `/in` mounts; it does not mutate the caller's state. |
+| `idempotentHint` | `false` | LLM runs are non-deterministic; the agent also fetches live data from the open internet. |
+| `openWorldHint` | `true` | Egress is always fully open — any public HTTPS endpoint is reachable. The agent-vendor proxy still gates model API calls. |
 
 ## Sample request
 

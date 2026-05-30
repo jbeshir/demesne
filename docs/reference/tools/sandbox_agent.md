@@ -16,14 +16,12 @@ Run an AI agent inside a fresh sandbox against the caller's prompt.
 
 ## Annotations
 
-| Hint | Logical value | Currently set in code? | Rationale |
-|------|--------------|------------------------|-----------|
-| `readOnlyHint` | `false` | No (not declared in tool registration) | Creates a sandbox, writes artefacts to `/out`, and tears the sandbox down. |
-| `destructiveHint` | `false` | No (not declared in tool registration) | The agent runs in its own fresh sandbox; it does not mutate the caller's state or any pre-existing sandbox. |
-| `idempotentHint` | `false` | No (not declared in tool registration) | LLM runs are non-deterministic; repeating the same prompt can produce different artefacts and API costs. |
-| `openWorldHint` | `true` | No (not declared in tool registration) | Reaches the Anthropic API (or other vendor API) through the on-host proxy; with `egress=package-managers` it also reaches npm/PyPI/conda registries. The agent can also spawn child sandboxes via the demesne child MCP server. |
-
-These values are documented here; wiring them into the Go tool registration is a follow-up code item recorded in CHANGES.md.
+| Hint | Value | Rationale |
+|------|-------|-----------|
+| `readOnlyHint` | `false` | Creates a sandbox, writes artefacts to `/out`, and tears the sandbox down. |
+| `destructiveHint` | `false` | The agent runs in its own fresh sandbox; it does not mutate the caller's state or any pre-existing sandbox. |
+| `idempotentHint` | `false` | LLM runs are non-deterministic; repeating the same prompt can produce different artefacts and API costs. |
+| `openWorldHint` | `true` | Reaches the Anthropic API (or other vendor API) through the on-host proxy; with `egress=package-managers` it also reaches npm/PyPI/conda registries. The agent can also spawn child sandboxes via the demesne child MCP server. |
 
 ## Sample request
 
