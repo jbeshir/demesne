@@ -14,10 +14,10 @@ import (
 
 func TestTracker_AddAccumulates(t *testing.T) {
 	tr := NewTracker("")
-	tr.Add(claudeSonnet46, TokenCounts{InputTokens: 100, OutputTokens: 200})
-	tr.Add(claudeSonnet46, TokenCounts{InputTokens: 50, OutputTokens: 25})
+	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200})
+	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 50, OutputTokens: 25})
 	snap := tr.snapshot()
-	model := snap.PerModel[claudeSonnet46]
+	model := snap.PerModel["claude-sonnet-4-6"]
 	assert.Equal(t, int64(150), model.InputTokens)
 	assert.Equal(t, int64(225), model.OutputTokens)
 	// 150 input @ $3/MTok + 225 output @ $15/MTok = 0.00045 + 0.003375 = 0.003825
@@ -28,13 +28,13 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "usage.json")
 	tr := NewTracker(path)
-	tr.Add(claudeSonnet46, TokenCounts{InputTokens: 100, OutputTokens: 200})
+	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200})
 
 	data, err := os.ReadFile(path) //nolint:gosec // path is under t.TempDir()
 	require.NoError(t, err)
 	var snap Snapshot
 	require.NoError(t, json.Unmarshal(data, &snap))
-	assert.Equal(t, int64(100), snap.PerModel[claudeSonnet46].InputTokens)
+	assert.Equal(t, int64(100), snap.PerModel["claude-sonnet-4-6"].InputTokens)
 
 	// .tmp must not survive the rename.
 	_, err = os.Stat(path + ".tmp")
@@ -92,7 +92,7 @@ data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}
 }
 
 func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
-	body := `{"id":"msg_1","type":"message","role":"assistant","model":"` + claudeSonnet46 + `","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":13,"output_tokens":7}}`
+	body := `{"id":"msg_1","type":"message","role":"assistant","model":"` + "claude-sonnet-4-6" + `","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":13,"output_tokens":7}}`
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
 	w := wrapResponseBody(r, "application/json", tr)
@@ -100,7 +100,7 @@ func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 	assert.Equal(t, body, string(out), "non-streaming body must pass through unchanged")
-	m := tr.snapshot().PerModel[claudeSonnet46]
+	m := tr.snapshot().PerModel["claude-sonnet-4-6"]
 	assert.Equal(t, int64(13), m.InputTokens)
 	assert.Equal(t, int64(7), m.OutputTokens)
 }

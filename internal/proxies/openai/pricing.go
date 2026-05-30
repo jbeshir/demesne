@@ -21,8 +21,9 @@ type Pricing struct {
 	CachedInputPerMTok USD
 }
 
-type pricingEntry struct {
-	prefix ModelID
+type catalogEntry struct {
+	Alias    string
+	IDPrefix ModelID
 	Pricing
 }
 
@@ -50,35 +51,47 @@ type OutputTokenDetails struct {
 	ReasoningTokens int64 `json:"reasoning_tokens"`
 }
 
-const gpt55 = "gpt-5.5"
-
 // IMPORTANT: ChatGPT-OAuth billing is subscription-based, so the per-token
 // costs below are INDICATIVE ONLY and do NOT reflect what the user is
 // charged. They are useful for relative cost accounting between model
 // families but must not be used for budget enforcement or billing.
+// The >272K long-context surcharge tier is NOT modelled (single standard tier only).
 // Unknown models return 0 cost so they will not break a run.
 //
-// modelPricingTable is ordered longest-prefix-first so LookupPricing
-// picks the most specific match without a secondary sort. "gpt-5.4-mini"
-// must appear before "gpt-5.4". Add new families here when they ship.
-var modelPricingTable = []pricingEntry{
-	// gpt-5.5 — placeholder estimate: $1.25/$10.00/$0.125 per MTok (in/out/cached)
-	{gpt55, Pricing{InputPerMTok: 1.25, OutputPerMTok: 10.0, CachedInputPerMTok: 0.125}},
-	// gpt-5.4-mini — placeholder estimate (cheaper mini variant)
-	{"gpt-5.4-mini", Pricing{InputPerMTok: 0.30, OutputPerMTok: 1.20, CachedInputPerMTok: 0.030}},
-	// gpt-5.4 — placeholder estimate
-	{"gpt-5.4", Pricing{InputPerMTok: 1.25, OutputPerMTok: 10.0, CachedInputPerMTok: 0.125}},
-	// gpt-5.3-codex — placeholder estimate
-	{"gpt-5.3-codex", Pricing{InputPerMTok: 1.25, OutputPerMTok: 10.0, CachedInputPerMTok: 0.125}},
-	// gpt-5.2 — placeholder estimate
-	{"gpt-5.2", Pricing{InputPerMTok: 1.25, OutputPerMTok: 10.0, CachedInputPerMTok: 0.125}},
+// modelCatalog is ordered longest-prefix-first so LookupPricing picks the
+// most specific match. The two-entry set {gpt-5.5, gpt-5.4-mini} has no
+// ambiguous prefix overlap, but the contract is maintained for future additions.
+// Add new families here (longest prefix first) when they ship.
+var modelCatalog = []catalogEntry{
+	// gpt-5.5 — verified rates: $5.00/$30.00/$0.50 per MTok (in/out/cached).
+	{
+		Alias:    "gpt-5.5",
+		IDPrefix: "gpt-5.5",
+		Pricing:  Pricing{InputPerMTok: 5.00, OutputPerMTok: 30.0, CachedInputPerMTok: 0.50},
+	},
+	// gpt-5.4-mini — verified rates: $0.75/$4.50/$0.075 per MTok (in/out/cached).
+	{
+		Alias:    "gpt-5.4-mini",
+		IDPrefix: "gpt-5.4-mini",
+		Pricing:  Pricing{InputPerMTok: 0.75, OutputPerMTok: 4.50, CachedInputPerMTok: 0.075},
+	},
+}
+
+// Aliases returns the catalog's user-facing model aliases in catalog order.
+// The default alias is index 0.
+func Aliases() []string {
+	out := make([]string, len(modelCatalog))
+	for i, e := range modelCatalog {
+		out[i] = e.Alias
+	}
+	return out
 }
 
 // LookupPricing returns the Pricing for the given OpenAI model ID by
 // longest-prefix match, plus whether a match was found.
 func LookupPricing(id ModelID) (Pricing, bool) {
-	for _, e := range modelPricingTable {
-		if strings.HasPrefix(string(id), string(e.prefix)) {
+	for _, e := range modelCatalog {
+		if strings.HasPrefix(string(id), string(e.IDPrefix)) {
 			return e.Pricing, true
 		}
 	}
@@ -88,7 +101,7 @@ func LookupPricing(id ModelID) (Pricing, bool) {
 // CostUSD computes the USD cost for the given token counts at the
 // model's pricing. Models with no pricing entry return 0 — that lets
 // unknown models pass through without breaking the run, at the cost of
-// not counting toward the cap. Add new families to modelPricingTable when
+// not counting toward the cap. Add new families to modelCatalog when
 // they ship.
 //
 // OpenAI's input_tokens is the TOTAL prompt token count;

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jbeshir/demesne/internal/agents"
+	proxyanthropic "github.com/jbeshir/demesne/internal/proxies/anthropic"
 )
 
 // ModelName is an alias for agents.ModelName so callers in this package
@@ -20,10 +21,19 @@ const (
 )
 
 // Models is the Anthropic model whitelist exposed via sandbox_agent's
-// `model` parameter.
-var Models = []ModelName{ModelOpus, ModelSonnet, ModelHaiku}
+// `model` parameter. Derived from proxyanthropic.Aliases() so the
+// whitelist stays in sync with the pricing catalog automatically.
+var Models = func() []ModelName {
+	a := proxyanthropic.Aliases()
+	out := make([]ModelName, len(a))
+	for i, s := range a {
+		out[i] = ModelName(s)
+	}
+	return out
+}()
 
 // DefaultModel is the model used when the caller does not specify one.
+// This MUST equal the alias at index 0 of proxyanthropic's modelCatalog.
 const DefaultModel ModelName = ModelSonnet
 
 // ErrUnknownModel is the sentinel wrapped by ResolveModel when the

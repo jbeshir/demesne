@@ -146,7 +146,7 @@ cumulative cost via `usage.json`.
   conveyed the wrong model of how billing actually works.
 - Pricing table lives at `internal/proxies/anthropic/pricing.go`;
   longest-prefix-match keyed on the family name so dated Anthropic
-  model IDs (e.g. `claude-opus-4-7-20251201`) route to the family
+  model IDs (e.g. `claude-opus-4-8-20260101`) route to the family
   entry. Updating prices is a single-file change.
 - Sidecar runtime gained a `ProxyConfig` (renamed from `ProxyTokens`)
   with `ResultsHost`. The sidecar bind-mounts a per-job results dir

@@ -8,7 +8,7 @@ import (
 type USD float64
 
 // ModelID is an Anthropic API model identifier, e.g. "claude-sonnet-4-6",
-// "claude-opus-4-7-20251201". Dated IDs resolve to their family via
+// "claude-opus-4-8-20260101". Dated IDs resolve to their family via
 // longest-prefix match in LookupPricing.
 type ModelID string
 
@@ -22,32 +22,73 @@ type Pricing struct {
 	CacheReadPerMTok  USD
 }
 
-type pricingEntry struct {
-	prefix ModelID
+type catalogEntry struct {
+	Alias    string
+	IDPrefix ModelID
 	Pricing
 }
 
-const claudeSonnet46 = "claude-sonnet-4-6"
-
-// modelPricingTable is the single source of truth for per-family pricing,
-// ordered longest-prefix-first so LookupPricing picks the most specific
-// match without a secondary sort. Add new model families here when they ship.
+// IMPORTANT: cost figures below are INDICATIVE ONLY. The 1-hour cache tier
+// is NOT modelled (single 5-minute cache tier only). Unknown models return
+// 0 cost so they will not break a run.
+//
+// modelCatalog is the single source of truth for per-family pricing.
+// sonnet sits at index 0 to match DefaultModel. The three IDPrefixes have
+// no overlap so longest-prefix ordering is moot, but the contract is
+// maintained. Add new families here when they ship.
 //
 // Source: https://docs.anthropic.com/en/docs/about-claude/pricing
-var modelPricingTable = []pricingEntry{
-	{"claude-opus-4-7", Pricing{InputPerMTok: 15.0, OutputPerMTok: 75.0, CacheWritePerMTok: 18.75, CacheReadPerMTok: 1.5}},
-	{"claude-opus-4", Pricing{InputPerMTok: 15.0, OutputPerMTok: 75.0, CacheWritePerMTok: 18.75, CacheReadPerMTok: 1.5}},
-	{claudeSonnet46, Pricing{InputPerMTok: 3.0, OutputPerMTok: 15.0, CacheWritePerMTok: 3.75, CacheReadPerMTok: 0.3}},
-	{"claude-sonnet-4", Pricing{InputPerMTok: 3.0, OutputPerMTok: 15.0, CacheWritePerMTok: 3.75, CacheReadPerMTok: 0.3}},
-	{"claude-haiku-4-5", Pricing{InputPerMTok: 0.8, OutputPerMTok: 4.0, CacheWritePerMTok: 1.0, CacheReadPerMTok: 0.08}},
-	{"claude-haiku-4", Pricing{InputPerMTok: 0.8, OutputPerMTok: 4.0, CacheWritePerMTok: 1.0, CacheReadPerMTok: 0.08}},
+var modelCatalog = []catalogEntry{
+	// sonnet — index 0 = DefaultModel; verified rates per MTok (in/out/write/read).
+	{
+		Alias:    "sonnet",
+		IDPrefix: "claude-sonnet-4-6",
+		Pricing: Pricing{
+			InputPerMTok:      3.00,
+			OutputPerMTok:     15.00,
+			CacheWritePerMTok: 3.75,
+			CacheReadPerMTok:  0.30,
+		},
+	},
+	// opus — verified rates per MTok (in/out/write/read).
+	{
+		Alias:    "opus",
+		IDPrefix: "claude-opus-4-8",
+		Pricing: Pricing{
+			InputPerMTok:      5.00,
+			OutputPerMTok:     25.00,
+			CacheWritePerMTok: 6.25,
+			CacheReadPerMTok:  0.50,
+		},
+	},
+	// haiku — verified rates per MTok (in/out/write/read).
+	{
+		Alias:    "haiku",
+		IDPrefix: "claude-haiku-4-5",
+		Pricing: Pricing{
+			InputPerMTok:      1.00,
+			OutputPerMTok:     5.00,
+			CacheWritePerMTok: 1.25,
+			CacheReadPerMTok:  0.10,
+		},
+	},
+}
+
+// Aliases returns the catalog's user-facing model aliases in catalog order.
+// The default alias is index 0.
+func Aliases() []string {
+	out := make([]string, len(modelCatalog))
+	for i, e := range modelCatalog {
+		out[i] = e.Alias
+	}
+	return out
 }
 
 // LookupPricing returns the Pricing for the given Anthropic model ID by
 // longest-prefix match, plus whether a match was found.
 func LookupPricing(id ModelID) (Pricing, bool) {
-	for _, e := range modelPricingTable {
-		if strings.HasPrefix(string(id), string(e.prefix)) {
+	for _, e := range modelCatalog {
+		if strings.HasPrefix(string(id), string(e.IDPrefix)) {
 			return e.Pricing, true
 		}
 	}
@@ -67,7 +108,7 @@ type TokenCounts struct {
 // CostUSD computes the USD cost for the given token counts at the
 // model's pricing. Models with no pricing entry return 0 — that lets
 // unknown models pass through without breaking the run, at the cost of
-// not counting toward the cap. Add new families to modelPricingTable when
+// not counting toward the cap. Add new families to modelCatalog when
 // they ship.
 func CostUSD(id ModelID, t TokenCounts) USD {
 	p, ok := LookupPricing(id)

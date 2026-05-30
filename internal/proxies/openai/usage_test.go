@@ -23,10 +23,10 @@ func TestTracker_AddAccumulates(t *testing.T) {
 	tc2.OutputTokens = 25
 	tc2.InputTokensDetails.CachedTokens = 30
 	tc2.OutputTokensDetails.ReasoningTokens = 5
-	tr.Add(gpt55, tc1)
-	tr.Add(gpt55, tc2)
+	tr.Add("gpt-5.5", tc1)
+	tr.Add("gpt-5.5", tc2)
 	snap := tr.snapshot()
-	model := snap.PerModel[gpt55]
+	model := snap.PerModel["gpt-5.5"]
 	assert.Equal(t, int64(150), model.InputTokens)
 	assert.Equal(t, int64(225), model.OutputTokens)
 	assert.Equal(t, int64(80), model.CachedTokens)
@@ -40,13 +40,13 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 	var tc TokenCounts
 	tc.InputTokens = 100
 	tc.OutputTokens = 200
-	tr.Add(gpt55, tc)
+	tr.Add("gpt-5.5", tc)
 
 	data, err := os.ReadFile(path) //nolint:gosec // path is under t.TempDir()
 	require.NoError(t, err)
 	var snap Snapshot
 	require.NoError(t, json.Unmarshal(data, &snap))
-	assert.Equal(t, int64(100), snap.PerModel[gpt55].InputTokens)
+	assert.Equal(t, int64(100), snap.PerModel["gpt-5.5"].InputTokens)
 
 	// .tmp must not survive the rename.
 	_, err = os.Stat(path + ".tmp")
@@ -81,7 +81,7 @@ func TestSSEInterceptor_ResponseCompleted(t *testing.T) {
 	assert.Equal(t, int64(1000), m.CachedTokens)
 	assert.Equal(t, int64(345), m.OutputTokens)
 	assert.Equal(t, int64(40), m.ReasoningTokens)
-	// Cost > 0: gpt-5.5 has placeholder pricing.
+	// Cost > 0: gpt-5.5 has indicative pricing.
 	assert.Greater(t, float64(snap.CostUSD), 0.0, "cost must be non-zero for known model")
 }
 
