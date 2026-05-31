@@ -236,8 +236,14 @@ func TestProxyTracksUsageFromSSE(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 	assert.Contains(t, string(body), "response.completed", "body must pass through to caller")
 
-	snap := tracker.snapshot()
-	assert.Greater(t, float64(snap.CostUSD), 0.0, "cost must be recorded after SSE stream")
+	// httputil.ReverseProxy records usage when it closes the upstream-wrapped
+	// body (sseInterceptor.flush), which runs in its request goroutine after
+	// the copy to the client completes — asynchronously to the client's read
+	// finishing. Poll until the cost lands rather than asserting immediately,
+	// which otherwise races that close and intermittently reads 0.
+	assert.Eventually(t, func() bool {
+		return tracker.snapshot().CostUSD > 0
+	}, time.Second, time.Millisecond, "cost must be recorded after the SSE stream is closed")
 }
 
 // mustRequest builds a POST request with the agent token and a 5s timeout.
