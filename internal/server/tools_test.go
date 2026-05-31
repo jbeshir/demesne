@@ -19,6 +19,7 @@ const (
 	msgNoCall        = "case %d: runner should not be called"
 	testCmdEcho      = "echo hello"
 	testCmdTrue      = "true"
+	testStdoutHello  = "hello\n"
 	testFile         = "/some/file.txt"
 	testDir          = "/some/dir"
 	msgExitCodeZero  = "exit_code: 0"
@@ -121,6 +122,16 @@ func resultText(t *testing.T, r *mcp.CallToolResult) string {
 	return tc.Text
 }
 
+// resultStructured returns the result's structuredContent typed as T, failing
+// if it is absent or of another type.
+func resultStructured[T any](t *testing.T, r *mcp.CallToolResult) T {
+	t.Helper()
+	require.NotNil(t, r)
+	v, ok := r.StructuredContent.(T)
+	require.True(t, ok, "structuredContent is %T, want %T", r.StructuredContent, *new(T))
+	return v
+}
+
 func TestHandleSandboxScript_MissingCommand(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
@@ -158,7 +169,7 @@ func TestHandleSandboxScript_HappyPath(t *testing.T) {
 		scriptRes: sandbox.ScriptResult{
 			JobID:      sandbox.JobID("abc-123"),
 			OutputPath: "/tmp/demesne/out/abc-123",
-			Stdout:     "hello\n",
+			Stdout:     testStdoutHello,
 			ExitCode:   0,
 		},
 	}
@@ -185,6 +196,12 @@ func TestHandleSandboxScript_HappyPath(t *testing.T) {
 	for _, want := range []string{msgExitCodeZero, "output_dir: /tmp/demesne/out/abc-123", "job_id: abc-123", "hello"} {
 		assert.Contains(t, text, want)
 	}
+	assert.Equal(t, scriptOutput{
+		ExitCode:  0,
+		OutputDir: "/tmp/demesne/out/abc-123",
+		JobID:     "abc-123",
+		Stdout:    testStdoutHello,
+	}, resultStructured[scriptOutput](t, got))
 }
 
 func TestHandleSandboxScript_DefaultEgress(t *testing.T) {
@@ -217,6 +234,10 @@ func TestHandleSandboxCreate_HappyPath(t *testing.T) {
 	for _, want := range []string{"sandbox_id: sbx-1", "output_dir: /tmp/demesne/out/job-1"} {
 		assert.Contains(t, text, want)
 	}
+	assert.Equal(t, createOutput{
+		SandboxID: "sbx-1",
+		OutputDir: "/tmp/demesne/out/job-1",
+	}, resultStructured[createOutput](t, got))
 }
 
 func TestHandleSandboxCreate_DefaultEgress(t *testing.T) {
@@ -246,7 +267,7 @@ func TestHandleSandboxExec_MissingParams(t *testing.T) {
 
 func TestHandleSandboxExec_HappyPath(t *testing.T) {
 	r := &fakeRunner{
-		execRes: sandbox.ExecResult{Stdout: "hello\n", ExitCode: 0},
+		execRes: sandbox.ExecResult{Stdout: testStdoutHello, ExitCode: 0},
 	}
 	s := NewServer(r)
 	got, err := s.handleSandboxExec(context.Background(), newRequest(map[string]any{
@@ -260,6 +281,7 @@ func TestHandleSandboxExec_HappyPath(t *testing.T) {
 	for _, want := range []string{msgExitCodeZero, "hello"} {
 		assert.Contains(t, text, want)
 	}
+	assert.Equal(t, execOutput{ExitCode: 0, Stdout: testStdoutHello}, resultStructured[execOutput](t, got))
 }
 
 func TestHandleSandboxExec_RunnerErrorSurfaced(t *testing.T) {
@@ -408,6 +430,13 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 	} {
 		assert.Contains(t, text, want)
 	}
+	assert.Equal(t, agentRunOutput{
+		ExitCode:  0,
+		OutputDir: "/tmp/demesne-out/abc",
+		JobID:     "abc",
+		CostUSD:   0.0123,
+		Stdout:    "PONG\n",
+	}, resultStructured[agentRunOutput](t, got))
 }
 
 func TestHandleSandboxAgent_RejectsOpenEgress(t *testing.T) {
@@ -487,6 +516,13 @@ func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 	} {
 		assert.Contains(t, text, want)
 	}
+	assert.Equal(t, agentRunOutput{
+		ExitCode:  0,
+		OutputDir: "/tmp/demesne-out/rsh",
+		JobID:     "rsh",
+		CostUSD:   0.42,
+		Stdout:    "DONE\n",
+	}, resultStructured[agentRunOutput](t, got))
 }
 
 func TestHandleSandboxResearch_RunnerErrorSurfaced(t *testing.T) {

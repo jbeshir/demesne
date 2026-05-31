@@ -75,6 +75,7 @@ func stringArrayItems() map[string]any { return map[string]any{"type": "string"}
 func (s *Server) registerTools() {
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxScript,
 		mcp.WithDescription(scriptToolDescription),
+		mcp.WithOutputSchema[scriptOutput](),
 		mcp.WithString(paramCommand,
 			mcp.Required(),
 			mcp.Description(
@@ -100,6 +101,7 @@ func (s *Server) registerTools() {
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxCreate,
 		mcp.WithDescription(createToolDescription),
+		mcp.WithOutputSchema[createOutput](),
 		mcp.WithString(paramImage, mcp.Description(imageParamDescription)),
 		mcp.WithString(paramEgress, mcp.Description(egressParamDescription)),
 		mcp.WithArray(paramFiles,
@@ -118,6 +120,7 @@ func (s *Server) registerTools() {
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxExec,
 		mcp.WithDescription(execToolDescription),
+		mcp.WithOutputSchema[execOutput](),
 		mcp.WithString(paramSandboxID,
 			mcp.Required(),
 			mcp.Description(sandboxHandleDesc),
@@ -191,6 +194,7 @@ func (s *Server) registerTools() {
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxAgent,
 		mcp.WithDescription(agentToolDescription),
+		mcp.WithOutputSchema[agentRunOutput](),
 		mcp.WithString(paramPrompt,
 			mcp.Required(),
 			mcp.Description("Task for the agent. Free-form text."),
@@ -240,6 +244,7 @@ func (s *Server) registerTools() {
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxResearch,
 		mcp.WithDescription(researchToolDescription),
+		mcp.WithOutputSchema[agentRunOutput](),
 		mcp.WithString(paramPrompt,
 			mcp.Required(),
 			mcp.Description("Research task for the agent. Free-form text."),

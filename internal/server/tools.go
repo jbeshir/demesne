@@ -68,9 +68,7 @@ func (s *Server) handleSandboxCreate(
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	return mcp.NewToolResultText(
-		fmt.Sprintf("sandbox_id: %s\noutput_dir: %s", res.SandboxID, res.OutputPath),
-	), nil
+	return formatCreateResult(res), nil
 }
 
 func (s *Server) handleSandboxExec(
@@ -93,9 +91,7 @@ func (s *Server) handleSandboxExec(
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	return mcp.NewToolResultText(
-		fmt.Sprintf("exit_code: %d\n---\n%s", res.ExitCode, res.Stdout),
-	), nil
+	return formatExecResult(res), nil
 }
 
 func (s *Server) handleSandboxUpload(
@@ -219,9 +215,7 @@ func (s *Server) handleSandboxAgent(
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	return mcp.NewToolResultText(formatAgentRunResult(
-		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.TotalUsageUSD, res.Stdout,
-	)), nil
+	return formatAgentRunResult(res), nil
 }
 
 func (s *Server) handleSandboxResearch(
@@ -246,9 +240,7 @@ func (s *Server) handleSandboxResearch(
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	return mcp.NewToolResultText(formatAgentRunResult(
-		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.TotalUsageUSD, res.Stdout,
-	)), nil
+	return formatAgentRunResult(res), nil
 }
 
 // requireNonEmpty extracts a required, non-empty string param, returning an
