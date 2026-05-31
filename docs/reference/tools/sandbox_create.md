@@ -52,17 +52,28 @@ Create a persistent sandbox and return its handle.
         "text": "sandbox_id: b7e23a1f-...\noutput_dir: /var/demesne/out/b7e23a1f-..."
       }
     ],
+    "structuredContent": {
+      "sandbox_id": "b7e23a1f-...",
+      "output_dir": "/var/demesne/out/b7e23a1f-..."
+    },
     "isError": false
   }
 }
 ```
 
-The text payload format (from `internal/server/tools.go`):
+The text payload format (from `internal/server/format.go`):
 
 ```
 sandbox_id: <OpenSandbox UUID>
 output_dir: <host path of /out>
 ```
+
+The same result is also returned as `structuredContent` against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume it and ignore the text block above, which remains as a fallback for clients that don't:
+
+| Field | Type |
+|-------|------|
+| `sandbox_id` | string |
+| `output_dir` | string |
 
 Pass `sandbox_id` to `sandbox_exec`, `sandbox_upload`, `sandbox_download`, and `sandbox_destroy`. The sandbox TTL is 24 hours from creation, refreshed by each `sandbox_exec` call. Call `sandbox_destroy` to tear it down explicitly before the TTL expires.
 

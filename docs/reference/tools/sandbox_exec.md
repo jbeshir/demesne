@@ -48,18 +48,29 @@ Run a shell command in an existing sandbox.
         "text": "exit_code: 0\n---\n2.2.0\n"
       }
     ],
+    "structuredContent": {
+      "exit_code": 0,
+      "stdout": "2.2.0\n"
+    },
     "isError": false
   }
 }
 ```
 
-The text payload format (from `internal/server/tools.go`):
+The text payload format (from `internal/server/format.go`):
 
 ```
 exit_code: <int>
 ---
 <stdout from the command>
 ```
+
+The same result is also returned as `structuredContent` against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume it and ignore the text block above, which remains as a fallback for clients that don't:
+
+| Field | Type |
+|-------|------|
+| `exit_code` | integer |
+| `stdout` | string |
 
 The sandbox TTL is refreshed by 24 hours before the command runs.
 

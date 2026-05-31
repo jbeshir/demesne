@@ -54,6 +54,12 @@ Run a single shell command in a fresh sandbox and return its stdout.
         "text": "exit_code: 0\noutput_dir: /var/demesne/out/3f2a1b4c-...\njob_id: 3f2a1b4c-...\n---\n3.12.0 (main, ...)\n"
       }
     ],
+    "structuredContent": {
+      "exit_code": 0,
+      "output_dir": "/var/demesne/out/3f2a1b4c-...",
+      "job_id": "3f2a1b4c-...",
+      "stdout": "3.12.0 (main, ...)\n"
+    },
     "isError": false
   }
 }
@@ -68,6 +74,15 @@ job_id: <UUID>
 ---
 <stdout from the command>
 ```
+
+The same result is also returned as `structuredContent` against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume it and ignore the text block above, which remains as a fallback for clients that don't:
+
+| Field | Type |
+|-------|------|
+| `exit_code` | integer |
+| `output_dir` | string |
+| `job_id` | string |
+| `stdout` | string |
 
 The `output_dir` is preserved on the host after the sandbox is destroyed; any files written to `/out` inside the sandbox are available there.
 

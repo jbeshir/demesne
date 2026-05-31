@@ -56,6 +56,14 @@ Run an AI agent inside a fresh sandbox against the caller's prompt.
         "text": "exit_code: 0\noutput_dir: /var/demesne/out/9c4d2e1a-.../out\njob_id: 9c4d2e1a-...\ncost_usd: 0.0042\ntotal_usage_usd: 0.0042\n---\nI've written summary.txt to /out/summary.txt.\n"
       }
     ],
+    "structuredContent": {
+      "exit_code": 0,
+      "output_dir": "/var/demesne/out/9c4d2e1a-.../out",
+      "job_id": "9c4d2e1a-...",
+      "cost_usd": 0.0042,
+      "total_usage_usd": 0.0042,
+      "stdout": "I've written summary.txt to /out/summary.txt.\n"
+    },
     "isError": false
   }
 }
@@ -72,6 +80,17 @@ total_usage_usd: <float, 4 decimal places>
 ---
 <agent's final answer / stdout>
 ```
+
+The same result is also returned as `structuredContent` against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume it and ignore the text block above, which remains as a fallback for clients that don't:
+
+| Field | Type |
+|-------|------|
+| `exit_code` | integer |
+| `output_dir` | string |
+| `job_id` | string |
+| `cost_usd` | number |
+| `total_usage_usd` | number |
+| `stdout` | string |
 
 `cost_usd` is the indicative spend this run incurred through its vendor proxy, computed from published API pricing. It is reported regardless of how the underlying OAuth token is billed (Claude Code OAuth tokens typically authorise against a Claude Console subscription, not per-request API billing). `total_usage_usd` adds the cost of any child sandboxes this agent spawned.
 
