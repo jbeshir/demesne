@@ -120,42 +120,36 @@ func NewAggregator(cfg Config) (*Aggregator, error) {
 // upstream, mounts them on a shared http.ServeMux at
 // /{server-name}/mcp, then opens a single HTTP listener.
 //
-// Per-upstream initialise/list failures degrade gracefully: the
-// affected server is omitted from the bindings, the rest still
-// come up. Returns an error only if the listener itself can't
-// open or if every upstream failed.
+// Per-upstream tool list failure is fatal for that server (it is
+// skipped). Resource, template, and prompt list failures are
+// non-fatal (they are treated as empty — many servers don't
+// implement those capabilities). A server is only skipped when
+// all four lists are empty after filtering.
+//
+// Returns an error only if the listener itself can't open or if
+// every upstream failed.
 func (a *Aggregator) Start(ctx context.Context) error {
 	if a.httpSrv != nil {
 		return ErrAlreadyStarted
 	}
 	mux := http.NewServeMux()
 	specs := a.pool.knownSpecs()
+	mounted := 0
 
 	for _, spec := range specs {
-		entry := a.allow[spec.Name]
-		tools, err := a.pool.ListUpstreamTools(ctx, spec.Name)
-		if err != nil {
-			log.Printf("mcpproxy: %q: list tools failed, skipping: %v", spec.Name, err)
-			continue
+		if a.registerUpstream(ctx, mux, spec) {
+			mounted++
 		}
-		exposed := filterTools(tools, entry)
-		if len(exposed) == 0 {
-			log.Printf("mcpproxy: %q: no allowlisted tools after intersect, skipping", spec.Name)
-			continue
-		}
-		srv := newServerForUpstream(spec.Name, exposed, a.pool)
-		path := "/" + spec.Name + "/mcp"
-		mux.Handle(path, server.NewStreamableHTTPServer(srv))
-		a.catalogue[spec.Name] = exposed
 	}
 
 	for _, e := range a.extra {
 		mux.Handle("/"+e.Name+"/mcp", e.Handler)
 		a.catalogue[e.Name] = e.Tools
+		mounted++
 	}
 
-	if len(a.catalogue) == 0 {
-		return errors.New("mcpproxy: no upstreams produced exposable tools")
+	if mounted == 0 {
+		return errors.New("mcpproxy: no upstreams produced exposable tools, resources, or prompts")
 	}
 
 	ln, err := a.listenSocket()
@@ -172,8 +166,50 @@ func (a *Aggregator) Start(ctx context.Context) error {
 			log.Printf("mcpproxy: http serve: %v", err)
 		}
 	}()
-	log.Printf("mcpproxy: listening on unix:%s with %d upstreams", a.socketPath, len(a.catalogue))
+	totalTools := 0
+	for _, v := range a.catalogue {
+		totalTools += len(v)
+	}
+	log.Printf("mcpproxy: listening on unix:%s with %d upstreams; tool catalogue exposes %d tool(s)",
+		a.socketPath, mounted, totalTools)
 	return nil
+}
+
+func (a *Aggregator) registerUpstream(ctx context.Context, mux *http.ServeMux, spec UpstreamSpec) bool {
+	entry := a.allow[spec.Name]
+	tools, err := a.pool.ListUpstreamTools(ctx, spec.Name)
+	if err != nil {
+		log.Printf("mcpproxy: %q: list tools failed, skipping: %v", spec.Name, err)
+		return false
+	}
+	exposed := filterTools(tools, entry)
+
+	resources, err := a.pool.ListUpstreamResources(ctx, spec.Name)
+	if err != nil {
+		log.Printf("mcpproxy: %q: list resources failed, treating as empty: %v", spec.Name, err)
+		resources = nil
+	}
+	templates, err := a.pool.ListUpstreamResourceTemplates(ctx, spec.Name)
+	if err != nil {
+		log.Printf("mcpproxy: %q: list resource templates failed, treating as empty: %v", spec.Name, err)
+		templates = nil
+	}
+	prompts, err := a.pool.ListUpstreamPrompts(ctx, spec.Name)
+	if err != nil {
+		log.Printf("mcpproxy: %q: list prompts failed, treating as empty: %v", spec.Name, err)
+		prompts = nil
+	}
+
+	if len(exposed) == 0 && len(resources) == 0 && len(templates) == 0 && len(prompts) == 0 {
+		log.Printf("mcpproxy: %q: no exposable tools/resources/prompts, skipping", spec.Name)
+		return false
+	}
+
+	srv := newServerForUpstream(spec.Name, exposed, resources, templates, prompts, a.pool)
+	path := "/" + spec.Name + "/mcp"
+	mux.Handle(path, server.NewStreamableHTTPServer(srv))
+	a.catalogue[spec.Name] = exposed
+	return true
 }
 
 // listenSocket creates the parent dir, removes any stale socket from
@@ -196,8 +232,8 @@ func (a *Aggregator) listenSocket() (net.Listener, error) {
 }
 
 // Servers returns the upstream server names that produced exposable
-// tools, sorted. The runner pairs each with a sidecar listener.
-// Path convention: /{server}/mcp.
+// tools, resources, or prompts, sorted. The runner pairs each with
+// a sidecar listener. Path convention: /{server}/mcp.
 func (a *Aggregator) Servers() []string {
 	out := make([]string, 0, len(a.catalogue))
 	for k := range a.catalogue {
@@ -237,10 +273,32 @@ func (a *Aggregator) Shutdown(ctx context.Context) error {
 }
 
 // newServerForUpstream builds an mcp-go MCPServer registered with
-// exactly the given (already-allowlisted) tools, each routed via
-// the pool to the named upstream.
-func newServerForUpstream(name string, tools []mcp.Tool, pool *Pool) *server.MCPServer {
-	srv := server.NewMCPServer("demesne-"+name, "0", server.WithToolCapabilities(false))
+// the given (already-allowlisted) tools, resources, resource
+// templates, and prompts, each routed via the pool to the named
+// upstream. Completion is wired only when prompts or templates are
+// present, since those are the only ref types that support it.
+func newServerForUpstream(
+	name string,
+	tools []mcp.Tool,
+	resources []mcp.Resource,
+	templates []mcp.ResourceTemplate,
+	prompts []mcp.Prompt,
+	pool *Pool,
+) *server.MCPServer {
+	opts := []server.ServerOption{
+		server.WithToolCapabilities(false),
+		server.WithResourceCapabilities(false, false),
+		server.WithPromptCapabilities(false),
+	}
+	if len(prompts) > 0 || len(templates) > 0 {
+		opts = append(opts,
+			server.WithCompletions(),
+			server.WithPromptCompletionProvider(&promptCompletionRelay{server: name, pool: pool}),
+			server.WithResourceCompletionProvider(&resourceCompletionRelay{server: name, pool: pool}),
+		)
+	}
+	srv := server.NewMCPServer("demesne-"+name, "0", opts...)
+
 	for _, t := range tools {
 		tool := t
 		srv.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -248,7 +306,82 @@ func newServerForUpstream(name string, tools []mcp.Tool, pool *Pool) *server.MCP
 			return pool.CallTool(ctx, name, req)
 		})
 	}
+	for _, r := range resources {
+		res := r
+		srv.AddResource(res, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			result, err := pool.ReadResource(ctx, name, req)
+			if err != nil {
+				return nil, err
+			}
+			return result.Contents, nil
+		})
+	}
+	for _, t := range templates {
+		tmpl := t
+		srv.AddResourceTemplate(tmpl, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			result, err := pool.ReadResource(ctx, name, req)
+			if err != nil {
+				return nil, err
+			}
+			return result.Contents, nil
+		})
+	}
+	for _, p := range prompts {
+		prompt := p
+		srv.AddPrompt(prompt, func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			req.Params.Name = prompt.Name
+			return pool.GetPrompt(ctx, name, req)
+		})
+	}
 	return srv
+}
+
+// promptCompletionRelay forwards completion/complete requests for
+// prompt arguments to the named upstream via the pool.
+type promptCompletionRelay struct {
+	server string
+	pool   *Pool
+}
+
+func (p *promptCompletionRelay) CompletePromptArgument(
+	ctx context.Context,
+	promptName string,
+	argument mcp.CompleteArgument,
+	completeCtx mcp.CompleteContext,
+) (*mcp.Completion, error) {
+	req := mcp.CompleteRequest{}
+	req.Params.Ref = mcp.PromptReference{Type: "ref/prompt", Name: promptName}
+	req.Params.Argument = argument
+	req.Params.Context = completeCtx
+	result, err := p.pool.Complete(ctx, p.server, req)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Completion, nil
+}
+
+// resourceCompletionRelay forwards completion/complete requests for
+// resource template arguments to the named upstream via the pool.
+type resourceCompletionRelay struct {
+	server string
+	pool   *Pool
+}
+
+func (r *resourceCompletionRelay) CompleteResourceArgument(
+	ctx context.Context,
+	uri string,
+	argument mcp.CompleteArgument,
+	completeCtx mcp.CompleteContext,
+) (*mcp.Completion, error) {
+	req := mcp.CompleteRequest{}
+	req.Params.Ref = mcp.ResourceReference{Type: "ref/resource", URI: uri}
+	req.Params.Argument = argument
+	req.Params.Context = completeCtx
+	result, err := r.pool.Complete(ctx, r.server, req)
+	if err != nil {
+		return nil, err
+	}
+	return &result.Completion, nil
 }
 
 func filterTools(tools []mcp.Tool, allow ServerAllowlist) []mcp.Tool {

@@ -105,6 +105,76 @@ func (p *Pool) ListUpstreamTools(ctx context.Context, server string) ([]mcp.Tool
 	return res.Tools, nil
 }
 
+// ListUpstreamResources returns all resources advertised by the named upstream.
+func (p *Pool) ListUpstreamResources(ctx context.Context, server string) ([]mcp.Resource, error) {
+	c, err := p.acquire(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.ListResources(ctx, mcp.ListResourcesRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("list resources for %q: %w", server, err)
+	}
+	return res.Resources, nil
+}
+
+// ListUpstreamResourceTemplates returns all resource templates advertised by the named upstream.
+func (p *Pool) ListUpstreamResourceTemplates(ctx context.Context, server string) ([]mcp.ResourceTemplate, error) {
+	c, err := p.acquire(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.ListResourceTemplates(ctx, mcp.ListResourceTemplatesRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("list resource templates for %q: %w", server, err)
+	}
+	return res.ResourceTemplates, nil
+}
+
+// ListUpstreamPrompts returns all prompts advertised by the named upstream.
+func (p *Pool) ListUpstreamPrompts(ctx context.Context, server string) ([]mcp.Prompt, error) {
+	c, err := p.acquire(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("list prompts for %q: %w", server, err)
+	}
+	return res.Prompts, nil
+}
+
+// ReadResource proxies a resources/read request to the named upstream.
+func (p *Pool) ReadResource(
+	ctx context.Context,
+	server string,
+	req mcp.ReadResourceRequest,
+) (*mcp.ReadResourceResult, error) {
+	c, err := p.acquire(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	return c.ReadResource(ctx, req)
+}
+
+// GetPrompt proxies a prompts/get request to the named upstream.
+func (p *Pool) GetPrompt(ctx context.Context, server string, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	c, err := p.acquire(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	return c.GetPrompt(ctx, req)
+}
+
+// Complete proxies a completion/complete request to the named upstream.
+func (p *Pool) Complete(ctx context.Context, server string, req mcp.CompleteRequest) (*mcp.CompleteResult, error) {
+	c, err := p.acquire(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	return c.Complete(ctx, req)
+}
+
 // Shutdown terminates every active upstream subprocess. Errors
 // from individual clients are logged but not surfaced — shutdown
 // is best-effort.

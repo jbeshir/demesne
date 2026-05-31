@@ -102,7 +102,7 @@ Unlike `sandbox_agent`, this tool has no `files`, `directories`, or `egress` par
 
 ### Host MCP proxy note
 
-When demesne is configured with host MCP servers, the agent sees those servers through the sidecar tunnel. Tool calls that are allowlist-blocked surface as errors from the agent's MCP calls. See `internal/mcpproxy/server.go` for the filtering logic.
+When demesne is configured with host MCP servers, the agent sees those servers through the sidecar tunnel. These servers are not advertised in the agent CLAUDE.md or MCP tool catalogue; agents discover them on demand via the standard MCP list methods. Tools are filtered through the read-only allowlist; blocked calls surface as errors from the agent's MCP calls. Resources, resource templates, prompts, and completion are relayed in full from any exposed upstream without allowlist filtering. Listings reflect a static snapshot taken at aggregator start. See `internal/mcpproxy/server.go` for the filtering logic.
 
 ## Errors
 

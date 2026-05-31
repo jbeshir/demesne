@@ -56,16 +56,51 @@ func TestEnvSlice(t *testing.T) {
 	}
 }
 
+func TestPool_AcquireUnknownServer_NewMethods(t *testing.T) {
+	p := NewPool([]UpstreamSpec{{Name: "known", Command: "/bin/true"}})
+	ctx := context.Background()
+
+	t.Run("ListUpstreamResources", func(t *testing.T) {
+		_, err := p.ListUpstreamResources(ctx, "unknown")
+		assert.ErrorIs(t, err, ErrNotRegistered)
+	})
+
+	t.Run("ListUpstreamResourceTemplates", func(t *testing.T) {
+		_, err := p.ListUpstreamResourceTemplates(ctx, "unknown")
+		assert.ErrorIs(t, err, ErrNotRegistered)
+	})
+
+	t.Run("ListUpstreamPrompts", func(t *testing.T) {
+		_, err := p.ListUpstreamPrompts(ctx, "unknown")
+		assert.ErrorIs(t, err, ErrNotRegistered)
+	})
+
+	t.Run("ReadResource", func(t *testing.T) {
+		_, err := p.ReadResource(ctx, "unknown", mcp.ReadResourceRequest{})
+		assert.ErrorIs(t, err, ErrNotRegistered)
+	})
+
+	t.Run("GetPrompt", func(t *testing.T) {
+		_, err := p.GetPrompt(ctx, "unknown", mcp.GetPromptRequest{})
+		assert.ErrorIs(t, err, ErrNotRegistered)
+	})
+
+	t.Run("Complete", func(t *testing.T) {
+		_, err := p.Complete(ctx, "unknown", mcp.CompleteRequest{})
+		assert.ErrorIs(t, err, ErrNotRegistered)
+	})
+}
+
 func TestPool_KnownSpecsSortedAndDuplicateNames(t *testing.T) {
 	p := NewPool([]UpstreamSpec{
 		{Name: "zeta", Command: "/bin/zeta"},
-		{Name: "alpha", Command: "/bin/old-alpha"},
-		{Name: "alpha", Command: "/bin/new-alpha"},
+		{Name: stubAlpha, Command: "/bin/old-alpha"},
+		{Name: stubAlpha, Command: "/bin/new-alpha"},
 	})
 
 	got := p.knownSpecs()
 	require.Len(t, got, 2)
-	assert.Equal(t, "alpha", got[0].Name)
+	assert.Equal(t, stubAlpha, got[0].Name)
 	assert.Equal(t, "/bin/new-alpha", got[0].Command)
 	assert.Equal(t, "zeta", got[1].Name)
 }

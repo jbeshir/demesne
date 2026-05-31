@@ -3,10 +3,15 @@
 // stdio MCP server subprocesses lazily on demand, and serves a
 // per-upstream Streamable HTTP MCP endpoint on host loopback. The
 // per-sandbox sidecar's MCP tunnel proxy points at these endpoints.
+// These upstreams are not advertised in the agent CLAUDE.md or MCP
+// tool catalogue; agents discover them on demand via the standard
+// MCP list methods.
 //
-// The aggregator only exposes tools that appear in the resolved
-// read-only allowlist (built-in defaults plus the user's optional
-// override file).
+// Tools are filtered through a read-only allowlist (built-in defaults
+// plus the user's optional override file). Resources, resource
+// templates, prompts, and completion are relayed in full from any
+// exposed upstream without allowlist filtering; listings reflect a
+// static snapshot taken at aggregator Start.
 package mcpproxy
 
 import (

@@ -105,7 +105,7 @@ See [`../usage-json.md`](../usage-json.md) and [`../results-json.md`](../results
 
 ### Host MCP proxy note
 
-When demesne is configured with host MCP servers, the agent sees those servers through the sidecar tunnel under their native tool names. Tool calls that reach allowlist-blocked servers or tools surface as errors from the agent's MCP calls, not directly from `sandbox_agent`. See `internal/mcpproxy/server.go` for the filtering logic.
+When demesne is configured with host MCP servers, the agent sees those servers through the sidecar tunnel. These servers are not advertised in the agent CLAUDE.md or MCP tool catalogue; agents discover them on demand via the standard MCP list methods. Tools are filtered through the read-only allowlist; calls that reach blocked servers or tools surface as errors from the agent's MCP calls, not directly from `sandbox_agent`. Resources, resource templates, prompts, and completion are relayed in full from any exposed upstream without allowlist filtering. Listings reflect a static snapshot taken at aggregator start. See `internal/mcpproxy/server.go` for the filtering logic.
 
 ## Errors
 
