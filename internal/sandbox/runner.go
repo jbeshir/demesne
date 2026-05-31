@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -228,14 +229,19 @@ func (r *Runner) launchSandbox(
 		if !isCreateSandboxTransient(err) {
 			return nil, fmt.Errorf("create sandbox: %w", err)
 		}
-		if attempt == createSandboxMaxAttempts-1 {
-			return nil, fmt.Errorf("create sandbox after %d attempts: %w", createSandboxMaxAttempts, err)
-		}
+		// Clean up the partial containers this attempt leaked before retrying
+		// or giving up. This must run on the final attempt too: a sandbox that
+		// fails every attempt otherwise leaks its egress sidecar (and anything
+		// sharing its namespace), which accumulates as pipe-page pressure that
+		// provokes further create failures.
 		if id := containerIDFromError(err); id != "" {
 			if rmErr := dockerRemoveFn(ctx, id); rmErr != nil {
 				log.Printf("launchSandbox: cleanup of partial container %s after attempt %d failed: %v",
 					id, attempt+1, rmErr)
 			}
+		}
+		if attempt == createSandboxMaxAttempts-1 {
+			return nil, fmt.Errorf("create sandbox after %d attempts: %w", createSandboxMaxAttempts, err)
 		}
 		select {
 		case <-ctx.Done():
@@ -462,12 +468,65 @@ func containerIDFromError(err error) string {
 
 var containerIDRegexp = regexp.MustCompile(`/containers/([0-9a-f]{8,64})/archive`)
 
-// dockerForceRemove is the default dockerRemoveFn. Best-effort: a missing
-// container counts as success (idempotent); other errors are returned so the
-// caller can log them. Single docker call per invocation — the outer retry
-// loop already controls cadence.
+// dockerForceRemove is the default dockerRemoveFn: it removes the partial
+// container a failed create left behind, together with the OpenSandbox egress
+// sidecar it shares a network namespace with and anything else joined to that
+// namespace (a demesne sidecar, say). A create that dies at the
+// execd-distribution step leaves both the sandbox container and its egress
+// sidecar running, but the failure names only the sandbox container; removing
+// just that leaks the egress, which then pins its dependents and accumulates
+// as pipe-page pressure that provokes further create failures.
+//
+// The egress sidecar is the network anchor — the sandbox container's network
+// mode is "container:<egressID>" — so we resolve it and remove it with
+// --depend, which cascades to the sandbox and any sidecar. The named container
+// is then removed directly as a safety net for the case where the egress was
+// already gone. Best-effort and idempotent: a missing container is success.
 func dockerForceRemove(ctx context.Context, containerID string) error {
-	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", containerID) //nolint:gosec // containerID is hex-validated above
+	var errs []error
+	if egressID := egressAnchorID(ctx, containerID); egressID != "" {
+		if err := dockerRemoveDepend(ctx, egressID); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := dockerRemoveDepend(ctx, containerID); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+// egressAnchorID returns the container ID of the OpenSandbox egress sidecar
+// the given container shares a network namespace with, or "" if it can't be
+// determined (the container is already gone, or isn't joined to another
+// container's namespace). OpenSandbox runs the sandbox in the egress
+// sidecar's namespace via a "container:<egressID>" network mode.
+func egressAnchorID(ctx context.Context, containerID string) string {
+	//nolint:gosec // containerID is hex-validated by containerIDFromError
+	cmd := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.HostConfig.NetworkMode}}", containerID)
+	// Output (stdout only): the podman docker-compat banner goes to stderr and
+	// would otherwise corrupt the parsed network mode.
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return egressIDFromNetworkMode(strings.TrimSpace(string(out)))
+}
+
+// egressIDFromNetworkMode extracts the anchor container ID from a docker
+// network mode of the form "container:<id>", or "" for any other mode.
+func egressIDFromNetworkMode(mode string) string {
+	id, ok := strings.CutPrefix(mode, "container:")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(id)
+}
+
+// dockerRemoveDepend force-removes a container and every container that
+// depends on it (--depend), treating an already-absent container as success.
+func dockerRemoveDepend(ctx context.Context, target string) error {
+	//nolint:gosec // target is a hex container ID
+	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", "--depend", target)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return nil
@@ -475,5 +534,5 @@ func dockerForceRemove(ctx context.Context, containerID string) error {
 	if strings.Contains(strings.ToLower(string(out)), "no such container") {
 		return nil
 	}
-	return fmt.Errorf("docker rm -f %s: %w\n%s", containerID, err, out)
+	return fmt.Errorf("docker rm -f --depend %s: %w\n%s", target, err, out)
 }

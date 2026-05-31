@@ -129,7 +129,9 @@ func TestLaunchSandbox_PersistentTransient(t *testing.T) {
 	_, err := launchTestSandbox(context.Background(), NewRunner(Config{}))
 	require.Error(t, err)
 	assert.Equal(t, 3, calls)
-	assert.Equal(t, 2, removes)
+	// Every failing attempt cleans up its partial container, including the
+	// final one — otherwise that last attempt's egress sidecar leaks.
+	assert.Equal(t, 3, removes)
 	assert.Contains(t, err.Error(), "after 3 attempts")
 	assert.Contains(t, err.Error(), createSandboxTransientCode)
 }
@@ -264,6 +266,27 @@ func TestIsCreateSandboxTransient(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, isCreateSandboxTransient(tt.err))
+		})
+	}
+}
+
+func TestEgressIDFromNetworkMode(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+		want string
+	}{
+		{"container mode", "container:2202ba8de08224da7ab9", "2202ba8de08224da7ab9"},
+		{"container mode with surrounding space", "container: abc123 ", "abc123"},
+		{"empty container id", "container:", ""},
+		{"bridge", "bridge", ""},
+		{"host", "host", ""},
+		{"none", "none", ""},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, egressIDFromNetworkMode(tt.mode))
 		})
 	}
 }
