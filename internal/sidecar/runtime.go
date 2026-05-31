@@ -178,7 +178,10 @@ func verifySidecarRunning(ctx context.Context, containerID string) error {
 	case <-time.After(sidecarStartSettle):
 	}
 	cmd := execCommand(ctx, dockerCmd, "inspect", "-f", "{{.State.Status}}", containerID)
-	out, err := cmd.CombinedOutput()
+	// Output (stdout only) — CombinedOutput would mix in Podman's
+	// "Emulate Docker CLI..." stderr banner, so the status would never
+	// compare equal to "running" and a live sidecar would be reported dead.
+	out, err := cmd.Output()
 	if err == nil && strings.TrimSpace(string(out)) == "running" {
 		return nil
 	}

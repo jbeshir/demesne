@@ -252,6 +252,13 @@ func TestVerifySidecarRunning(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "running", stub: inspectStub("running", 0), wantErr: false},
+		// Regression: Podman prints an "Emulate Docker CLI" banner to stderr.
+		// The status lives on stdout; conflating the two (CombinedOutput) made
+		// a live sidecar read as dead. Output (stdout only) must ignore it.
+		{name: "running-with-podman-banner", stub: func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+			script := "printf 'Emulate Docker CLI using podman.\\n' 1>&2; printf 'running'; exit 0"
+			return exec.CommandContext(ctx, "sh", "-c", script)
+		}, wantErr: false},
 		{name: "exited", stub: inspectStub("exited", 0), wantErr: true},
 		{name: "created", stub: inspectStub("created", 0), wantErr: true},
 		// inspect of an already-removed container exits non-zero (--rm reaped it).
