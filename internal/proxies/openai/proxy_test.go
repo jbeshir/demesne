@@ -16,6 +16,15 @@ import (
 const testAgentToken = "test-agent-token"
 const testAccountID = "test-account-id"
 
+// newProxyServerTo is the test-only constructor: forwards to the given
+// backend URL over http.DefaultTransport, so tests that exercise the
+// gating logic on a host without CAP_NET_ADMIN don't fail in
+// setsockopt(SO_MARK). Production callers must use NewProxyServer. The
+// agent token is always the package test constant.
+func newProxyServerTo(backendURL, accessToken, accountID string, tracker *Tracker) *ProxyServer {
+	return newProxyServer("127.0.0.1:0", backendURL, http.DefaultTransport, testAgentToken, accessToken, accountID, tracker)
+}
+
 // TestProxyAllowedRequestRewritesHeaders confirms that a valid POST
 // /v1/responses is forwarded with the rewritten backend path,
 // Authorization swapped to the real OAuth token, and routing headers set.
@@ -49,7 +58,7 @@ func TestProxyAllowedRequestRewritesHeaders(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := newProxyServerTo(upstream.URL, testAgentToken, realToken, testAccountID, nil)
+	p := newProxyServerTo(upstream.URL, realToken, testAccountID, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -89,7 +98,7 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := newProxyServerTo(upstream.URL, testAgentToken, "any-token", testAccountID, nil)
+	p := newProxyServerTo(upstream.URL, "any-token", testAccountID, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -116,7 +125,7 @@ func TestProxyDeniesUnknownMethod(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := newProxyServerTo(upstream.URL, testAgentToken, "any-token", testAccountID, nil)
+	p := newProxyServerTo(upstream.URL, "any-token", testAccountID, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -141,7 +150,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := newProxyServerTo(upstream.URL, testAgentToken, "real-access-token", testAccountID, nil)
+	p := newProxyServerTo(upstream.URL, "real-access-token", testAccountID, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -183,7 +192,7 @@ func TestProxyOmitsAccountIDWhenEmpty(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := newProxyServerTo(upstream.URL, testAgentToken, "tok", "", nil)
+	p := newProxyServerTo(upstream.URL, "tok", "", nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -196,7 +205,7 @@ func TestProxyOmitsAccountIDWhenEmpty(t *testing.T) {
 
 // TestProxyShutdown confirms Start returns cleanly when its context is cancelled.
 func TestProxyShutdown(t *testing.T) {
-	p := newProxyServerTo("http://127.0.0.1:1", testAgentToken, "tok", testAccountID, nil)
+	p := newProxyServerTo("http://127.0.0.1:1", "tok", testAccountID, nil)
 
 	startCtx, startCancel := context.WithCancel(context.Background())
 	defer startCancel()
@@ -224,7 +233,7 @@ func TestProxyTracksUsageFromSSE(t *testing.T) {
 	defer upstream.Close()
 
 	tracker := NewTracker("")
-	p := newProxyServerTo(upstream.URL, testAgentToken, "tok", testAccountID, tracker)
+	p := newProxyServerTo(upstream.URL, "tok", testAccountID, tracker)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 

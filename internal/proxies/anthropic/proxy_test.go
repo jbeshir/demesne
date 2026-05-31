@@ -18,6 +18,15 @@ const (
 	testUpstreamToken = "test-upstream-token"
 )
 
+// newProxyServerTo is the test-only constructor: forwards to the given
+// upstream URL over http.DefaultTransport, so tests that exercise the
+// gating logic on a host without CAP_NET_ADMIN don't fail in
+// setsockopt(SO_MARK). Production callers must use NewProxyServer. The
+// agent and upstream tokens are always the package test constants.
+func newProxyServerTo(upstreamURL string, tracker *Tracker) *ProxyServer {
+	return newProxyServer("127.0.0.1:0", upstreamURL, http.DefaultTransport, testAgentToken, testUpstreamToken, tracker)
+}
+
 // TestProxyAllowedRequestSwapsToken confirms that an allowed
 // (method, path) pair authenticated with the agent token is forwarded
 // upstream with the real upstream token, the Host rewritten, and
@@ -51,7 +60,7 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -87,7 +96,7 @@ func TestProxyAllowsCountTokens(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -107,7 +116,7 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -130,7 +139,7 @@ func TestProxyDeniesUnknownMethod(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -155,7 +164,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo(upstream.URL, nil)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
@@ -189,7 +198,7 @@ func TestProxyDeniesWrongToken(t *testing.T) {
 
 // TestProxyShutdown confirms Start returns cleanly when its context is cancelled.
 func TestProxyShutdown(t *testing.T) {
-	p := newProxyServerTo("http://127.0.0.1:1", testAgentToken, testUpstreamToken, nil)
+	p := newProxyServerTo("http://127.0.0.1:1", nil)
 
 	startCtx, startCancel := context.WithCancel(context.Background())
 	defer startCancel()
@@ -242,7 +251,7 @@ data: {"type":"message_stop"}
 	defer upstream.Close()
 
 	tracker := NewTracker("")
-	p := newProxyServerTo(upstream.URL, testAgentToken, testUpstreamToken, tracker)
+	p := newProxyServerTo(upstream.URL, tracker)
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 

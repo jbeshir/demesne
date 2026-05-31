@@ -41,7 +41,7 @@ func newRefreshSrv(t *testing.T, newAccess, newRefresh, newID string) *httptest.
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(refreshResponse{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(refreshResponse{ //nolint:errcheck,gosec // test handler; Encode to the httptest ResponseWriter can't fail
 			AccessToken:  &newAccess,
 			RefreshToken: &newRefresh,
 			IDToken:      &newID,

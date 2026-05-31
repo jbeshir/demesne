@@ -480,11 +480,10 @@ func (r *Runner) buildChildLayout(c *childSpawn) (sandboxLayout, error) {
 }
 
 // mkLayoutDirs creates the given host directories. Paths are composed
-// from r.cfg.OutputRoot, a uuid, and constant suffixes; gosec G703
-// fires under -tags=integration but default lint is clean.
+// from r.cfg.OutputRoot, a uuid, and constant suffixes.
 func mkLayoutDirs(dirs ...string) error {
 	for _, d := range dirs {
-		if err := os.MkdirAll(d, 0o750); err != nil { //nolint:gosec,nolintlint
+		if err := os.MkdirAll(d, 0o750); err != nil {
 			return fmt.Errorf("create %s: %w", d, err)
 		}
 	}

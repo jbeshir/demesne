@@ -115,7 +115,7 @@ func TestCredentialRefreshesExpiredToken(t *testing.T) {
 		assert.Equal(t, "refresh_token", body.GrantType)
 		assert.Equal(t, "refresh-token-old", body.RefreshToken)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(refreshResponse{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(refreshResponse{ //nolint:errcheck,gosec // test handler; Encode to the httptest ResponseWriter can't fail
 			AccessToken:  &newAccess,
 			RefreshToken: &newRefresh,
 			IDToken:      &newID,
@@ -177,7 +177,7 @@ func TestCredentialZeroLastRefreshTriggersRefresh(t *testing.T) {
 	tokenEndpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		endpointHit = true
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(refreshResponse{AccessToken: &newAccess}) //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(refreshResponse{AccessToken: &newAccess}) //nolint:errcheck,gosec // test handler; Encode to the httptest ResponseWriter can't fail
 	}))
 	defer tokenEndpoint.Close()
 

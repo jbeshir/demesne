@@ -128,16 +128,6 @@ func NewProxyServer(bindAddr, agentToken, accessToken, accountID string, tracker
 	return newProxyServer(bindAddr, ChatGPTBase, proxies.BypassTransport(), agentToken, accessToken, accountID, tracker)
 }
 
-// newProxyServerTo is the test-only constructor: forwards to the given
-// backend URL over http.DefaultTransport, so tests that exercise the
-// gating logic on a host without CAP_NET_ADMIN don't fail in
-// setsockopt(SO_MARK). Production callers must use NewProxyServer.
-//
-//nolint:unparam // agentToken is fixed in tests but kept explicit for clarity
-func newProxyServerTo(backendURL, agentToken, accessToken, accountID string, tracker *Tracker) *ProxyServer {
-	return newProxyServer("127.0.0.1:0", backendURL, http.DefaultTransport, agentToken, accessToken, accountID, tracker)
-}
-
 func newProxyServer(
 	bindAddr, upstreamURL string,
 	transport http.RoundTripper,
