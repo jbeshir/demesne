@@ -30,7 +30,7 @@ func (r *Runner) Upload(ctx context.Context, req UploadRequest) error {
 		return err
 	}
 
-	f, err := os.Open(resolved) //nolint:gosec // path validated against AllowedPaths
+	f, err := openValidatedHostFile(resolved)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", req.HostSrc, err)
 	}

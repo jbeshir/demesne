@@ -178,7 +178,7 @@ func defaultReaperSidecarRemove(ctx context.Context, sandboxID string) error {
 // starttime is still alive. A read error (process gone) returns false; a
 // starttime mismatch also returns false (PID reused by a different process).
 func defaultReaperProcessAlive(pid, starttime uint64) bool {
-	got, err := readStarttimeTicks(int(pid)) //nolint:gosec // demesne targets 64-bit Linux; valid PIDs always fit in int
+	got, err := readStarttimeTicks(pid)
 	if err != nil {
 		return false
 	}

@@ -41,6 +41,14 @@ const dockerCmd = "docker"
 // execCommand is a seam to allow tests to swap the docker invocation.
 var execCommand = exec.CommandContext
 
+// dockerCommand builds an exec.Cmd for the docker CLI through the
+// execCommand seam so tests can swap it. Callers pass argv with a
+// constant subcommand + validated hex container IDs / embed-hash refs
+// / UUIDs — none of the args ever transit a shell.
+func dockerCommand(ctx context.Context, args ...string) *exec.Cmd {
+	return execCommand(ctx, dockerCmd, args...)
+}
+
 // sidecarStartSettle is how long Start waits after `docker run -d` returns
 // before confirming the sidecar is still running (see verifySidecarRunning).
 // A package var so tests can zero it.
@@ -137,8 +145,7 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 	}
 	args = append(args, proxyArgs...)
 	args = append(args, imageRef)
-	//nolint:gosec // args composed from validated input
-	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	cmd := dockerCommand(ctx, args...)
 	// Output (stdout only) — CombinedOutput would mix in Podman's
 	// "Emulate Docker CLI..." stderr banner, corrupting the container
 	// ID and silently breaking later docker rm -f calls.
@@ -354,8 +361,7 @@ func Remove(ctx context.Context, sandboxID string) error {
 
 func findEgressSidecar(ctx context.Context, sandboxID string) (string, error) {
 	filter := fmt.Sprintf("label=%s=%s", EgressSidecarLabel, sandboxID)
-	//nolint:gosec // filter composed from a validated UUID
-	cmd := exec.CommandContext(ctx, dockerCmd, "ps", "--filter", filter, "--format", "{{.ID}}")
+	cmd := dockerCommand(ctx, "ps", "--filter", filter, "--format", "{{.ID}}")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("locate egress sidecar for %s: %w", sandboxID, err)

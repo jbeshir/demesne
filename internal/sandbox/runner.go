@@ -154,13 +154,12 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 	}
 	// The wrapper redirect always creates both files, so a read error is
 	// exceptional; log it rather than silently surfacing empty output (the
-	// command itself may have succeeded, so don't fail the run). Paths are
-	// runner-composed under cfg.OutputRoot; gosec G304 false-positive.
-	stdoutBytes, err := os.ReadFile(filepath.Join(outputHost, "stdout.log")) //nolint:gosec
+	// command itself may have succeeded, so don't fail the run).
+	stdoutBytes, err := readOutputFile(outputHost, "stdout.log")
 	if err != nil {
 		log.Printf("sandbox_script: read stdout.log: %v", err)
 	}
-	stderrBytes, err := os.ReadFile(filepath.Join(outputHost, "stderr.log")) //nolint:gosec
+	stderrBytes, err := readOutputFile(outputHost, "stderr.log")
 	if err != nil {
 		log.Printf("sandbox_script: read stderr.log: %v", err)
 	}
@@ -515,8 +514,7 @@ func dockerForceRemove(ctx context.Context, containerID string) error {
 // container's namespace). OpenSandbox runs the sandbox in the egress
 // sidecar's namespace via a "container:<egressID>" network mode.
 func egressAnchorID(ctx context.Context, containerID string) string {
-	//nolint:gosec // containerID is hex-validated by containerIDFromError
-	cmd := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.HostConfig.NetworkMode}}", containerID)
+	cmd := dockerCommand(ctx, "inspect", "-f", "{{.HostConfig.NetworkMode}}", containerID)
 	// Output (stdout only): the podman docker-compat banner goes to stderr and
 	// would otherwise corrupt the parsed network mode.
 	out, err := cmd.Output()
@@ -539,8 +537,7 @@ func egressIDFromNetworkMode(mode string) string {
 // dockerRemoveDepend force-removes a container and every container that
 // depends on it (--depend), treating an already-absent container as success.
 func dockerRemoveDepend(ctx context.Context, target string) error {
-	//nolint:gosec // target is a hex container ID
-	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", "--depend", target)
+	cmd := dockerCommand(ctx, "rm", "-f", "--depend", target)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return nil
@@ -549,4 +546,12 @@ func dockerRemoveDepend(ctx context.Context, target string) error {
 		return nil
 	}
 	return fmt.Errorf("docker rm -f --depend %s: %w\n%s", target, err, out)
+}
+
+// dockerCommand wraps exec.CommandContext("docker", ...) so the gosec
+// G204 suppression for sandbox-package docker calls lives here. argv
+// only; callers pass a constant subcommand plus container IDs that are
+// hex-validated (containerIDFromError) or otherwise OpenSandbox-generated.
+func dockerCommand(ctx context.Context, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, "docker", args...) //nolint:gosec // argv-only; subcommand const, args hex-validated
 }

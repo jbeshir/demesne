@@ -110,8 +110,8 @@ func runCodexWrapperOpts(t *testing.T, opts codexWrapperOpts) codexScriptResult 
 	require.NoError(t, os.WriteFile(scriptPath, wrapperScriptBytes, 0o600))
 
 	binDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(fakeCodex), 0o755)) //nolint:gosec
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "sleep"), []byte(fakeSleep), 0o755)) //nolint:gosec
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(fakeCodex), 0o755)) //nolint:gosec // test temp dir; fake codex binary must be executable
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "sleep"), []byte(fakeSleep), 0o755)) //nolint:gosec // test temp dir; fake sleep binary must be executable
 
 	inDir := filepath.Join(t.TempDir(), ".agent")
 	require.NoError(t, os.MkdirAll(inDir, 0o700))
@@ -174,7 +174,7 @@ func runCodexWrapperOpts(t *testing.T, opts codexWrapperOpts) codexScriptResult 
 
 func readCodexLines(t *testing.T, path string) []string {
 	t.Helper()
-	data, err := os.ReadFile(path) //nolint:gosec
+	data, err := os.ReadFile(path) //nolint:gosec // path is a test temp file
 	if err != nil {
 		return nil
 	}

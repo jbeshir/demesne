@@ -49,8 +49,8 @@ func parseStarttimeFromStat(data []byte) (uint64, error) {
 
 // readStarttimeTicks reads /proc/<pid>/stat and delegates to the pure
 // parseStarttimeFromStat helper.
-func readStarttimeTicks(pid int) (uint64, error) {
-	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+func readStarttimeTicks(pid uint64) (uint64, error) {
+	data, err := os.ReadFile("/proc/" + strconv.FormatUint(pid, 10) + "/stat")
 	if err != nil {
 		return 0, err
 	}
@@ -85,7 +85,10 @@ func ComputeOwner() (string, error) {
 		return "", fmt.Errorf("read boot_id: %w", err)
 	}
 	pid := os.Getpid()
-	st, err := readStarttimeTicks(pid)
+	if pid < 0 {
+		return "", fmt.Errorf("read pid: got negative PID %d", pid)
+	}
+	st, err := readStarttimeTicks(uint64(pid))
 	if err != nil {
 		return "", fmt.Errorf("read starttime: %w", err)
 	}

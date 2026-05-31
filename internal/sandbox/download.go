@@ -45,8 +45,7 @@ func (r *Runner) Download(ctx context.Context, req DownloadRequest) (DownloadRes
 	defer func() { _ = rc.Close() }()
 
 	hostPath := filepath.Join(hostDir, filepath.Base(req.SandboxSrc))
-	// hostPath is under r.cfg.OutputRoot, joined with our internal jobID + a basename.
-	f, err := os.OpenFile(hostPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec
+	f, err := createDownloadFile(hostPath)
 	if err != nil {
 		return DownloadResult{}, fmt.Errorf("create %s: %w", hostPath, err)
 	}

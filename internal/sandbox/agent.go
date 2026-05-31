@@ -282,10 +282,9 @@ const (
 
 // readAgentTranscript reads the agent's redirected stdout transcript
 // from the host /out dir. Missing/unreadable yields nil so ResultText
-// returns an empty string. The path is runner-composed under
-// cfg.OutputRoot; gosec G304 false-positive.
+// returns an empty string. The path is runner-composed under cfg.OutputRoot.
 func readAgentTranscript(outHost string) []byte {
-	data, err := os.ReadFile(filepath.Join(outHost, agentTranscriptBasename)) //nolint:gosec
+	data, err := readOutputFile(outHost, agentTranscriptBasename)
 	if err != nil {
 		return nil
 	}
@@ -294,9 +293,9 @@ func readAgentTranscript(outHost string) []byte {
 
 // readAgentStderr reads the agent's redirected stderr from the host /out
 // dir. Missing/unreadable yields nil; the caller tail-bounds and surfaces
-// it. The path is runner-composed under cfg.OutputRoot; gosec G304 false-positive.
+// it. The path is runner-composed under cfg.OutputRoot.
 func readAgentStderr(outHost string) []byte {
-	data, err := os.ReadFile(filepath.Join(outHost, agentStderrBasename)) //nolint:gosec
+	data, err := readOutputFile(outHost, agentStderrBasename)
 	if err != nil {
 		return nil
 	}
@@ -710,9 +709,7 @@ func readUsageSnapshot(resultsHost string) usageSnapshot {
 	if resultsHost == "" {
 		return usageSnapshot{}
 	}
-	// resultsHost is composed by the runner from r.cfg.OutputRoot +
-	// a uuid; gosec G304 false-positive.
-	data, err := os.ReadFile(filepath.Join(resultsHost, "usage.json")) //nolint:gosec
+	data, err := readOutputFile(resultsHost, "usage.json")
 	if err != nil {
 		return usageSnapshot{}
 	}
@@ -729,13 +726,11 @@ func readUsageSnapshot(resultsHost string) usageSnapshot {
 // summary in AgentResult already carries the headline numbers.
 func copyUsageToOut(resultsHost, outHost string) {
 	src := filepath.Join(resultsHost, "usage.json")
-	// src and outHost are runner-composed paths under r.cfg.OutputRoot;
-	// gosec G304/G703 false-positives.
-	data, err := os.ReadFile(src) //nolint:gosec
+	data, err := readOutputPath(src)
 	if err != nil {
 		return
 	}
-	if err := os.WriteFile(filepath.Join(outHost, "usage.json"), data, 0o600); err != nil { //nolint:gosec
+	if err := writeOutputFile(outHost, "usage.json", data); err != nil {
 		log.Printf("demesne: copy usage.json to out: %v", err)
 	}
 }

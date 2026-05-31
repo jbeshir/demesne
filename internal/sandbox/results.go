@@ -73,10 +73,9 @@ func sumChildResults(outHost string) ([]string, float64) {
 }
 
 // readResultsFile reads results.json from dir. The dir is composed
-// from runner-controlled paths under r.cfg.OutputRoot; gosec G304
-// false-positive.
+// from runner-controlled paths under r.cfg.OutputRoot.
 func readResultsFile(dir string) (Results, bool) {
-	data, err := os.ReadFile(filepath.Join(dir, "results.json")) //nolint:gosec
+	data, err := readOutputFile(dir, "results.json")
 	if err != nil {
 		return Results{}, false
 	}

@@ -59,7 +59,7 @@ func writeFakeDocker(t *testing.T) string {
 	t.Helper()
 	binDir := t.TempDir()
 	p := filepath.Join(binDir, "docker")
-	require.NoError(t, os.WriteFile(p, []byte(fakeDocker), 0o755)) //nolint:gosec
+	require.NoError(t, os.WriteFile(p, []byte(fakeDocker), 0o755)) //nolint:gosec // test temp dir; fake docker script must be executable
 	return p
 }
 

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 )
@@ -61,7 +60,7 @@ func EnsureImage(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("chmod sidecar binary: %w", err)
 	}
 
-	build := exec.CommandContext(ctx, dockerCmd, "build", "-t", ref, dir) //nolint:gosec // ref derived from embed hash
+	build := dockerCommand(ctx, "build", "-t", ref, dir)
 	output, err := build.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("docker build %s: %w\n%s", ref, err, output)
@@ -80,6 +79,6 @@ func imageTag() string {
 }
 
 func imagePresent(ctx context.Context, ref string) bool {
-	cmd := exec.CommandContext(ctx, dockerCmd, "image", "inspect", ref) //nolint:gosec // ref derived from embed hash
+	cmd := dockerCommand(ctx, "image", "inspect", ref)
 	return cmd.Run() == nil
 }
