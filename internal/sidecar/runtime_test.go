@@ -226,3 +226,64 @@ func TestRemove_ContextCancelledMidBackoff(t *testing.T) {
 	count := readCallCount(t, scenarioDir)
 	assert.Less(t, count, 3, "expected fewer than 3 calls; got "+strconv.Itoa(count))
 }
+
+// TestVerifySidecarRunning covers the post-start liveness check: a "running"
+// container passes; an exited one or a vanished one (inspect errors because
+// --rm already removed it — the wrong-architecture failure mode) returns an
+// error naming the linux/amd64 requirement.
+func TestVerifySidecarRunning(t *testing.T) {
+	requireSh(t)
+	prevSettle := sidecarStartSettle
+	sidecarStartSettle = 0 // don't actually wait in tests
+	t.Cleanup(func() { sidecarStartSettle = prevSettle })
+
+	// inspectStub makes execCommand return a command emitting the given stdout
+	// and exit code, regardless of args.
+	inspectStub := func(stdout string, exit int) func(context.Context, string, ...string) *exec.Cmd {
+		return func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+			script := "printf '%s' " + stdout + "; exit " + strconv.Itoa(exit)
+			return exec.CommandContext(ctx, "sh", "-c", script) //nolint:gosec // fixed test script
+		}
+	}
+
+	tests := []struct {
+		name    string
+		stub    func(context.Context, string, ...string) *exec.Cmd
+		wantErr bool
+	}{
+		{name: "running", stub: inspectStub("running", 0), wantErr: false},
+		{name: "exited", stub: inspectStub("exited", 0), wantErr: true},
+		{name: "created", stub: inspectStub("created", 0), wantErr: true},
+		// inspect of an already-removed container exits non-zero (--rm reaped it).
+		{name: "gone", stub: inspectStub("", 1), wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prev := execCommand
+			t.Cleanup(func() { execCommand = prev })
+			execCommand = tt.stub
+
+			err := verifySidecarRunning(context.Background(), "cid123")
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "linux/amd64",
+					"failure must name the architecture requirement")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestVerifySidecarRunning_ContextCancelled confirms the settle wait honours
+// context cancellation rather than blocking.
+func TestVerifySidecarRunning_ContextCancelled(t *testing.T) {
+	prevSettle := sidecarStartSettle
+	sidecarStartSettle = time.Hour // long enough that only cancellation returns
+	t.Cleanup(func() { sidecarStartSettle = prevSettle })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := verifySidecarRunning(ctx, "cid123")
+	require.ErrorIs(t, err, context.Canceled)
+}

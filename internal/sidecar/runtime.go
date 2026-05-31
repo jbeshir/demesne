@@ -41,6 +41,11 @@ const dockerCmd = "docker"
 // execCommand is a seam to allow tests to swap the docker invocation.
 var execCommand = exec.CommandContext
 
+// sidecarStartSettle is how long Start waits after `docker run -d` returns
+// before confirming the sidecar is still running (see verifySidecarRunning).
+// A package var so tests can zero it.
+var sidecarStartSettle = 300 * time.Millisecond
+
 // AnthropicProxyConfig carries the auth values the agent-vendor proxy
 // needs. The agent-facing token is validated by the proxy on every
 // inbound request; the upstream token is what the proxy sends to the
@@ -147,7 +152,50 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 		return nil, fmt.Errorf("docker run demesne sidecar: %w\nstdout: %s\nstderr: %s", err, out, stderr)
 	}
 	containerID := strings.TrimSpace(string(out))
+	if err := verifySidecarRunning(ctx, containerID); err != nil {
+		// The container started but didn't stay running; best-effort remove
+		// it in case --rm hasn't reaped it yet (idempotent if already gone).
+		_ = dockerRemoveWithRetry(context.WithoutCancel(ctx), containerID)
+		return nil, err
+	}
 	return &Handle{ContainerID: containerID}, nil
+}
+
+// verifySidecarRunning confirms the sidecar container is still running a
+// short moment after `docker run -d` reported success. It catches the
+// silent-failure case where the runtime accepts the container but its init
+// can't exec the entrypoint: the embedded sidecar binary is linux/amd64, so
+// on a container runtime that can't run linux/amd64 (e.g. an arm64 host with
+// no amd64 emulation) the init exits immediately with "exec format error"
+// and --rm removes the container — yet `docker run -d` still exits 0 with a
+// container ID. Without this check Start would return a Handle for a dead
+// sidecar and the failure would surface only later as a confusing
+// proxy-unreachable error inside the agent run.
+func verifySidecarRunning(ctx context.Context, containerID string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(sidecarStartSettle):
+	}
+	cmd := execCommand(ctx, dockerCmd, "inspect", "-f", "{{.State.Status}}", containerID)
+	out, err := cmd.CombinedOutput()
+	if err == nil && strings.TrimSpace(string(out)) == "running" {
+		return nil
+	}
+	// status is "exited"/"created"/"dead", or — when --rm already removed the
+	// immediately-exited container — inspect errors with "no such container".
+	status := strings.TrimSpace(string(out))
+	if err != nil {
+		status = "not running (container already removed)"
+	}
+	return fmt.Errorf(
+		"demesne sidecar did not stay running after start (status: %s). The embedded "+
+			"sidecar binary is linux/amd64; the most likely cause is a container runtime "+
+			"that cannot execute linux/amd64 (e.g. an arm64 host without amd64 emulation). "+
+			"See the Requirements section of the README: the runtime must run linux/amd64 "+
+			"natively, via a Docker/Podman Machine VM, Rosetta, or qemu-user-static. It can "+
+			"also indicate an unexpected sidecar startup crash",
+		status)
 }
 
 // proxyRunArgs builds the docker run -v/-e arguments for the per-sandbox
