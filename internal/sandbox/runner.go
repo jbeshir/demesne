@@ -138,8 +138,9 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 		}
 	}()
 
+	wrapped := wrapStdoutStderr(req.Command)
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
-		Command: req.Command,
+		Command: wrapped,
 		Cwd:     mountOut,
 		Timeout: commandTimeout.Milliseconds(),
 	}, nil)
@@ -151,11 +152,24 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 	if exec.ExitCode != nil {
 		exitCode = *exec.ExitCode
 	}
+	// The wrapper redirect always creates both files, so a read error is
+	// exceptional; log it rather than silently surfacing empty output (the
+	// command itself may have succeeded, so don't fail the run). Paths are
+	// runner-composed under cfg.OutputRoot; gosec G304 false-positive.
+	stdoutBytes, err := os.ReadFile(filepath.Join(outputHost, "stdout.log")) //nolint:gosec
+	if err != nil {
+		log.Printf("sandbox_script: read stdout.log: %v", err)
+	}
+	stderrBytes, err := os.ReadFile(filepath.Join(outputHost, "stderr.log")) //nolint:gosec
+	if err != nil {
+		log.Printf("sandbox_script: read stderr.log: %v", err)
+	}
 	return ScriptResult{
 		JobID:      jobID,
 		OutputPath: outputHost,
-		Stdout:     exec.Text(),
+		Stdout:     string(stdoutBytes),
 		ExitCode:   exitCode,
+		Stderr:     tailStderr(stderrBytes),
 	}, nil
 }
 

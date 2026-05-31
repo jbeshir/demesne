@@ -4,7 +4,7 @@ Demesne exposes eight MCP tools over its stdio JSON-RPC interface. Three categor
 
 | Tool | Summary | Category |
 |------|---------|----------|
-| [`sandbox_script`](sandbox_script.md) | Run a single shell command in a fresh sandbox and return its stdout. | single-shot |
+| [`sandbox_script`](sandbox_script.md) | Run a single shell command in a fresh sandbox and return its stdout and stderr. | single-shot |
 | [`sandbox_create`](sandbox_create.md) | Create a persistent sandbox and return its handle. | persistent |
 | [`sandbox_exec`](sandbox_exec.md) | Run a shell command in an existing sandbox. | persistent |
 | [`sandbox_upload`](sandbox_upload.md) | Copy a host file into an existing sandbox. | persistent |

@@ -37,7 +37,8 @@ func (r *Runner) Exec(ctx context.Context, req ExecRequest) (ExecResult, error) 
 		exitCode = *exec.ExitCode
 	}
 	return ExecResult{
-		Stdout:   exec.Text(),
+		Stdout:   combineMessages(exec.Stdout),
 		ExitCode: exitCode,
+		Stderr:   tailStderr([]byte(combineMessages(exec.Stderr))),
 	}, nil
 }

@@ -35,6 +35,7 @@ type ScriptResult struct {
 	OutputPath string
 	Stdout     string
 	ExitCode   int
+	Stderr     string
 }
 
 // CreateRequest captures the inputs to sandbox_create.
@@ -61,6 +62,7 @@ type ExecRequest struct {
 type ExecResult struct {
 	Stdout   string
 	ExitCode int
+	Stderr   string
 }
 
 // UploadRequest captures the inputs to sandbox_upload.
@@ -110,6 +112,7 @@ type AgentResult struct {
 	// TotalUsageUSD adds CostUSD plus the spend of every descendant
 	// sandbox this run spawned (see results.json).
 	TotalUsageUSD float64
+	Stderr        string
 }
 
 // ResearchRequest captures the inputs to sandbox_research. It mirrors

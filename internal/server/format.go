@@ -20,6 +20,7 @@ type scriptOutput struct {
 	OutputDir string `json:"output_dir"`
 	JobID     string `json:"job_id"`
 	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
 }
 
 type createOutput struct {
@@ -30,6 +31,7 @@ type createOutput struct {
 type execOutput struct {
 	ExitCode int    `json:"exit_code"`
 	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
 }
 
 type agentRunOutput struct {
@@ -39,6 +41,7 @@ type agentRunOutput struct {
 	CostUSD       float64 `json:"cost_usd"`
 	TotalUsageUSD float64 `json:"total_usage_usd"`
 	Stdout        string  `json:"stdout"`
+	Stderr        string  `json:"stderr"`
 }
 
 func formatScriptResult(res sandbox.ScriptResult) *mcp.CallToolResult {
@@ -48,11 +51,14 @@ func formatScriptResult(res sandbox.ScriptResult) *mcp.CallToolResult {
 	fmt.Fprintf(&b, "job_id: %s\n", res.JobID)
 	b.WriteString("---\n")
 	b.WriteString(res.Stdout)
+	b.WriteString("---stderr---\n")
+	b.WriteString(res.Stderr)
 	return mcp.NewToolResultStructured(scriptOutput{
 		ExitCode:  res.ExitCode,
 		OutputDir: res.OutputPath,
 		JobID:     string(res.JobID),
 		Stdout:    res.Stdout,
+		Stderr:    res.Stderr,
 	}, b.String())
 }
 
@@ -65,10 +71,11 @@ func formatCreateResult(res sandbox.CreateResult) *mcp.CallToolResult {
 }
 
 func formatExecResult(res sandbox.ExecResult) *mcp.CallToolResult {
-	text := fmt.Sprintf("exit_code: %d\n---\n%s", res.ExitCode, res.Stdout)
+	text := fmt.Sprintf("exit_code: %d\n---\n%s\n---stderr---\n%s", res.ExitCode, res.Stdout, res.Stderr)
 	return mcp.NewToolResultStructured(execOutput{
 		ExitCode: res.ExitCode,
 		Stdout:   res.Stdout,
+		Stderr:   res.Stderr,
 	}, text)
 }
 
@@ -78,8 +85,8 @@ func formatExecResult(res sandbox.ExecResult) *mcp.CallToolResult {
 // adds the spend of any child sandboxes the run spawned.
 func formatAgentRunResult(res sandbox.AgentResult) *mcp.CallToolResult {
 	text := fmt.Sprintf(
-		"exit_code: %d\noutput_dir: %s\njob_id: %s\ncost_usd: %.4f\ntotal_usage_usd: %.4f\n---\n%s",
-		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.TotalUsageUSD, res.Stdout,
+		"exit_code: %d\noutput_dir: %s\njob_id: %s\ncost_usd: %.4f\ntotal_usage_usd: %.4f\n---\n%s\n---stderr---\n%s",
+		res.ExitCode, res.OutputPath, res.JobID, res.CostUSD, res.TotalUsageUSD, res.Stdout, res.Stderr,
 	)
 	return mcp.NewToolResultStructured(agentRunOutput{
 		ExitCode:      res.ExitCode,
@@ -88,5 +95,6 @@ func formatAgentRunResult(res sandbox.AgentResult) *mcp.CallToolResult {
 		CostUSD:       res.CostUSD,
 		TotalUsageUSD: res.TotalUsageUSD,
 		Stdout:        res.Stdout,
+		Stderr:        res.Stderr,
 	}, text)
 }

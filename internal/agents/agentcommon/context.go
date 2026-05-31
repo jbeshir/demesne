@@ -30,6 +30,10 @@ func WriteEnvironment(b *strings.Builder, p agents.ContextParams, egressSentence
 	b.WriteString("- `/out` is writable but **output only** — write your final " +
 		"artefacts (results, reports, generated files) here. The caller reads " +
 		"this back from the host after you exit.\n")
+	b.WriteString("- Each command you run inside the sandbox has its stdout and stderr captured to files under /out " +
+		"(e.g. stdout.log and stderr.log for shell scripts; transcript.jsonl + stderr.log for agent runs). " +
+		"The same streams are returned as separate stdout and stderr fields in the tool result; " +
+		"stderr is tail-bounded to ~16 KiB.\n")
 	if len(p.Inputs) > 0 {
 		b.WriteString("- Read-only inputs under `/in/`:\n")
 		for _, in := range p.Inputs {
@@ -109,6 +113,10 @@ func WriteOrchestration(b *strings.Builder) {
 	b.WriteString("- **Plan and enforce the handoff.** Before implementing in phases, " +
 		"decide what each phase produces, where, and in what format — appropriate to " +
 		"your task — and follow that contract strictly across every phase.\n")
+	b.WriteString("- **Read failed children's stderr.** Every child sandbox's stderr is " +
+		"surfaced as the `stderr` field in the tool result (tail-bounded), and the " +
+		"complete log is at the child's `/out/stderr.log`. On a non-zero `exit_code`, " +
+		"read the stderr before retrying — that's where the failure cause lives.\n")
 }
 
 // WriteTask appends the "## Task" section with the caller-supplied prompt.

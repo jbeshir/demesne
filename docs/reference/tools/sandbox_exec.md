@@ -45,12 +45,13 @@ Run a shell command in an existing sandbox.
     "content": [
       {
         "type": "text",
-        "text": "exit_code: 0\n---\n2.2.0\n"
+        "text": "exit_code: 0\n---\n2.2.0\n\n---stderr---\n"
       }
     ],
     "structuredContent": {
       "exit_code": 0,
-      "stdout": "2.2.0\n"
+      "stdout": "2.2.0\n",
+      "stderr": ""
     },
     "isError": false
   }
@@ -63,6 +64,8 @@ The text payload format (from `internal/server/format.go`):
 exit_code: <int>
 ---
 <stdout from the command>
+---stderr---
+<stderr>
 ```
 
 The same result is also returned as `structuredContent` against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume it and ignore the text block above, which remains as a fallback for clients that don't:
@@ -71,8 +74,11 @@ The same result is also returned as `structuredContent` against a declared [`out
 |-------|------|
 | `exit_code` | integer |
 | `stdout` | string |
+| `stderr` | string |
 
 The sandbox TTL is refreshed by 24 hours before the command runs.
+
+Stderr is captured separately from stdout (via the SDK's per-stream split) and returned as the `stderr` field, tail-bounded to the last 16 KiB. No on-disk file: `sandbox_exec` runs against the sandbox's persistent `/out` and would otherwise overwrite a log on every call.
 
 ## Errors
 

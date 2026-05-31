@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/jbeshir/demesne/internal/agents"
@@ -142,4 +143,18 @@ func TestBuildProxyConfig(t *testing.T) {
 			tt.check(t, results, tt.codexTokens, cfg)
 		})
 	}
+}
+
+func TestReadAgentStderr_Missing(t *testing.T) {
+	dir := t.TempDir()
+	result := readAgentStderr(dir)
+	assert.Nil(t, result)
+}
+
+func TestReadAgentStderr_Present(t *testing.T) {
+	dir := t.TempDir()
+	want := []byte("some stderr output\n")
+	require.NoError(t, os.WriteFile(dir+"/"+agentStderrBasename, want, 0o600))
+	got := readAgentStderr(dir)
+	assert.Equal(t, want, got)
 }

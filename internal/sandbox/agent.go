@@ -240,6 +240,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 		ExitCode:      exitCode,
 		CostUSD:       usage.CostUSD,
 		TotalUsageUSD: total,
+		Stderr:        tailStderr(readAgentStderr(layout.outHost)),
 	}, nil
 }
 
@@ -285,6 +286,17 @@ const (
 // cfg.OutputRoot; gosec G304 false-positive.
 func readAgentTranscript(outHost string) []byte {
 	data, err := os.ReadFile(filepath.Join(outHost, agentTranscriptBasename)) //nolint:gosec
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+// readAgentStderr reads the agent's redirected stderr from the host /out
+// dir. Missing/unreadable yields nil; the caller tail-bounds and surfaces
+// it. The path is runner-composed under cfg.OutputRoot; gosec G304 false-positive.
+func readAgentStderr(outHost string) []byte {
+	data, err := os.ReadFile(filepath.Join(outHost, agentStderrBasename)) //nolint:gosec
 	if err != nil {
 		return nil
 	}

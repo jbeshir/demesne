@@ -23,6 +23,7 @@ const (
 	testFile         = "/some/file.txt"
 	testDir          = "/some/dir"
 	msgExitCodeZero  = "exit_code: 0"
+	doneStdout       = "DONE\n"
 )
 
 type fakeRunner struct {
@@ -490,7 +491,7 @@ func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 		researchRes: sandbox.AgentResult{
 			JobID:      sandbox.JobID("rsh"),
 			OutputPath: "/tmp/demesne-out/rsh",
-			Stdout:     "DONE\n",
+			Stdout:     doneStdout,
 			ExitCode:   0,
 			CostUSD:    0.42,
 		},
@@ -521,7 +522,7 @@ func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 		OutputDir: "/tmp/demesne-out/rsh",
 		JobID:     "rsh",
 		CostUSD:   0.42,
-		Stdout:    "DONE\n",
+		Stdout:    doneStdout,
 	}, resultStructured[agentRunOutput](t, got))
 }
 
