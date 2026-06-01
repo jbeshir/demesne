@@ -68,6 +68,7 @@ job_id: <UUID>
 ---
 hello, world
 --- ran in Linux ... x86_64 GNU/Linux
+---stderr---
 ```
 
 - `exit_code: 0` — the command succeeded.

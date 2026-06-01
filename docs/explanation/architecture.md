@@ -55,7 +55,7 @@ Present in `sandbox_agent` and `sandbox_research` sandboxes. One loopback listen
 
 At startup, `cmd/demesne-mcp` launches an in-process **MCP aggregator** (`internal/mcpproxy`). The aggregator reads `~/.claude.json` (or `DEMESNE_HOST_MCP_CONFIG`), discovers configured stdio MCP servers, and serves one `/<server>/mcp` HTTP endpoint per server on a **unix socket** (default `/tmp/demesne-mcp/<pid>/aggregator.sock`). Upstream server processes are spawned lazily on first use and kept alive.
 
-Only tools on the read-only allowlist are ever advertised: the aggregator intersects each upstream's `tools/list` with the built-in per-server defaults (overridable via `~/.config/demesne/mcp-allowlist.json`) and filters the result, so a non-allowlisted tool never appears in `tools/list` and cannot be called.
+Only tools on the read-only allowlist are ever advertised: the aggregator intersects each upstream's `tools/list` with the built-in per-server defaults (overridable via `~/.config/demesne/mcp-allowlist.json`) and filters the result, so a non-allowlisted tool never appears in `tools/list` and cannot be called. Resources, resource templates, prompts, and completion are relayed in full from any exposed upstream and are not subject to the allowlist.
 
 The runner bind-mounts the aggregator socket into each sandbox's sidecar. The sidecar then runs the MCP tunnel proxy (one listener per server) sharing a **single egress-bypassing HTTP transport** over that socket. This design uses a unix socket rather than a host TCP port because under rootless podman the sandbox network namespace cannot reach a host-process TCP listener — a bind-mounted socket crosses the boundary as a regular file.
 
@@ -73,8 +73,6 @@ This gives the demesne handlers the parent's identity without exposing it to the
 
 `sandbox_agent` and `sandbox_research` re-expose demesne's own tools as an in-process **demesne self-server** mounted on the aggregator alongside the discovered host MCP servers (via an `ExtraServers` hook). The agent reaches this self-server through the same sidecar tunnel mechanism, so it can call `sandbox_script`, `sandbox_agent`, `sandbox_research`, `sandbox_create`, `sandbox_exec`, and `sandbox_destroy` (upload/download are excluded, as child sandboxes take no mount params).
 
-Child sandboxes spawned by `sandbox_agent` inherit the parent's read-only `/in` and share the parent's writable `/workspace`; their `/out` is `/out/child/<name>`, visible to the parent and all ancestors. Grandchildren nest further: `/out/child/<name>/child/<grandchild>`, and so on, so the whole descendant tree materialises under the root run's `/out`. `sandbox_research` children are the exception — they get a fresh private workspace with no `/in` mounts.
-
-Names are required and must be unique per parent. There is no recursion depth cap. Each agent run writes `<out>/results.json` with `own_usage_usd` and `total_usage_usd` (the latter sums the whole descendant tree's indicative cost).
+Child sandboxes spawned by `sandbox_agent` inherit the parent's read-only `/in` and share the parent's writable `/workspace`; their `/out` is `/out/child/<name>`. `sandbox_research` children are isolated — see [Spawn nested agents](../how-to/spawn-nested-agents.md) for the output-path convention, the copy-to-`/out` rule, and grandchild nesting. Each agent run writes `<out>/results.json` with `own_usage_usd` and `total_usage_usd` (summing the whole descendant tree).
 
 The host process performs the actual container spawning (a sibling sandbox, not podman-in-podman). The `X-Demesne-Parent` header mechanism described above is what allows the demesne self-server to correctly attribute a child sandbox to its parent context.

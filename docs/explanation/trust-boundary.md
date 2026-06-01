@@ -11,24 +11,14 @@ uses ChatGPT-OAuth (not an API key): demesne reads the host's OAuth token
 set from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written
 by `codex login`); the proxy holds that token set off-agent, refreshes it
 autonomously, and swaps in a fresh access token when forwarding — the
-sandboxed Codex only ever sees a per-sandbox fake bearer. Additional providers slot in through the
-`internal/agents/<vendor>` package layout.
+sandboxed Codex only ever sees a per-sandbox fake bearer.
 
-`sandbox_agent` is the input-bearing variant: caller-supplied host
-paths are mounted read-only at `/in/<basename>`, and egress is
-restricted to the agent provider's API proxy (with `package-managers`
-as an opt-in extra). `sandbox_research` is the open-egress variant:
-no inputs, but the sandbox can reach anywhere on the open internet.
-The combination of read-only inputs and open egress is the
-data-exfiltration shape kept off the surface — `sandbox_agent`
-refuses `egress: "open"`, and `sandbox_research` accepts no `files` /
-`directories`.
+`sandbox_agent` is the input-bearing variant: caller-supplied host paths are mounted read-only at `/in/<basename>`, and egress is restricted to the agent provider's API proxy (with `package-managers` as an opt-in extra). `sandbox_research` is the open-egress variant: no inputs, but the sandbox can reach anywhere on the open internet. `sandbox_agent` refuses `egress: "open"` and `sandbox_research` accepts no `files` / `directories` — see [Egress modes](key-concepts.md#egress-modes) for the rationale.
 
 For each invocation demesne starts a **per-sandbox sidecar container**
-that joins OpenSandbox's egress-sidecar network namespace. The sidecar
-runs exactly one vendor proxy — the one matching the agent vendor
+that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs one AI-vendor credential proxy — the one matching the agent vendor
 (anthropic proxy on `127.0.0.1:8088` for claude-code; OpenAI proxy on
-`127.0.0.1:8086` for codex); the agent reaches it on localhost. The proxy holds the real upstream OAuth token; the
+`127.0.0.1:8086` for codex) — plus a Go-module proxy (`127.0.0.1:8087`, in every sandbox) and, for agent sandboxes, MCP tunnel listeners (`127.0.0.1:8089+`). The proxy holds the real upstream OAuth token; the
 agent only ever sees a per-sandbox fake token (`demesne-agent-...`)
 that the proxy validates and swaps. The proxy parses the upstream API
 response for token usage and writes a `usage.json` to the
@@ -109,7 +99,7 @@ called. There is no auth between agent, tunnel, and aggregator — the
 sandbox edge is the trust boundary. To change what's exposed, edit
 `~/.config/demesne/mcp-allowlist.json` (per server: `"default"`,
 `"*"`, an explicit list of tool names, or `[]` to disable) and
-restart demesne.
+restart demesne. Resources, resource templates, prompts, and completion are relayed without allowlist filtering — only tool calls are gated.
 
 ## Child sandboxes
 
@@ -119,11 +109,7 @@ alongside the discovered upstreams (via its `ExtraServers` hook), so
 it rides the same socket + tunnel. The agent can spawn child
 sandboxes — `sandbox_script` / `agent` / `research` / `create` /
 `exec` / `destroy` (no `upload`/`download`) — none of which take
-mount params. `sandbox_agent` children inherit the parent's read-only `/in` and
-shared writable `/workspace`, and write to `/out/child/<name>`;
-`sandbox_research` children instead get a fresh private workspace with no `/in` mounts;
-grandchildren nest deeper, so the whole descendant tree materialises
-under the root run's `/out`. Names are required and unique per parent.
+mount params. `sandbox_agent` children inherit the parent's read-only `/in` and share the parent's `/workspace`; `sandbox_research` children are isolated. See [Spawn nested agents](../how-to/spawn-nested-agents.md) for the output-path convention, the copy-to-`/out` rule, and grandchild nesting.
 
 The host process does the actual spawning (a sibling sandbox, not
 podman-in-podman). Because the `demesne` server is per-caller while

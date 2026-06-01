@@ -84,7 +84,7 @@ total_usage_usd: <float, 4 decimal places>
 <agent's stderr>
 ```
 
-The same result is also returned as `structuredContent` against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume it and ignore the text block above, which remains as a fallback for clients that don't:
+Returned as `structuredContent` against the declared output schema — see [Structured output](README.md#structured-output) for the cross-tool conventions. Fields for this tool:
 
 | Field | Type |
 |-------|------|
@@ -98,7 +98,7 @@ The same result is also returned as `structuredContent` against a declared [`out
 
 The MCP `stderr` field is the last 16 KiB of `stderr.log`; the file is the complete stream.
 
-`cost_usd` is the indicative spend this run incurred through its vendor proxy, computed from published API pricing. It is reported regardless of how the underlying OAuth token is billed (Claude Code OAuth tokens typically authorise against a Claude Console subscription, not per-request API billing). `total_usage_usd` adds the cost of any child sandboxes this agent spawned.
+`cost_usd` is indicative and `total_usage_usd` adds child sandboxes' costs — see [Indicative cost reporting](../../explanation/key-concepts.md#indicative-cost-reporting).
 
 The `output_dir` contains:
 - Any artefacts the agent wrote to `/out` inside the sandbox.

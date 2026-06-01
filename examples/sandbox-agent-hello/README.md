@@ -41,9 +41,6 @@ After the agent exits, the `output_dir` returned in the result contains:
 - **`<output_dir>/results.json`** — own cost plus a rolled-up cost tree covering this run and any child sandboxes it spawned. See [`../../docs/reference/results-json.md`](../../docs/reference/results-json.md) for the field-level reference.
 - **`<output_dir>/fib.txt`** (or whatever the agent writes to `/out`) — depends on the agent's behaviour. In this example the prompt asks for `fib.txt`, so you should find it there.
 
-## Indicative cost
-
-The `cost_usd` field in the result (and in `usage.json`) is **indicative**. Demesne computes it from an embedded pricing table and the token counts reported by the API. For Claude Code OAuth users, billing is against a Claude Console subscription rather than on a per-request basis, so the figure is useful for relative cost tracking but is not what is actually charged. See the `cost_usd` note in [`../../docs/reference/usage-json.md`](../../docs/reference/usage-json.md).
 
 ## Run it
 

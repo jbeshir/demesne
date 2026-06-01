@@ -54,6 +54,8 @@ Completed siblings' outputs are mounted read-only under /in/previous-jobs/<name>
 The host MCP servers (e.g. workflowy, alignment, anki) appear in your tool list under their native tool names. Only tools on the built-in read-only allowlist (or the operator's override) are available; calls to non-allowlisted tools will fail. There is no auth between you, the sidecar tunnel, and the aggregator — the sandbox edge is the trust boundary.
 ```
 
+See [Spawn nested agents](spawn-nested-agents.md) for the output-path convention and the copy-to-`/out` rule outside the system-prompt context.
+
 ## Why each claim
 
 - **sandbox_agent refuses `egress: "open"`** — `rejectOpenEgress` in `internal/sandbox/childserver.go:326-339` returns a tool-result error for any egress value of `"open"` on `sandbox_script`, `sandbox_agent`, and `sandbox_create` children. The comment names the exact threat: "inputs plus unrestricted outbound is the data-exfiltration shape demesne keeps off the child surface."

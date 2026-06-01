@@ -58,3 +58,4 @@ Demesne reads the allowlist file **once at startup** (via `ResolveAllowlist` in 
 - The allowlist applies to `tools/list` filtering at the aggregator level. A tool that is not on the allowlist never appears in the agent's tool list and cannot be called — the agent doesn't even know it exists.
 - There is no per-tool argument filtering; the allowlist is coarse-grained (tool-level, not argument-level).
 - The demesne self-server (which exposes `sandbox_script`, `sandbox_agent`, etc. to child agents) is not governed by this allowlist file — it is wired in directly by the runner.
+- Resources, resource templates, prompts, and completion bypass the allowlist — setting a server to `[]` removes its tools but the server's resources/prompts are still exposed.

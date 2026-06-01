@@ -68,7 +68,7 @@ exit_code: <int>
 <stderr>
 ```
 
-The same result is also returned as `structuredContent` against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume it and ignore the text block above, which remains as a fallback for clients that don't:
+Returned as `structuredContent` against the declared output schema — see [Structured output](README.md#structured-output) for the cross-tool conventions. Fields for this tool:
 
 | Field | Type |
 |-------|------|

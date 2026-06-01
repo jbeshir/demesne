@@ -65,50 +65,7 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 }
 ```
 
-The text payload format (from `internal/server/format.go`):
-
-```
-exit_code: <int>
-output_dir: <host path of /out>
-job_id: <UUID>
-cost_usd: <float, 4 decimal places>
-total_usage_usd: <float, 4 decimal places>
----
-<agent's final answer / stdout>
----stderr---
-<agent's stderr>
-```
-
-The same result is also returned as `structuredContent` against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume it and ignore the text block above, which remains as a fallback for clients that don't:
-
-| Field | Type |
-|-------|------|
-| `exit_code` | integer |
-| `output_dir` | string |
-| `job_id` | string |
-| `cost_usd` | number |
-| `total_usage_usd` | number |
-| `stdout` | string |
-| `stderr` | string |
-
-The MCP `stderr` field is the last 16 KiB of `stderr.log`; the file is the complete stream.
-
-`cost_usd` is the indicative spend this run incurred through its vendor proxy, computed from published API pricing. It is reported regardless of how the underlying OAuth token is billed (Claude Code OAuth tokens typically authorise against a Claude Console subscription, not per-request API billing). `total_usage_usd` adds the cost of any child sandboxes this agent spawned.
-
-The `output_dir` contains:
-- Any artefacts the agent wrote to `/out` inside the sandbox.
-- `usage.json` — the per-run token and cost snapshot written by the sidecar proxy.
-- `results.json` — a rolled-up cost tree covering this run and all descendants.
-- `transcript.jsonl` — the agent's raw stdout.
-- `stderr.log` — the agent's stderr.
-
-See [`../usage-json.md`](../usage-json.md) and [`../results-json.md`](../results-json.md) for field-level documentation of those files.
-
-Unlike `sandbox_agent`, this tool has no `files`, `directories`, or `egress` parameters. Egress is always `open`; there are no `/in` mounts. The combination of read-only host inputs and unrestricted outbound access is deliberately kept off the surface — use `sandbox_agent` for input mounts, or `sandbox_research` for open egress, never both.
-
-### Host MCP proxy note
-
-When demesne is configured with host MCP servers, the agent sees those servers through the sidecar tunnel. These servers are not advertised in the agent CLAUDE.md or MCP tool catalogue; agents discover them on demand via the standard MCP list methods. Tools are filtered through the read-only allowlist; blocked calls surface as errors from the agent's MCP calls. Resources, resource templates, prompts, and completion are relayed in full from any exposed upstream without allowlist filtering. Listings reflect a static snapshot taken at aggregator start. See `internal/mcpproxy/server.go` for the filtering logic.
+Output format, cost reporting, the `output_dir` contents, and the host MCP proxy note are the same as for [`sandbox_agent`](sandbox_agent.md) — see that page. Unlike `sandbox_agent`, this tool has no `files`/`directories`/`egress` parameters: egress is always `open`, there are no `/in` mounts, and the inputs-plus-open-egress shape is deliberately kept off the surface — see [Egress modes](../../explanation/key-concepts.md#egress-modes).
 
 ## Errors
 

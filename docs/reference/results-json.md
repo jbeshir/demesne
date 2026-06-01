@@ -17,7 +17,7 @@ Every `sandbox_agent` and `sandbox_research` run writes `results.json` to its ou
 
 ## Notes
 
-- **`own_usage_usd` and `total_usage_usd` are indicative.** They are derived from `usage.json` which is computed from demesne's embedded pricing table, not from actual billing. For Claude Code OAuth users, real charges are against a Claude Console subscription. See [Indicative cost reporting](../explanation/key-concepts.md) and [`usage.json` reference](usage-json.md).
+- **`own_usage_usd` and `total_usage_usd` are indicative.** They are derived from `usage.json` which is computed from demesne's embedded pricing table, not from actual billing. For Claude Code OAuth users, real charges are against a Claude Console subscription. See [Indicative cost reporting](../explanation/key-concepts.md#indicative-cost-reporting) and [`usage.json` reference](usage-json.md).
 - **`total_usage_usd` sums descendants bottom-up.** Each child's `results.json` is written before its parent reads it; the parent reads every `<output_dir>/child/<name>/results.json` and sums their `total_usage_usd` values. This means the root run's `results.json` carries the cost of the entire descendant tree.
 - **Written after children finish.** The write happens in `writeResults` in `internal/sandbox/results.go`, called from `runAgent` after `runAgent` returns — at which point all child tool calls within the agent have already completed, so all child `results.json` files are present.
 - `results.json` is best-effort: write failures are silently dropped. The headline cost is also reported in the tool result text (`total_usage_usd` field), so the information is not lost even if the file write fails.

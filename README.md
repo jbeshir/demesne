@@ -45,7 +45,6 @@ See [docs/how-to/wire-into-claude-code.md](docs/how-to/wire-into-claude-code.md)
 | 🚀 [Quickstart](docs/tutorial/quickstart.md) | Five steps to your first `sandbox_script` call |
 | 📚 [Docs](docs/) | Tutorials, how-to recipes, reference, explanation |
 | 🧪 [Examples](examples/) | Runnable example calls |
-| 🗺 [Roadmap](ROADMAP.md) | What's shipped, what's planned |
 | 🔍 [Alternatives](docs/explanation/comparison.md) | How demesne compares to E2B, Modal, Daytona, and others |
 
 ## Requirements
@@ -60,52 +59,20 @@ Releases are published for `linux/amd64`, `darwin/amd64`, `darwin/arm64`, and `w
 
 ## Status
 
-See [CHANGELOG.md](CHANGELOG.md) for milestone history. Roadmap and future work in [ROADMAP.md](ROADMAP.md).
+See [CHANGELOG.md](CHANGELOG.md) for milestone history.
 
 ## Tools
 
-| Tool               | Description                                                                                                                                                                                                                                |
-|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sandbox_script`   | Run a shell command in a fresh sandbox and tear it down. Returns exit code, stdout, stderr, and the `/out` host path.                                                                                                                     |
-| `sandbox_create`   | Create a persistent sandbox. Returns a `sandbox_id` handle and the `/out` host path. TTL is 24h, refreshed by each `sandbox_exec`.                                                                                                          |
-| `sandbox_exec`     | Run a shell command in an existing sandbox. Refreshes TTL. Returns exit code, stdout, and stderr.                                                                                                                                           |
-| `sandbox_upload`   | Copy a host file into an existing sandbox.                                                                                                                                                                                                  |
-| `sandbox_download` | Copy a file out of an existing sandbox; written under `<output_dir>/downloads/<basename>`. Returns the host path.                                                                                                                           |
-| `sandbox_destroy`  | Kill an existing sandbox. Host output dir is preserved.                                                                                                                                                                                     |
-| `sandbox_agent`    | Run an AI coding agent (currently the Claude Code CLI) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the per-vendor API proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.              |
-| `sandbox_research` | Run a long-running research agent with no input mounts and unrestricted outbound internet. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.                                                     |
-
-### `sandbox_script` parameters
-
-See [docs/reference/tools/sandbox_script.md](docs/reference/tools/sandbox_script.md) for the full parameter reference, sample requests, and error table.
-
-### `sandbox_create` parameters
-
-See [docs/reference/tools/sandbox_create.md](docs/reference/tools/sandbox_create.md) for the full parameter reference, sample requests, and error table.
-
-### `sandbox_exec` parameters
-
-See [docs/reference/tools/sandbox_exec.md](docs/reference/tools/sandbox_exec.md) for the full parameter reference, sample requests, and error table.
-
-### `sandbox_upload` parameters
-
-See [docs/reference/tools/sandbox_upload.md](docs/reference/tools/sandbox_upload.md) for the full parameter reference, sample requests, and error table.
-
-### `sandbox_download` parameters
-
-See [docs/reference/tools/sandbox_download.md](docs/reference/tools/sandbox_download.md) for the full parameter reference, sample requests, and error table.
-
-### `sandbox_destroy` parameters
-
-See [docs/reference/tools/sandbox_destroy.md](docs/reference/tools/sandbox_destroy.md) for the full parameter reference, sample requests, and error table.
-
-### `sandbox_agent` parameters
-
-See [docs/reference/tools/sandbox_agent.md](docs/reference/tools/sandbox_agent.md) for the full parameter reference, sample requests, and error table.
-
-### `sandbox_research` parameters
-
-See [docs/reference/tools/sandbox_research.md](docs/reference/tools/sandbox_research.md) for the full parameter reference, sample requests, and error table.
+| Tool               | Description                                                                                                                                                                                                                                | Reference |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----|
+| `sandbox_script`   | Run a shell command in a fresh sandbox and tear it down. Returns exit code, stdout, stderr, and the `/out` host path.                                                                                                                     | [ref](docs/reference/tools/sandbox_script.md) |
+| `sandbox_create`   | Create a persistent sandbox. Returns a `sandbox_id` handle and the `/out` host path. TTL is 24h, refreshed by each `sandbox_exec`.                                                                                                          | [ref](docs/reference/tools/sandbox_create.md) |
+| `sandbox_exec`     | Run a shell command in an existing sandbox. Refreshes TTL. Returns exit code, stdout, and stderr.                                                                                                                                           | [ref](docs/reference/tools/sandbox_exec.md) |
+| `sandbox_upload`   | Copy a host file into an existing sandbox.                                                                                                                                                                                                  | [ref](docs/reference/tools/sandbox_upload.md) |
+| `sandbox_download` | Copy a file out of an existing sandbox; written under `<output_dir>/downloads/<basename>`. Returns the host path.                                                                                                                           | [ref](docs/reference/tools/sandbox_download.md) |
+| `sandbox_destroy`  | Kill an existing sandbox. Host output dir is preserved.                                                                                                                                                                                     | [ref](docs/reference/tools/sandbox_destroy.md) |
+| `sandbox_agent`    | Run an AI coding agent (currently the Claude Code CLI) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the per-vendor API proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.              | [ref](docs/reference/tools/sandbox_agent.md) |
+| `sandbox_research` | Run a long-running research agent with no input mounts and unrestricted outbound internet. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.                                                     | [ref](docs/reference/tools/sandbox_research.md) |
 
 For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Quickstart](docs/tutorial/quickstart.md) and the [`sandbox_create`](docs/reference/tools/sandbox_create.md) / [`sandbox_exec`](docs/reference/tools/sandbox_exec.md) reference pages.
 
@@ -122,7 +89,7 @@ For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Qui
 | `DEMESNE_CODEX_AUTH_FILE` | no | `~/.codex/auth.json` | Path to the Codex ChatGPT-OAuth token file (written by `codex login`) for the Codex provider (experimental). The proxy holds and refreshes this token set off-agent. Required when `sandbox_agent` or `sandbox_research` is invoked with `agent="codex"`; other tools and providers work without it. |
 | `DEMESNE_HOST_MCP_CONFIG` | no | `~/.claude.json` | Path to the Claude Code MCP config demesne reads to discover host stdio MCP servers. |
 | `DEMESNE_MCP_ALLOWLIST`  | no | `~/.config/demesne/mcp-allowlist.json` | Path to the per-server tool allowlist override file (auto-seeded with built-in read-only defaults on first run). |
-| `DEMESNE_MCP_SOCKET`     | no | `/tmp/demesne-mcp/aggregator.sock` | Host path of the MCP aggregator's unix socket. The runner bind-mounts it into each sandbox sidecar; a socket (not a host TCP port) is what lets the sandbox reach the aggregator under rootless podman. |
+| `DEMESNE_MCP_SOCKET`     | no | `/tmp/demesne-mcp/<pid>/aggregator.sock` | Host path of the MCP aggregator's unix socket. The runner bind-mounts it into each sandbox sidecar; a socket (not a host TCP port) is what lets the sandbox reach the aggregator under rootless podman. |
 
 ## Run a local OpenSandbox
 
@@ -137,26 +104,7 @@ uvx opensandbox-server --config ~/.sandbox.toml
 Feed the lifecycle host:port and API key to Demesne via `OPEN_SANDBOX_DOMAIN`
 and `OPEN_SANDBOX_API_KEY`.
 
-### Required `~/.sandbox.toml` edits
-
-The packaged docker example defaults are too permissive for use as a security
-boundary. Change two settings before starting the server:
-
-- **`[egress] mode = "dns+nft"`** (default is `"dns"`). The default only
-  filters egress at DNS lookup; raw-IP outbound traffic still succeeds, so
-  `egress: "none"` in `sandbox_script` does not actually deny network. The
-  `dns+nft` mode adds nftables-based IP filtering and makes `none` mean
-  none.
-- **`[server] api_key = "<some-secret>"`** (default is empty). With an empty
-  key, the server requires either an interactive `YES` at startup or
-  `OPENSANDBOX_INSECURE_SERVER=YES` in the environment.
-- **`[storage] allowed_host_paths = ["/tmp", "/home/<you>/code"]`** (or
-  whichever directories you want bind-mountable). The example sets `[]`
-  with a comment saying "all paths allowed", but empirically empty means
-  *nothing* is allowed — every bind mount fails with
-  `VOLUME::HOST_PATH_NOT_ALLOWED`. Both OpenSandbox's allowlist and
-  demesne's `DEMESNE_ALLOWED_PATHS` must include each host path you
-  intend to mount.
+See [Step 2 of the Quickstart](docs/tutorial/quickstart.md#step-2--run-a-local-opensandbox) for the required `~/.sandbox.toml` edits.
 
 ## Build and run
 
@@ -196,5 +144,6 @@ blocks both DNS and raw-IP egress; `egress: "package-managers"` allows
 pypi.org; the full persistent-sandbox lifecycle
 (create / exec / upload / exec / download / destroy); and that
 `sandbox_exec` refreshes the sandbox TTL. The raw-IP assertion requires
-the `[egress] mode = "dns+nft"` config noted above; against a
-`mode = "dns"` server it will fail.
+the `[egress] mode = "dns+nft"` config in `~/.sandbox.toml` (see the
+[Quickstart](docs/tutorial/quickstart.md#step-2--run-a-local-opensandbox));
+against a `mode = "dns"` server it will fail.

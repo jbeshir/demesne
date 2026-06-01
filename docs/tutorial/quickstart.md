@@ -172,6 +172,7 @@ job_id: <uuid>
 ---
 hello
 Linux <container-hostname> 6.x.x ... x86_64 GNU/Linux
+---stderr---
 ```
 
 The command ran inside a disposable `continuumio/anaconda3` container (the default image). The `/tmp/demesne/out/<job-id>/out` directory on your host contains any files the command wrote to `/out` inside the sandbox.
