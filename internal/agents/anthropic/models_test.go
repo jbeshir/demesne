@@ -34,7 +34,7 @@ func TestResolveModel_RejectsRemoved(t *testing.T) {
 	}
 }
 
-// TestModels_MatchCatalog asserts the agent whitelist stays in sync
+// TestModels_MatchCatalog asserts the agent allowlist stays in sync
 // with the proxy catalog: every alias in Models has a non-empty
 // pricing entry, and DefaultModel sits at catalog index 0.
 func TestModels_MatchCatalog(t *testing.T) {

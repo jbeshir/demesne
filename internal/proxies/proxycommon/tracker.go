@@ -62,7 +62,8 @@ func (t *Tracker[TC]) Add(modelID string, tc TC) {
 	t.persistLocked()
 }
 
-// Snapshot returns a JSON-serializable view of the current state.
+// Snapshot returns per-model totals and the aggregate USD cost. Model IDs are sorted for stable
+// output. Safe for concurrent use.
 func (t *Tracker[TC]) Snapshot() Snapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()

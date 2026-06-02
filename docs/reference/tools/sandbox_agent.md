@@ -21,7 +21,7 @@ Run an AI agent inside a fresh sandbox against the caller's prompt.
 | `readOnlyHint` | `false` | Creates a sandbox, writes artefacts to `/out`, and tears the sandbox down. |
 | `destructiveHint` | `false` | The agent runs in its own fresh sandbox; it does not mutate the caller's state or any pre-existing sandbox. |
 | `idempotentHint` | `false` | LLM runs are non-deterministic; repeating the same prompt can produce different artefacts and API costs. |
-| `openWorldHint` | `true` | Reaches the Anthropic API (or other vendor API) through the on-host proxy; with `egress=package-managers` it also reaches npm/PyPI/conda registries. The agent can also spawn child sandboxes via the demesne child MCP server. |
+| `openWorldHint` | `true` | Reaches the Anthropic API (or other vendor API) through the vendor proxy; with `egress=package-managers` it also reaches npm/PyPI/conda registries. The agent can also spawn child sandboxes via the demesne child MCP server. |
 
 ## Sample request
 
@@ -122,7 +122,7 @@ When demesne is configured with host MCP servers, the agent sees those servers t
 | `agent "<name>" is not registered (available: [...])` | The `agent` parameter names an unknown provider. |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for sandbox_agent (run 'claude setup-token' to obtain one)` | The Claude Code OAuth token env var is not set on the demesne process. Required for `agent=claude-code`. |
 | `DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) is required for sandbox_agent when agent="codex"` | The Codex auth file is not set. Required for `agent=codex`. |
-| `model "<name>" is not in the Anthropic whitelist ([opus sonnet haiku])` | `model` parameter is not one of the three valid Claude tiers. |
+| `model "<name>" is not in the Anthropic allowlist ([opus sonnet haiku])` | `model` parameter is not one of the three valid Claude tiers. |
 | `mount path must be absolute: <path>` | A path in `files` or `directories` is relative. |
 | `mount path <path> is not within DEMESNE_ALLOWED_PATHS` | A path in `files` or `directories` is outside every `DEMESNE_ALLOWED_PATHS` entry. |
 | `resolve mount path <path>: <OS error>` | Symlink resolution failed for an input path. |

@@ -109,7 +109,7 @@ func buildMCPProxy() (*proxymcp.Server, error) {
 	return proxymcp.NewServer(os.Getenv(proxymcp.SocketPathEnv), bindings), nil
 }
 
-// credProxyEnv names the env vars one credential proxy reads and how to
+// credProxyEnv names the env vars one vendor proxy reads and how to
 // construct it. build receives the validated values and returns a ready
 // starter; it is called only when the auth token is present and the
 // upstream credential is set. Used for the Anthropic proxy (upstream is
@@ -122,7 +122,7 @@ type credProxyEnv struct {
 	build       func(auth, upstream, usagePath string) starter
 }
 
-// buildCredentialProxy wires one agent-vendor credential proxy from its
+// buildCredentialProxy wires one vendor proxy from its
 // env vars. Returns (nil, nil) when the auth token is absent (not that
 // vendor's agent run — a plain script/create sandbox, or the other
 // vendor); when the auth token is present, the upstream credential is
@@ -143,7 +143,7 @@ func buildCredentialProxy(c credProxyEnv) (starter, error) {
 	return c.build(auth, upstream, usagePath), nil
 }
 
-// buildCodexProxy wires the OpenAI/Codex credential proxy from its env vars.
+// buildCodexProxy wires the OpenAI/Codex vendor proxy from its env vars.
 // Returns (nil, nil) when DEMESNE_OPENAI_AUTH_TOKEN is absent (not a Codex
 // agent run). When the auth token is present, UpstreamTokensEnv must also
 // be set and contain a valid JSON-encoded TokenSet.

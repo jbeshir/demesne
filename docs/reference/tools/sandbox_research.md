@@ -18,7 +18,7 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 | `readOnlyHint` | `false` | Creates a sandbox and writes artefacts to `/out`. |
 | `destructiveHint` | `false` | The agent runs in its own fresh sandbox with no `/in` mounts; it does not mutate the caller's state. |
 | `idempotentHint` | `false` | LLM runs are non-deterministic; the agent also fetches live data from the open internet. |
-| `openWorldHint` | `true` | Egress is always fully open — any public HTTPS endpoint is reachable. The agent-vendor proxy still gates model API calls. |
+| `openWorldHint` | `true` | Egress is always fully open — any public HTTPS endpoint is reachable. The vendor proxy still gates model API calls. |
 
 ## Sample request
 
@@ -75,7 +75,7 @@ Output format, cost reporting, the `output_dir` contents, and the host MCP proxy
 | `agent "<name>" is not registered (available: [...])` | The `agent` parameter names an unknown provider. |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for sandbox_research (run 'claude setup-token' to obtain one)` | The Claude Code OAuth token env var is not set on the demesne process. Required for `agent=claude-code`. |
 | `DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) is required for sandbox_research when agent="codex"` | The Codex auth file is not set. Required for `agent=codex`. |
-| `model "<name>" is not in the Anthropic whitelist ([opus sonnet haiku])` | `model` parameter is not one of the three valid Claude tiers. |
+| `model "<name>" is not in the Anthropic allowlist ([opus sonnet haiku])` | `model` parameter is not one of the three valid Claude tiers. |
 | `build sidecar image: <error>` | The demesne sidecar Docker image could not be built. |
 | `build agent image: <error>` | The agent provider's container image could not be built or pulled. |
 | `DOCKER::SANDBOX_EXECD_DISTRIBUTION_FAILED … passing bulk input to subprocess` | Transient buildah-copier race. Demesne retries up to 3 times; surfaces only if all attempts fail. |

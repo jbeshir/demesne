@@ -39,7 +39,7 @@ func BuildNetworkPolicy(mode EgressMode, extraAllow []string) (*opensandbox.Netw
 		// switch exhaustive.
 		return nil, fmt.Errorf("egress mode %q must be handled before the deny-by-default switch", mode)
 	default:
-		return nil, fmt.Errorf("egress mode %q is not in the whitelist (none, package-managers, open)", mode)
+		return nil, fmt.Errorf("egress mode %q is not in the allowlist (none, package-managers, open)", mode)
 	}
 	hosts = append(hosts, extraAllow...)
 

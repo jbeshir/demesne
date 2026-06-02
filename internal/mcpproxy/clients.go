@@ -106,7 +106,9 @@ func (p *Pool) ListUpstreamTools(ctx context.Context, server string) ([]mcp.Tool
 	return res.Tools, nil
 }
 
-// ListUpstreamResources returns all resources advertised by the named upstream.
+// ListUpstreamResources returns the upstream's resource list via resources/list. Called by
+// registerUpstream alongside ListUpstreamTools; an error is treated as empty there since many
+// servers omit resource support.
 func (p *Pool) ListUpstreamResources(ctx context.Context, server string) ([]mcp.Resource, error) {
 	c, err := p.acquire(ctx, server)
 	if err != nil {
@@ -119,7 +121,8 @@ func (p *Pool) ListUpstreamResources(ctx context.Context, server string) ([]mcp.
 	return res.Resources, nil
 }
 
-// ListUpstreamResourceTemplates returns all resource templates advertised by the named upstream.
+// ListUpstreamResourceTemplates returns the upstream's resource templates via
+// resources/templates/list. Failure is non-fatal in registerUpstream and treated as empty.
 func (p *Pool) ListUpstreamResourceTemplates(ctx context.Context, server string) ([]mcp.ResourceTemplate, error) {
 	c, err := p.acquire(ctx, server)
 	if err != nil {
@@ -132,7 +135,8 @@ func (p *Pool) ListUpstreamResourceTemplates(ctx context.Context, server string)
 	return res.ResourceTemplates, nil
 }
 
-// ListUpstreamPrompts returns all prompts advertised by the named upstream.
+// ListUpstreamPrompts returns the upstream's prompts via prompts/list. Failure is non-fatal in
+// registerUpstream and treated as empty.
 func (p *Pool) ListUpstreamPrompts(ctx context.Context, server string) ([]mcp.Prompt, error) {
 	c, err := p.acquire(ctx, server)
 	if err != nil {

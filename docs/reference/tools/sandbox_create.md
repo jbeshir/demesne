@@ -81,8 +81,8 @@ Pass `sandbox_id` to `sandbox_exec`, `sandbox_upload`, `sandbox_download`, and `
 
 | Error | When it occurs |
 |-------|----------------|
-| `image "<name>" is not in the whitelist (node, python, anaconda, go)` | `image` parameter names an unknown container image. |
-| `egress mode "<mode>" is not in the whitelist (none, package-managers, open)` | `egress` parameter is not one of the three valid modes. |
+| `image "<name>" is not in the allowlist (node, python, anaconda, go)` | `image` parameter names an unknown container image. |
+| `egress mode "<mode>" is not in the allowlist (none, package-managers, open)` | `egress` parameter is not one of the three valid modes. |
 | `mount path must be absolute: <path>` | A path in `files` or `directories` is relative. |
 | `mount path <path> is not within DEMESNE_ALLOWED_PATHS` | A path in `files` or `directories` is outside every configured `DEMESNE_ALLOWED_PATHS` entry. |
 | `resolve mount path <path>: <OS error>` | Symlink resolution failed for a path in `files` or `directories`. |

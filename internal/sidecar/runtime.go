@@ -18,7 +18,7 @@ import (
 
 // SidecarResultsDir is the path the proxy sees inside the sidecar
 // container for the host-bind-mounted results directory. The
-// agent-vendor proxy writes usage.json under here after every
+// vendor proxy writes usage.json under here after every
 // request; the host runner reads it back from the matching
 // ResultsHost path after the sandbox exits.
 const SidecarResultsDir = "/sidecar-results"
@@ -29,7 +29,7 @@ const SidecarResultsDir = "/sidecar-results"
 const SidecarMCPDir = "/demesne-mcp"
 
 // SidecarUsageFile is the absolute in-container path of the
-// agent-vendor usage snapshot the proxy maintains.
+// vendor-proxy usage snapshot it maintains.
 const SidecarUsageFile = SidecarResultsDir + "/usage.json"
 
 // EgressSidecarLabel is OpenSandbox's label on its own per-sandbox egress
@@ -67,7 +67,7 @@ func validateContainerID(id string) error {
 	return nil
 }
 
-// AnthropicProxyConfig carries the auth values the agent-vendor proxy
+// AnthropicProxyConfig carries the auth values the vendor proxy
 // needs. The agent-facing token is validated by the proxy on every
 // inbound request; the upstream token is what the proxy sends to the
 // real vendor API. Keeping both off-host avoids storing them in sidecar
@@ -130,7 +130,7 @@ type Handle struct {
 //
 // imageRef is the image returned by EnsureImage. sandboxID is the
 // OpenSandbox-issued UUID. cfg carries the per-sandbox auth values
-// and host results path the agent-vendor proxy needs.
+// and host results path the vendor proxy needs.
 func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*Handle, error) {
 	egressID, err := findEgressSidecar(ctx, sandboxID)
 	if err != nil {
@@ -224,7 +224,7 @@ func verifySidecarRunning(ctx context.Context, containerID string) error {
 }
 
 // proxyRunArgs builds the docker run -v/-e arguments for the per-sandbox
-// proxies enabled in cfg: the agent-vendor credential proxy (Anthropic OR
+// proxies enabled in cfg: the vendor proxy (Anthropic OR
 // Codex — never both, since they share the SidecarResultsDir mount) and
 // the optional MCP tunnel. The Go module proxy needs no config, so it's
 // not represented here. Validation mirrors each proxy's "all-or-nothing"

@@ -125,7 +125,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	}
 
 	// Per-sandbox fake credential. The agent never sees the real
-	// upstream OAuth token; the agent-vendor proxy validates this
+	// upstream OAuth token; the vendor proxy validates this
 	// value on every inbound request and substitutes the real token
 	// before forwarding.
 	agentToken, err := generateAgentToken()
@@ -246,7 +246,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	}, nil
 }
 
-// buildProxyConfig selects the per-sandbox credential proxy for the
+// buildProxyConfig selects the vendor proxy for the
 // agent's vendor: the agent never sees the real upstream credential, so
 // the runner hands it to the sidecar proxy here (validate fake token →
 // swap real). codexTokens is the freshly host-refreshed token set

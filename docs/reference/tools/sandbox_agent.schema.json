@@ -22,7 +22,7 @@
     },
     "egress": {
       "type": "string",
-      "description": "Additional outbound network policy. 'none' (default) means only the agent-vendor API proxy; 'package-managers' also allows npm/PyPI/conda registries. 'open' is rejected.",
+      "description": "Additional outbound network policy. 'none' (default) means only the vendor proxy; 'package-managers' also allows npm/PyPI/conda registries. 'open' is rejected.",
       "enum": ["none", "package-managers"],
       "default": "none"
     },

@@ -20,9 +20,9 @@ const (
 	ModelHaiku  ModelName = "haiku"
 )
 
-// Models is the Anthropic model whitelist exposed via sandbox_agent's
+// Models is the Anthropic model allowlist exposed via sandbox_agent's
 // `model` parameter. Derived from proxyanthropic.Aliases() so the
-// whitelist stays in sync with the pricing catalog automatically.
+// allowlist stays in sync with the pricing catalog automatically.
 var Models = func() []ModelName {
 	a := proxyanthropic.Aliases()
 	out := make([]ModelName, len(a))
@@ -37,9 +37,9 @@ var Models = func() []ModelName {
 const DefaultModel ModelName = ModelSonnet
 
 // ErrUnknownModel is the sentinel wrapped by ResolveModel when the
-// requested model is not in the whitelist. Use errors.Is to distinguish
+// requested model is not in the allowlist. Use errors.Is to distinguish
 // this from operational errors without inspecting the text.
-var ErrUnknownModel = errors.New("is not in the Anthropic whitelist")
+var ErrUnknownModel = errors.New("is not in the Anthropic allowlist")
 
 // ResolveModel validates a model name against Models. Empty input
 // resolves to DefaultModel.

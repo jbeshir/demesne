@@ -44,7 +44,8 @@ type Server struct {
 	mcpServer *server.MCPServer
 }
 
-// NewServer creates a new MCP server backed by the given runner.
+// NewServer constructs the demesne MCP server and registers every tool against the supplied
+// Runner. Call RunContext to serve over stdio.
 func NewServer(runner Runner) *Server {
 	s := &Server{runner: runner}
 
@@ -290,7 +291,7 @@ const directoriesParamDescription = "Host directory paths to mount read-only int
 
 const scriptToolDescription = `Run a single shell command in a fresh sandbox and return its stdout.
 
-The sandbox is created from a whitelisted image (anaconda by default), the
+The sandbox is created from an allowlisted image (anaconda by default), the
 command runs once, and the sandbox is destroyed when the command returns.
 
 Mounts:
@@ -306,7 +307,7 @@ and the captured stdout.`
 
 const createToolDescription = `Create a persistent sandbox and return its handle.
 
-The sandbox is built from a whitelisted image (anaconda by default) with any
+The sandbox is built from an allowlisted image (anaconda by default) with any
 caller-supplied host paths mounted read-only at /in/<basename>. A writable
 /out mount is provisioned automatically; its host path is returned so the
 caller can read produced artifacts.
@@ -354,8 +355,7 @@ is generated from the optional 'preamble' parameter plus an
 auto-generated 'Environment' section listing any /in/<basename>
 inputs and the /out writable mount.
 
-Outbound network access is restricted: the on-host agent-vendor API
-proxy is always reachable (the agent's CLI uses it), and the 'egress'
+Outbound network access is restricted: the vendor proxy is always reachable (the agent's CLI uses it), and the 'egress'
 parameter controls whatever else the sandbox may reach. 'open' egress
 is not permitted here — use sandbox_research for unrestricted egress
 (which also forbids /in mounts).
@@ -376,7 +376,7 @@ outbound internet access.
 Like sandbox_agent but with two deliberate differences:
   - No /in mounts. The agent only sees its prompt and whatever it
     fetches from the open web.
-  - Egress is fully open. The agent-vendor proxy still gates calls to
+  - Egress is fully open. The vendor proxy still gates calls to
     the model API; any other public HTTPS endpoint is reachable
     directly.
 

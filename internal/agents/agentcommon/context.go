@@ -94,25 +94,25 @@ func WriteOrchestration(b *strings.Builder) {
 		"at `/in/previous-jobs/<name>`. " +
 		"(Exception: `sandbox_research` children get a fresh private workspace " +
 		"with no `/in` mounts — they do NOT inherit `/in` or share `/workspace`.)\n\n")
-	b.WriteString("- **Delivering results is your job, not a child's.** " +
-		"`/out/child/<name>` is that child's own output dir — files a child writes " +
-		"there do NOT appear in your `/out`. To hand a child-produced or `/workspace` " +
-		"artefact back to the caller, copy it into your own `/out` yourself with plain " +
-		"`cp` (that needs no toolchain). Never delegate the copy-into-`/out` step to a " +
-		"`sandbox_script` child — it would just write to its own `/out/child/<name>`.\n")
+	b.WriteString("Delivering results is your job, not a child's. Files a child " +
+		"writes to its `/out/child/<name>` directory do NOT appear in your `/out`, " +
+		"so to hand a child-produced or `/workspace` artefact back to your caller, " +
+		"copy it into your own `/out` with plain `cp` (no toolchain needed). Do not " +
+		"try to delegate this copy step to a `sandbox_script` child: that child would " +
+		"write only to its own `/out/child/<name>` subtree, replicating the problem.\n\n")
 	b.WriteString("- **Validate with real builds/tests.** To compile, test, or lint " +
-		"code, spawn a `sandbox_script` child — or a persistent " +
-		"`sandbox_create`+`sandbox_exec` sandbox for repeated runs — with the " +
+		"code, spawn a `sandbox_script` child (or a persistent " +
+		"`sandbox_create`+`sandbox_exec` sandbox for repeated runs) with the " +
 		"appropriate image (`node`, `python`, `go`, or `anaconda`), run it against " +
 		"the shared `/workspace`, read the result, and iterate. Go modules resolve " +
 		"automatically via `GOPROXY` (no egress change needed); for npm/PyPI/conda " +
 		"set `egress: package-managers`.\n")
 	b.WriteString("- **Preserve a baseline for review.** If you copy a repo from " +
-		"`/in` into `/workspace` to edit it, copy it whole — including `.git` — so " +
+		"`/in` into `/workspace` to edit it, copy it whole (including `.git`) so " +
 		"review phases can `git diff` your changes against the original.\n")
 	b.WriteString("- **Plan and enforce the handoff.** Before implementing in phases, " +
-		"decide what each phase produces, where, and in what format — appropriate to " +
-		"your task — and follow that contract strictly across every phase.\n")
+		"decide what each phase produces, where, and in what format (appropriate to " +
+		"your task) and follow that contract strictly across every phase.\n")
 	b.WriteString("- **Read failed children's stderr.** Every child sandbox's stderr is " +
 		"surfaced as the `stderr` field in the tool result (tail-bounded), and the " +
 		"complete log is at the child's `/out/stderr.log`. On a non-zero `exit_code`, " +

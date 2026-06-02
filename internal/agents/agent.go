@@ -130,7 +130,7 @@ type Agent interface {
 	ResultText(transcript []byte) string
 
 	// ResolveModel validates and normalises a caller-supplied model name
-	// against the vendor's whitelist. Empty input must resolve to a
+	// against the vendor's allowlist. Empty input must resolve to a
 	// sensible default.
 	ResolveModel(name string) (ModelName, error)
 

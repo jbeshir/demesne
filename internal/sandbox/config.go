@@ -81,7 +81,9 @@ func resolveCodexAuthFile() string {
 	return home + "/.codex/auth.json"
 }
 
-// LoadConfigFromEnv reads required configuration from environment variables.
+// LoadConfigFromEnv reads required configuration from the process environment.
+// DEMESNE_ALLOWED_PATHS and OPEN_SANDBOX_DOMAIN / OPEN_SANDBOX_API_KEY are mandatory; MCPServers
+// and Owner are not env-derived and must be set after construction.
 func LoadConfigFromEnv() (Config, error) {
 	cfg := Config{
 		OutputRoot:           envOr("DEMESNE_OUTPUT_ROOT", "/tmp/demesne/out"),

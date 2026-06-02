@@ -90,7 +90,9 @@ type Runner struct {
 	registry *ChildRegistry
 }
 
-// NewRunner constructs a Runner against the given configuration.
+// NewRunner builds a Runner from cfg with an empty child registry. The MCP-aggregator wiring
+// (MCPServers, MCPSocketPath, MCPToolCatalogue) is populated after construction via SetMCPWiring,
+// once the aggregator has started.
 func NewRunner(cfg Config) *Runner {
 	return &Runner{cfg: cfg, registry: newChildRegistry()}
 }

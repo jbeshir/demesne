@@ -45,7 +45,6 @@ See [docs/how-to/wire-into-claude-code.md](docs/how-to/wire-into-claude-code.md)
 | 🚀 [Quickstart](docs/tutorial/quickstart.md) | Five steps to your first `sandbox_script` call |
 | 📚 [Docs](docs/) | Tutorials, how-to recipes, reference, explanation |
 | 🧪 [Examples](examples/) | Runnable example calls |
-| 🔍 [Alternatives](docs/explanation/comparison.md) | How demesne compares to E2B, Modal, Daytona, and others |
 
 ## Requirements
 
@@ -71,8 +70,8 @@ See [CHANGELOG.md](CHANGELOG.md) for milestone history.
 | `sandbox_upload`   | Copy a host file into an existing sandbox.                                                                                                                                                                                                  | [ref](docs/reference/tools/sandbox_upload.md) |
 | `sandbox_download` | Copy a file out of an existing sandbox; written under `<output_dir>/downloads/<basename>`. Returns the host path.                                                                                                                           | [ref](docs/reference/tools/sandbox_download.md) |
 | `sandbox_destroy`  | Kill an existing sandbox. Host output dir is preserved.                                                                                                                                                                                     | [ref](docs/reference/tools/sandbox_destroy.md) |
-| `sandbox_agent`    | Run an AI coding agent (currently the Claude Code CLI) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the per-vendor API proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.              | [ref](docs/reference/tools/sandbox_agent.md) |
-| `sandbox_research` | Run a long-running research agent with no input mounts and unrestricted outbound internet. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.                                                     | [ref](docs/reference/tools/sandbox_research.md) |
+| `sandbox_agent`    | Run an AI coding agent (currently the Claude Code CLI) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the vendor proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.              | [ref](docs/reference/tools/sandbox_agent.md) |
+| `sandbox_research` | Run a long-running research agent with no input mounts and unrestricted outbound internet access. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.                                                     | [ref](docs/reference/tools/sandbox_research.md) |
 
 For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Quickstart](docs/tutorial/quickstart.md) and the [`sandbox_create`](docs/reference/tools/sandbox_create.md) / [`sandbox_exec`](docs/reference/tools/sandbox_exec.md) reference pages.
 
@@ -104,7 +103,7 @@ uvx opensandbox-server --config ~/.sandbox.toml
 Feed the lifecycle host:port and API key to Demesne via `OPEN_SANDBOX_DOMAIN`
 and `OPEN_SANDBOX_API_KEY`.
 
-See [Step 2 of the Quickstart](docs/tutorial/quickstart.md#step-2--run-a-local-opensandbox) for the required `~/.sandbox.toml` edits.
+See [Step 2 of the Quickstart](docs/tutorial/quickstart.md#step-2-run-a-local-opensandbox) for the required `~/.sandbox.toml` edits.
 
 ## Build and run
 
@@ -145,5 +144,5 @@ pypi.org; the full persistent-sandbox lifecycle
 (create / exec / upload / exec / download / destroy); and that
 `sandbox_exec` refreshes the sandbox TTL. The raw-IP assertion requires
 the `[egress] mode = "dns+nft"` config in `~/.sandbox.toml` (see the
-[Quickstart](docs/tutorial/quickstart.md#step-2--run-a-local-opensandbox));
+[Quickstart](docs/tutorial/quickstart.md#step-2-run-a-local-opensandbox));
 against a `mode = "dns"` server it will fail.

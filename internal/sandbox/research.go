@@ -4,7 +4,7 @@ import "context"
 
 // Research runs an agent with no input mounts and unrestricted
 // outbound internet egress against the caller's prompt — the
-// long-running research variant of Agent. The agent-vendor proxy
+// long-running research variant of Agent. The vendor proxy
 // stays in front of the model API.
 //
 // Research has no Files/Directories or Egress knobs by design: the

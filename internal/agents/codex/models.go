@@ -20,8 +20,8 @@ const (
 	ModelGPT54Mini ModelName = "gpt-5.4-mini"
 )
 
-// Models is the Codex model whitelist exposed via sandbox_agent's
-// `model` parameter. Derived from proxyopenai.Aliases() so the whitelist
+// Models is the Codex model allowlist exposed via sandbox_agent's
+// `model` parameter. Derived from proxyopenai.Aliases() so the allowlist
 // stays in sync with the pricing catalog.
 var Models = func() []ModelName {
 	a := proxyopenai.Aliases()
@@ -37,9 +37,9 @@ var Models = func() []ModelName {
 const DefaultModel ModelName = ModelGPT55
 
 // ErrUnknownModel is the sentinel wrapped by ResolveModel when the
-// requested model is not in the whitelist. Use errors.Is to distinguish
+// requested model is not in the allowlist. Use errors.Is to distinguish
 // this from operational errors without inspecting the text.
-var ErrUnknownModel = errors.New("is not in the Codex whitelist")
+var ErrUnknownModel = errors.New("is not in the Codex allowlist")
 
 // ResolveModel validates a model name against Models. Empty input
 // resolves to DefaultModel.

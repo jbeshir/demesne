@@ -8,7 +8,7 @@ Use `egress=none` when you want to guarantee that code running inside a sandbox 
 - You want to prevent accidental data exfiltration during a build or test step.
 - You are running `sandbox_agent` and want to restrict the agent to only its vendor API proxy (this is already the default for `sandbox_agent`).
 
-Note: effective `egress=none` requires your OpenSandbox server to be configured with `[egress] mode = "dns+nft"` in `~/.sandbox.toml`. The default `"dns"` mode only filters at DNS resolution; raw-IP connections still succeed, so `none` is not fully enforced without the `dns+nft` setting. See [Step 2 of the Quickstart](../tutorial/quickstart.md#step-2--run-a-local-opensandbox) for the required config.
+Note: effective `egress=none` requires your OpenSandbox server to be configured with `[egress] mode = "dns+nft"` in `~/.sandbox.toml`. The default `"dns"` mode only filters at DNS resolution; raw-IP connections still succeed, so `none` is not fully enforced without the `dns+nft` setting. See [Step 2 of the Quickstart](../tutorial/quickstart.md#step-2-run-a-local-opensandbox) for the required config.
 
 ## What still works under `egress=none`
 

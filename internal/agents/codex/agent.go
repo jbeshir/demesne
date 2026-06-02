@@ -20,7 +20,7 @@ const (
 // codexAgent implements agents.Agent for the OpenAI Codex CLI.
 type codexAgent struct{}
 
-// New returns the Codex agent provider.
+// New constructs the codex agent; init() registers it under AgentName.
 func New() agents.Agent {
 	return codexAgent{}
 }

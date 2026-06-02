@@ -2,7 +2,7 @@
 
 This tutorial takes you from a clean machine to a successful `sandbox_script` call wired through Claude Code in five copy-pasteable steps. By the end you will have demesne running as a stdio MCP server and Claude Code invoking it to run a shell command inside a disposable container.
 
-## Step 1 — Install demesne
+## Step 1: Install demesne
 
 ### Option A: `go install` (requires Go 1.26+)
 
@@ -32,7 +32,7 @@ $ demesne-mcp --help
 
 ---
 
-## Step 2 — Run a local OpenSandbox
+## Step 2: Run a local OpenSandbox
 
 Demesne delegates container lifecycle to [OpenSandbox](https://github.com/alibaba/OpenSandbox). The reference server runs locally against Docker:
 
@@ -88,7 +88,7 @@ INFO  Listening on :8080
 
 ---
 
-## Step 3 — Set env vars and start `demesne-mcp`
+## Step 3: Set env vars and start `demesne-mcp`
 
 At minimum you need the three required variables from the [Configuration table](../../README.md#configuration):
 
@@ -114,7 +114,7 @@ No output on startup is correct — it is waiting for a client. This manual invo
 
 ---
 
-## Step 4 — Wire into Claude Code
+## Step 4: Wire into Claude Code
 
 Create or edit `.mcp.json` in your project root (this is the project-scoped MCP config committed to git) with one entry for demesne:
 
@@ -149,7 +149,7 @@ In Claude Code, after reloading the MCP config (restart Claude Code or run `/mcp
 
 ---
 
-## Step 5 — Make a `sandbox_script` call
+## Step 5: Make a `sandbox_script` call
 
 In a Claude Code session, ask Claude to run a command:
 

@@ -23,7 +23,7 @@ const (
 // claudeCodeAgent implements agents.Agent for the Claude Code CLI.
 type claudeCodeAgent struct{}
 
-// New returns the Claude Code agent provider.
+// New constructs the claude-code agent; init() registers it under AgentName.
 func New() agents.Agent {
 	return claudeCodeAgent{}
 }

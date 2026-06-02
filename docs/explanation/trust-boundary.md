@@ -16,7 +16,7 @@ sandboxed Codex only ever sees a per-sandbox fake bearer.
 `sandbox_agent` is the input-bearing variant: caller-supplied host paths are mounted read-only at `/in/<basename>`, and egress is restricted to the agent provider's API proxy (with `package-managers` as an opt-in extra). `sandbox_research` is the open-egress variant: no inputs, but the sandbox can reach anywhere on the open internet. `sandbox_agent` refuses `egress: "open"` and `sandbox_research` accepts no `files` / `directories` — see [Egress modes](key-concepts.md#egress-modes) for the rationale.
 
 For each invocation demesne starts a **per-sandbox sidecar container**
-that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs one AI-vendor credential proxy — the one matching the agent vendor
+that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs one vendor proxy — the one matching the agent vendor
 (anthropic proxy on `127.0.0.1:8088` for claude-code; OpenAI proxy on
 `127.0.0.1:8086` for codex) — plus a Go-module proxy (`127.0.0.1:8087`, in every sandbox) and, for agent sandboxes, MCP tunnel listeners (`127.0.0.1:8089+`). The proxy holds the real upstream OAuth token; the
 agent only ever sees a per-sandbox fake token (`demesne-agent-...`)

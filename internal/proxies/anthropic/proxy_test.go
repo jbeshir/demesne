@@ -89,7 +89,7 @@ func TestProxyAllowedRequestSwapsToken(t *testing.T) {
 	assert.True(t, strings.HasSuffix(got.host, upstreamHostPort(upstream.URL)))
 }
 
-// TestProxyAllowsCountTokens confirms the second whitelisted endpoint
+// TestProxyAllowsCountTokens confirms the second allowlisted endpoint
 // (POST /v1/messages/count_tokens) is also forwarded.
 func TestProxyAllowsCountTokens(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -131,7 +131,7 @@ func TestProxyDeniesUnknownPath(t *testing.T) {
 }
 
 // TestProxyDeniesUnknownMethod confirms that non-POST methods (GET, etc.)
-// to even whitelisted paths return 403.
+// to even allowlisted paths return 403.
 func TestProxyDeniesUnknownMethod(t *testing.T) {
 	upstreamHit := false
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

@@ -32,7 +32,7 @@ func ResolveImage(name string) (ImageURI, error) {
 	}
 	uri, ok := Images[name]
 	if !ok {
-		return "", fmt.Errorf("image %q is not in the whitelist (node, python, anaconda, go)", name)
+		return "", fmt.Errorf("image %q is not in the allowlist (node, python, anaconda, go)", name)
 	}
 	return ImageURI(uri), nil
 }

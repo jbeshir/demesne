@@ -27,9 +27,9 @@ Do not open a public issue. Your issue will be fixed or made public within 90 da
 
 ### Out of scope
 
-- Trust between the stdio MCP client and demesne. The parent process is trusted by design — this is the documented trust boundary (see [docs/explanation/trust-boundary.md](docs/explanation/trust-boundary.md)).
+- Trust between the stdio MCP client and demesne. The MCP client (parent process — distinct from the nested-agent "parent agent" usage in [trust-boundary.md](docs/explanation/trust-boundary.md)) is trusted by design — this is the documented trust boundary.
 - Vulnerabilities in podman, OpenSandbox, the kernel, or other upstream dependencies — please report those upstream.
-- Container-image CVEs in the four whitelisted images (`node`, `python`, `go`, `anaconda`) — please report those to the upstream image maintainers.
+- Container-image CVEs in the four allowlisted images (`node`, `python`, `go`, `anaconda`) — please report those to the upstream image maintainers.
 - Single-user-by-design assumptions. Multi-tenant deployment of demesne is not supported and is not in scope for this policy.
 - Denial-of-service attacks against a local demesne instance.
 - Issues requiring physical access to the host machine.

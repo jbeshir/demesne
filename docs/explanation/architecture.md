@@ -1,6 +1,6 @@
 # Architecture
 
-Demesne is a **stdio MCP server** that exposes eight tools — `sandbox_script`, `sandbox_create`, `sandbox_exec`, `sandbox_upload`, `sandbox_download`, `sandbox_destroy`, `sandbox_agent`, and `sandbox_research` — all of which delegate container lifecycle to an [OpenSandbox](https://github.com/alibaba/OpenSandbox) server over HTTP. The calling AI agent (Claude Code or any MCP client) communicates with demesne over JSON-RPC on stdin/stdout; demesne never opens a TCP listener of its own.
+Demesne is a **stdio MCP server** that exposes eight tools: `sandbox_script`, `sandbox_create`, `sandbox_exec`, `sandbox_upload`, `sandbox_download`, `sandbox_destroy`, `sandbox_agent`, and `sandbox_research`. All eight delegate container lifecycle to an [OpenSandbox](https://github.com/alibaba/OpenSandbox) server over HTTP. The calling AI agent (Claude Code or any MCP client) communicates with demesne over JSON-RPC on stdin/stdout; demesne never opens a TCP listener of its own.
 
 For a glossary of the terms used throughout this document see [key-concepts.md](key-concepts.md). For the trust-edge diagram (agent → sidecar → egress → vendor) see [trust-boundary.md](trust-boundary.md). For the external-service dependency map see [dependencies.md](dependencies.md).
 

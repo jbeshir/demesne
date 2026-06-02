@@ -121,7 +121,7 @@ func TestGenerateContext(t *testing.T) {
 			want: []string{
 				"## Orchestrating child agents",
 				"Delivering results is your job",
-				"copy it into your own `/out` yourself",
+				"copy it into your own `/out` with plain `cp`",
 				"Validate with real builds/tests",
 				"including `.git`",
 				"Plan and enforce the handoff",
