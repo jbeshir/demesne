@@ -12,7 +12,20 @@ setup-files: .env
 # ── Validation ────────────────────────────────────────────────
 
 .PHONY: validate
-validate: lint test-short build
+validate: tidy-check lint test-short build
+
+# tidy-check fails when go.mod / go.sum drift from `go mod tidy` output —
+# catches missing or wrongly-annotated requires (e.g. a direct test import
+# left marked `// indirect`).
+.PHONY: tidy-check
+tidy-check:
+	@cp go.mod go.mod.tidy-check && cp go.sum go.sum.tidy-check
+	@go mod tidy
+	@diff -u go.mod.tidy-check go.mod || (mv go.mod.tidy-check go.mod; mv go.sum.tidy-check go.sum; \
+		echo "go.mod changed after 'go mod tidy' — commit the tidy diff"; exit 1)
+	@diff -u go.sum.tidy-check go.sum || (mv go.mod.tidy-check go.mod; mv go.sum.tidy-check go.sum; \
+		echo "go.sum changed after 'go mod tidy' — commit the tidy diff"; exit 1)
+	@rm go.mod.tidy-check go.sum.tidy-check
 
 .PHONY: lint
 lint: sidecar-binary

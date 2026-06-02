@@ -1,7 +1,7 @@
 package anthropic
 
 import (
-	"strings"
+	"github.com/jbeshir/demesne/internal/proxies/proxycommon"
 )
 
 // USD represents US dollars (indicative).
@@ -27,6 +27,9 @@ type catalogEntry struct {
 	IDPrefix ModelID
 	Pricing
 }
+
+func (e catalogEntry) Prefix() string { return string(e.IDPrefix) }
+func (e catalogEntry) Price() Pricing { return e.Pricing }
 
 // IMPORTANT: cost figures below are INDICATIVE ONLY. The 1-hour cache tier
 // is NOT modelled (single 5-minute cache tier only). Unknown models return
@@ -87,12 +90,7 @@ func Aliases() []string {
 // LookupPricing returns the Pricing for the given Anthropic model ID by
 // longest-prefix match, plus whether a match was found.
 func LookupPricing(id ModelID) (Pricing, bool) {
-	for _, e := range modelCatalog {
-		if strings.HasPrefix(string(id), string(e.IDPrefix)) {
-			return e.Pricing, true
-		}
-	}
-	return Pricing{}, false
+	return proxycommon.LookupPricing[catalogEntry, Pricing](modelCatalog, string(id))
 }
 
 // TokenCounts is the per-request usage breakdown the Anthropic API

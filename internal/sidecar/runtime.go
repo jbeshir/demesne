@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -53,6 +54,18 @@ func dockerCommand(ctx context.Context, args ...string) *exec.Cmd {
 // before confirming the sidecar is still running (see verifySidecarRunning).
 // A package var so tests can zero it.
 var sidecarStartSettle = 300 * time.Millisecond
+
+var containerIDRe = regexp.MustCompile(`^[0-9a-f]{8,64}$`)
+
+// validateContainerID returns an error if id is not a lowercase hex string
+// of 8–64 characters, which is the only shape a Docker/Podman container ID
+// can have.
+func validateContainerID(id string) error {
+	if !containerIDRe.MatchString(id) {
+		return fmt.Errorf("unexpected container ID format: %q", id)
+	}
+	return nil
+}
 
 // AnthropicProxyConfig carries the auth values the agent-vendor proxy
 // needs. The agent-facing token is validated by the proxy on every
@@ -179,10 +192,12 @@ func Start(ctx context.Context, sandboxID, imageRef string, cfg ProxyConfig) (*H
 // sidecar and the failure would surface only later as a confusing
 // proxy-unreachable error inside the agent run.
 func verifySidecarRunning(ctx context.Context, containerID string) error {
+	t := time.NewTimer(sidecarStartSettle)
+	defer t.Stop()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(sidecarStartSettle):
+	case <-t.C:
 	}
 	cmd := execCommand(ctx, dockerCmd, "inspect", "-f", "{{.State.Status}}", containerID)
 	// Output (stdout only) — CombinedOutput would mix in Podman's
@@ -300,10 +315,12 @@ func dockerRemoveWithRetry(ctx context.Context, target string) error {
 			return lastErr
 		}
 		if i < len(backoff) {
+			t := time.NewTimer(backoff[i])
 			select {
 			case <-ctx.Done():
+				t.Stop()
 				return lastErr
-			case <-time.After(backoff[i]):
+			case <-t.C:
 			}
 		}
 	}
@@ -374,6 +391,9 @@ func findEgressSidecar(ctx context.Context, sandboxID string) (string, error) {
 	// non-empty line.
 	if i := strings.IndexAny(id, "\n\r"); i >= 0 {
 		id = id[:i]
+	}
+	if err := validateContainerID(id); err != nil {
+		return "", fmt.Errorf("locate egress sidecar for %s: %w", sandboxID, err)
 	}
 	return id, nil
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -88,6 +90,52 @@ func TestPool_AcquireUnknownServer_NewMethods(t *testing.T) {
 	t.Run("Complete", func(t *testing.T) {
 		_, err := p.Complete(ctx, "unknown", mcp.CompleteRequest{})
 		assert.ErrorIs(t, err, ErrNotRegistered)
+	})
+}
+
+// TestPool_EvictGenerationGuard verifies that a queued evict goroutine
+// carrying a stale generation is a no-op, and that an evict with the
+// current generation removes the entry.
+func TestPool_EvictGenerationGuard(t *testing.T) {
+	// NewInProcessClient gives us a *client.Client whose Close() is safe
+	// to call without spawning a real subprocess.
+	stubSrv := server.NewMCPServer("stub", "0")
+
+	t.Run("stale generation is a no-op", func(t *testing.T) {
+		c, err := client.NewInProcessClient(stubSrv)
+		require.NoError(t, err)
+
+		p := &Pool{
+			specs:   map[string]UpstreamSpec{"s": {Name: "s"}},
+			clients: make(map[string]*upstreamClient),
+			timeout: idleTimeout,
+		}
+		uc := &upstreamClient{c: c, generation: 5}
+		p.clients["s"] = uc
+
+		p.evict("s", 4) // stale: generation mismatch → must be a no-op
+
+		got, ok := p.clients["s"]
+		require.True(t, ok, "evict with stale generation must not remove the entry")
+		assert.Same(t, uc, got)
+	})
+
+	t.Run("matching generation removes entry", func(t *testing.T) {
+		c, err := client.NewInProcessClient(stubSrv)
+		require.NoError(t, err)
+
+		p := &Pool{
+			specs:   map[string]UpstreamSpec{"s": {Name: "s"}},
+			clients: make(map[string]*upstreamClient),
+			timeout: idleTimeout,
+		}
+		uc := &upstreamClient{c: c, generation: 5}
+		p.clients["s"] = uc
+
+		p.evict("s", 5) // matching: client is closed and entry removed
+
+		_, ok := p.clients["s"]
+		assert.False(t, ok, "evict with matching generation must remove the entry")
 	})
 }
 

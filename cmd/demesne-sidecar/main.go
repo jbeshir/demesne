@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -157,7 +158,7 @@ func buildCodexProxy() (starter, error) {
 	}
 	var tokens proxyopenai.TokenSet
 	if err := json.Unmarshal([]byte(tokensRaw), &tokens); err != nil {
-		return nil, errors.New(proxyopenai.UpstreamTokensEnv + ": invalid JSON TokenSet: " + err.Error())
+		return nil, fmt.Errorf("%s: invalid JSON TokenSet: %w", proxyopenai.UpstreamTokensEnv, err)
 	}
 	usagePath := os.Getenv(proxyopenai.UsagePathEnv)
 	if err := proxycommon.EnsureUsageDir(usagePath); err != nil {

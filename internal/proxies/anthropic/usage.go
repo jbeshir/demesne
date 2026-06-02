@@ -1,12 +1,9 @@
 package anthropic
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
-	"sort"
 	"strings"
-	"sync"
 
 	"github.com/jbeshir/demesne/internal/proxies/proxycommon"
 )
@@ -17,50 +14,60 @@ import (
 // Add. The host reads the resulting snapshot from usage.json after the
 // sandbox exits.
 type Tracker struct {
-	mu        sync.Mutex
-	usagePath string // empty disables disk writes
-	perModel  map[ModelID]*TokenCounts
+	*proxycommon.Tracker[TokenCounts]
 }
 
 // NewTracker constructs a Tracker. usagePath is the host-bind-mounted
 // path the tracker rewrites with a JSON snapshot after every Add
 // (empty disables writes — useful in tests).
 func NewTracker(usagePath string) *Tracker {
-	return &Tracker{
-		usagePath: usagePath,
-		perModel:  map[ModelID]*TokenCounts{},
-	}
+	return &Tracker{proxycommon.NewTracker[TokenCounts](
+		usagePath, "anthropic proxy",
+		combineCounts, modelCostUSD, modelReport,
+	)}
 }
 
 // Add folds another request's token counts into the per-model totals
 // and rewrites usage.json. modelID may be a dated Anthropic ID (e.g.
 // "claude-opus-4-8-20260101"); pricing uses longest-prefix-match so
 // dated IDs route to their family.
-func (t *Tracker) Add(modelID ModelID, tc TokenCounts) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if modelID == "" {
-		modelID = "unknown"
-	}
-	mu, ok := t.perModel[modelID]
-	if !ok {
-		mu = &TokenCounts{}
-		t.perModel[modelID] = mu
-	}
-	mu.InputTokens += tc.InputTokens
-	mu.OutputTokens += tc.OutputTokens
-	mu.CacheCreationInputTokens += tc.CacheCreationInputTokens
-	mu.CacheReadInputTokens += tc.CacheReadInputTokens
-	t.persistLocked()
+func (t *Tracker) Add(id ModelID, tc TokenCounts) {
+	t.Tracker.Add(string(id), tc)
 }
 
-// costUSDLocked returns the cumulative cost; caller must hold the mutex.
-func (t *Tracker) costUSDLocked() USD {
-	var total USD
-	for modelID, mu := range t.perModel {
-		total += CostUSD(modelID, *mu)
+// snapshot returns the current state. Called only by in-package tests;
+// production reads come from usage.json written by the generic tracker.
+func (t *Tracker) snapshot() Snapshot {
+	s := t.Snapshot()
+	result := Snapshot{
+		CostUSD:  USD(s.CostUSD),
+		PerModel: make(map[string]ModelReport, len(s.PerModel)),
 	}
-	return total
+	for k, v := range s.PerModel {
+		result.PerModel[k] = v.(ModelReport)
+	}
+	return result
+}
+
+func combineCounts(into *TokenCounts, add TokenCounts) {
+	into.InputTokens += add.InputTokens
+	into.OutputTokens += add.OutputTokens
+	into.CacheCreationInputTokens += add.CacheCreationInputTokens
+	into.CacheReadInputTokens += add.CacheReadInputTokens
+}
+
+func modelCostUSD(m string, tc TokenCounts) float64 {
+	return float64(CostUSD(ModelID(m), tc))
+}
+
+func modelReport(m string, tc TokenCounts) any {
+	return ModelReport{
+		InputTokens:              tc.InputTokens,
+		OutputTokens:             tc.OutputTokens,
+		CacheCreationInputTokens: tc.CacheCreationInputTokens,
+		CacheReadInputTokens:     tc.CacheReadInputTokens,
+		CostUSD:                  CostUSD(ModelID(m), tc),
+	}
 }
 
 // Snapshot is the JSON-serializable view of the tracker.
@@ -78,44 +85,6 @@ type ModelReport struct {
 	CostUSD                  USD   `json:"cost_usd"`
 }
 
-// snapshot returns the current state. Called only by in-package tests;
-// production reads come from usage.json written by persistLocked.
-func (t *Tracker) snapshot() Snapshot {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.snapshotLocked()
-}
-
-func (t *Tracker) snapshotLocked() Snapshot {
-	models := make([]string, 0, len(t.perModel))
-	for k := range t.perModel {
-		models = append(models, string(k))
-	}
-	sort.Strings(models)
-	report := make(map[string]ModelReport, len(t.perModel))
-	for _, m := range models {
-		mu := t.perModel[ModelID(m)]
-		report[m] = ModelReport{
-			InputTokens:              mu.InputTokens,
-			OutputTokens:             mu.OutputTokens,
-			CacheCreationInputTokens: mu.CacheCreationInputTokens,
-			CacheReadInputTokens:     mu.CacheReadInputTokens,
-			CostUSD:                  CostUSD(ModelID(m), *mu),
-		}
-	}
-	return Snapshot{
-		CostUSD:  t.costUSDLocked(),
-		PerModel: report,
-	}
-}
-
-func (t *Tracker) persistLocked() {
-	if t.usagePath == "" {
-		return
-	}
-	proxycommon.WriteUsageAtomic(t.usagePath, "anthropic proxy", t.snapshotLocked())
-}
-
 const contentTypeEventStream = "text/event-stream"
 
 // wrapResponseBody returns a ReadCloser that tees the upstream body
@@ -127,55 +96,30 @@ const contentTypeEventStream = "text/event-stream"
 // parsed as a single JSON document at close.
 func wrapResponseBody(upstream io.ReadCloser, contentType string, t *Tracker) io.ReadCloser {
 	if strings.HasPrefix(contentType, contentTypeEventStream) {
-		return &sseInterceptor{
-			upstream: upstream,
-			tracker:  t,
+		state := &sseState{tracker: t}
+		return proxycommon.NewSSEInterceptor(upstream, state.handleLine, state.flush)
+	}
+	return proxycommon.NewJSONInterceptor(upstream, func(data []byte) {
+		var body struct {
+			Model string       `json:"model"`
+			Usage *TokenCounts `json:"usage"`
 		}
-	}
-	return &jsonInterceptor{
-		upstream: upstream,
-		tracker:  t,
-	}
+		if err := json.Unmarshal(data, &body); err != nil {
+			return
+		}
+		if body.Usage == nil {
+			return
+		}
+		t.Add(ModelID(body.Model), *body.Usage)
+	})
 }
 
-// sseInterceptor parses Anthropic's SSE stream as the response body is
-// read. It tracks the running per-response totals and submits one Add
-// call to the tracker at body Close. Output tokens are taken from the
-// final message_delta (which carries the cumulative output count for
-// the message); inputs and cache figures come from message_start.
-type sseInterceptor struct {
-	upstream io.ReadCloser
+// sseState holds per-response SSE parsing state for the Anthropic vendor.
+type sseState struct {
 	tracker  *Tracker
-	buf      bytes.Buffer
-
 	modelID  ModelID
 	counts   TokenCounts
 	sawStart bool
-	flushed  bool
-}
-
-func (s *sseInterceptor) Read(p []byte) (int, error) {
-	n, err := s.upstream.Read(p)
-	if n > 0 {
-		s.buf.Write(p[:n])
-		s.scan(false)
-	}
-	if err == io.EOF {
-		s.scan(true)
-	}
-	return n, err
-}
-
-func (s *sseInterceptor) Close() error {
-	s.flush()
-	return s.upstream.Close()
-}
-
-// scan consumes complete SSE lines from the buffer. When eof is true,
-// it also drains any final partial line (which Anthropic terminates
-// with a newline before EOF; we tolerate either).
-func (s *sseInterceptor) scan(eof bool) {
-	proxycommon.ScanSSELines(&s.buf, eof, s.handleLine)
 }
 
 type sseEvent struct {
@@ -187,7 +131,7 @@ type sseEvent struct {
 	Usage *TokenCounts `json:"usage"`
 }
 
-func (s *sseInterceptor) handleLine(line string) {
+func (s *sseState) handleLine(line string) {
 	if !strings.HasPrefix(line, "data:") {
 		return
 	}
@@ -209,7 +153,7 @@ func (s *sseInterceptor) handleLine(line string) {
 	}
 }
 
-func (s *sseInterceptor) applyStart(ev sseEvent) {
+func (s *sseState) applyStart(ev sseEvent) {
 	if ev.Message == nil {
 		return
 	}
@@ -223,7 +167,7 @@ func (s *sseInterceptor) applyStart(ev sseEvent) {
 	s.sawStart = true
 }
 
-func (s *sseInterceptor) applyDelta(ev sseEvent) {
+func (s *sseState) applyDelta(ev sseEvent) {
 	if ev.Usage == nil {
 		return
 	}
@@ -241,49 +185,8 @@ func (s *sseInterceptor) applyDelta(ev sseEvent) {
 	}
 }
 
-func (s *sseInterceptor) flush() {
-	if s.flushed {
-		return
+func (s *sseState) flush() {
+	if s.sawStart {
+		s.tracker.Add(s.modelID, s.counts)
 	}
-	s.flushed = true
-	if !s.sawStart {
-		return
-	}
-	s.tracker.Add(s.modelID, s.counts)
-}
-
-// jsonInterceptor buffers a non-streaming JSON response body, forwards
-// it to the caller as-is, and parses one usage block out of the
-// completed JSON on Close.
-type jsonInterceptor struct {
-	upstream io.ReadCloser
-	tracker  *Tracker
-	tee      bytes.Buffer
-}
-
-func (j *jsonInterceptor) Read(p []byte) (int, error) {
-	n, err := j.upstream.Read(p)
-	if n > 0 {
-		j.tee.Write(p[:n])
-	}
-	return n, err
-}
-
-func (j *jsonInterceptor) Close() error {
-	defer func() { _ = j.upstream.Close() }()
-	if j.tee.Len() == 0 {
-		return nil
-	}
-	var body struct {
-		Model string       `json:"model"`
-		Usage *TokenCounts `json:"usage"`
-	}
-	if err := json.Unmarshal(j.tee.Bytes(), &body); err != nil {
-		return nil
-	}
-	if body.Usage == nil {
-		return nil
-	}
-	j.tracker.Add(ModelID(body.Model), *body.Usage)
-	return nil
 }

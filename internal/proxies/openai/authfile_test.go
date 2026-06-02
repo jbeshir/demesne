@@ -19,12 +19,12 @@ import (
 // unknown top-level field, account_id, unknown token field).
 func expiredAuthJSON(t *testing.T) []byte {
 	t.Helper()
-	data, err := json.MarshalIndent(map[string]interface{}{
+	data, err := json.MarshalIndent(map[string]any{
 		"OPENAI_API_KEY":   "sk-preserve-me",
 		"auth_mode":        "chatgpt",
-		"some_unknown_top": map[string]interface{}{"x": 1},
+		"some_unknown_top": map[string]any{"x": 1},
 		"last_refresh":     "2020-01-01T00:00:00Z",
-		"tokens": map[string]interface{}{
+		"tokens": map[string]any{
 			fieldIDToken:      makeJWT(time.Now().Add(-1 * time.Hour).Unix()),
 			fieldAccessToken:  "old-access",
 			fieldRefreshToken: "old-refresh",
@@ -118,9 +118,9 @@ func TestRefreshAuthFile_PreservesOtherFields(t *testing.T) {
 	assert.Equal(t, "sk-preserve-me", unmarshalStr(t, top["OPENAI_API_KEY"]))
 	assert.Equal(t, "chatgpt", unmarshalStr(t, top["auth_mode"]))
 
-	var unk map[string]interface{}
+	var unk map[string]any
 	require.NoError(t, json.Unmarshal(top["some_unknown_top"], &unk))
-	assert.Equal(t, map[string]interface{}{"x": float64(1)}, unk)
+	assert.Equal(t, map[string]any{"x": float64(1)}, unk)
 
 	assert.Equal(t, "acct-keep", unmarshalStr(t, tokens["account_id"]))
 	assert.Equal(t, "keep", unmarshalStr(t, tokens["unknown_tok"]))
@@ -166,11 +166,11 @@ func TestRefreshAuthFile_NoRefreshWhenFresh(t *testing.T) {
 	path := dir + "/auth.json"
 
 	fs := freshTokenSet()
-	raw, err := json.MarshalIndent(map[string]interface{}{
+	raw, err := json.MarshalIndent(map[string]any{
 		"OPENAI_API_KEY": "sk-fresh",
 		"auth_mode":      "chatgpt",
 		"last_refresh":   fs.LastRefresh.UTC().Format(time.RFC3339),
-		"tokens": map[string]interface{}{
+		"tokens": map[string]any{
 			fieldIDToken:      fs.IDToken,
 			fieldAccessToken:  fs.AccessToken,
 			fieldRefreshToken: fs.RefreshToken,

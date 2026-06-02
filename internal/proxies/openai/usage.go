@@ -1,12 +1,9 @@
 package openai
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
-	"sort"
 	"strings"
-	"sync"
 
 	"github.com/jbeshir/demesne/internal/proxies/proxycommon"
 )
@@ -16,51 +13,61 @@ import (
 // response interceptors fold per-request usage into it via Add. The host
 // reads the resulting snapshot from usage.json after the sandbox exits.
 type Tracker struct {
-	mu        sync.Mutex
-	usagePath string // empty disables disk writes
-	perModel  map[ModelID]*TokenCounts
+	*proxycommon.Tracker[TokenCounts]
 }
 
 // NewTracker constructs a Tracker. usagePath is the host-bind-mounted
 // path the tracker rewrites with a JSON snapshot after every Add
 // (empty disables writes — useful in tests).
 func NewTracker(usagePath string) *Tracker {
-	return &Tracker{
-		usagePath: usagePath,
-		perModel:  map[ModelID]*TokenCounts{},
-	}
+	return &Tracker{proxycommon.NewTracker[TokenCounts](
+		usagePath, "openai proxy",
+		combineCounts, modelCostUSD, modelReport,
+	)}
 }
 
 // Add folds another request's token counts into the per-model totals
 // and rewrites usage.json. modelID may be a versioned OpenAI ID (e.g.
 // "gpt-5.5-2026..."); pricing uses longest-prefix-match so versioned
 // IDs route to their family.
-func (t *Tracker) Add(modelID ModelID, tc TokenCounts) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if modelID == "" {
-		modelID = "unknown"
-	}
-	mu, ok := t.perModel[modelID]
-	if !ok {
-		mu = &TokenCounts{}
-		t.perModel[modelID] = mu
-	}
-	mu.InputTokens += tc.InputTokens
-	mu.OutputTokens += tc.OutputTokens
-	mu.TotalTokens += tc.TotalTokens
-	mu.InputTokensDetails.CachedTokens += tc.InputTokensDetails.CachedTokens
-	mu.OutputTokensDetails.ReasoningTokens += tc.OutputTokensDetails.ReasoningTokens
-	t.persistLocked()
+func (t *Tracker) Add(id ModelID, tc TokenCounts) {
+	t.Tracker.Add(string(id), tc)
 }
 
-// costUSDLocked returns the cumulative cost; caller must hold the mutex.
-func (t *Tracker) costUSDLocked() USD {
-	var total USD
-	for modelID, mu := range t.perModel {
-		total += CostUSD(modelID, *mu)
+// snapshot returns the current state. Called only by in-package tests;
+// production reads come from usage.json written by the generic tracker.
+func (t *Tracker) snapshot() Snapshot {
+	s := t.Snapshot()
+	result := Snapshot{
+		CostUSD:  USD(s.CostUSD),
+		PerModel: make(map[string]ModelReport, len(s.PerModel)),
 	}
-	return total
+	for k, v := range s.PerModel {
+		result.PerModel[k] = v.(ModelReport)
+	}
+	return result
+}
+
+func combineCounts(into *TokenCounts, add TokenCounts) {
+	into.InputTokens += add.InputTokens
+	into.OutputTokens += add.OutputTokens
+	into.TotalTokens += add.TotalTokens
+	into.InputTokensDetails.CachedTokens += add.InputTokensDetails.CachedTokens
+	into.OutputTokensDetails.ReasoningTokens += add.OutputTokensDetails.ReasoningTokens
+}
+
+func modelCostUSD(m string, tc TokenCounts) float64 {
+	return float64(CostUSD(ModelID(m), tc))
+}
+
+func modelReport(m string, tc TokenCounts) any {
+	return ModelReport{
+		InputTokens:     tc.InputTokens,
+		OutputTokens:    tc.OutputTokens,
+		CachedTokens:    tc.InputTokensDetails.CachedTokens,
+		ReasoningTokens: tc.OutputTokensDetails.ReasoningTokens,
+		CostUSD:         CostUSD(ModelID(m), tc),
+	}
 }
 
 // Snapshot is the JSON-serializable view of the tracker.
@@ -78,44 +85,6 @@ type ModelReport struct {
 	CostUSD         USD   `json:"cost_usd"`
 }
 
-// snapshot returns the current state. Called only by in-package tests;
-// production reads come from usage.json written by persistLocked.
-func (t *Tracker) snapshot() Snapshot {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.snapshotLocked()
-}
-
-func (t *Tracker) snapshotLocked() Snapshot {
-	models := make([]string, 0, len(t.perModel))
-	for k := range t.perModel {
-		models = append(models, string(k))
-	}
-	sort.Strings(models)
-	report := make(map[string]ModelReport, len(t.perModel))
-	for _, m := range models {
-		mu := t.perModel[ModelID(m)]
-		report[m] = ModelReport{
-			InputTokens:     mu.InputTokens,
-			OutputTokens:    mu.OutputTokens,
-			CachedTokens:    mu.InputTokensDetails.CachedTokens,
-			ReasoningTokens: mu.OutputTokensDetails.ReasoningTokens,
-			CostUSD:         CostUSD(ModelID(m), *mu),
-		}
-	}
-	return Snapshot{
-		CostUSD:  t.costUSDLocked(),
-		PerModel: report,
-	}
-}
-
-func (t *Tracker) persistLocked() {
-	if t.usagePath == "" {
-		return
-	}
-	proxycommon.WriteUsageAtomic(t.usagePath, "openai proxy", t.snapshotLocked())
-}
-
 const contentTypeJSON = "application/json"
 
 // wrapResponseBody returns a ReadCloser that tees the upstream body
@@ -128,55 +97,30 @@ const contentTypeJSON = "application/json"
 // when the response is explicitly application/json.
 func wrapResponseBody(upstream io.ReadCloser, contentType string, t *Tracker) io.ReadCloser {
 	if strings.HasPrefix(contentType, contentTypeJSON) {
-		return &jsonInterceptor{
-			upstream: upstream,
-			tracker:  t,
-		}
+		return proxycommon.NewJSONInterceptor(upstream, func(data []byte) {
+			var body struct {
+				Model string       `json:"model"`
+				Usage *TokenCounts `json:"usage"`
+			}
+			if err := json.Unmarshal(data, &body); err != nil {
+				return
+			}
+			if body.Usage == nil {
+				return
+			}
+			t.Add(ModelID(body.Model), *body.Usage)
+		})
 	}
-	return &sseInterceptor{
-		upstream: upstream,
-		tracker:  t,
-	}
+	state := &sseState{tracker: t}
+	return proxycommon.NewSSEInterceptor(upstream, state.handleLine, state.flush)
 }
 
-// sseInterceptor parses the OpenAI Responses API SSE stream as the
-// response body is read. It watches for the response.completed event,
-// which carries the definitive per-response usage totals, and submits
-// one Add call to the tracker at body Close. If no response.completed
-// is seen but an event carries a top-level usage block, that is used as
-// a fallback; response.completed always takes precedence.
-type sseInterceptor struct {
-	upstream io.ReadCloser
+// sseState holds per-response SSE parsing state for the OpenAI vendor.
+type sseState struct {
 	tracker  *Tracker
-	buf      bytes.Buffer
-
 	modelID  ModelID
 	counts   TokenCounts
 	sawUsage bool
-	flushed  bool
-}
-
-func (s *sseInterceptor) Read(p []byte) (int, error) {
-	n, err := s.upstream.Read(p)
-	if n > 0 {
-		s.buf.Write(p[:n])
-		s.scan(false)
-	}
-	if err == io.EOF {
-		s.scan(true)
-	}
-	return n, err
-}
-
-func (s *sseInterceptor) Close() error {
-	s.flush()
-	return s.upstream.Close()
-}
-
-// scan consumes complete SSE lines from the buffer. When eof is true,
-// it also drains any final partial line.
-func (s *sseInterceptor) scan(eof bool) {
-	proxycommon.ScanSSELines(&s.buf, eof, s.handleLine)
 }
 
 // sseEvent is the minimal shape of an OpenAI Responses API SSE event.
@@ -191,7 +135,7 @@ type sseEvent struct {
 	Usage *TokenCounts `json:"usage"` // top-level fallback; prefer response.completed
 }
 
-func (s *sseInterceptor) handleLine(line string) {
+func (s *sseState) handleLine(line string) {
 	if !strings.HasPrefix(line, "data:") {
 		return
 	}
@@ -226,49 +170,8 @@ func (s *sseInterceptor) handleLine(line string) {
 	}
 }
 
-func (s *sseInterceptor) flush() {
-	if s.flushed {
-		return
+func (s *sseState) flush() {
+	if s.sawUsage {
+		s.tracker.Add(s.modelID, s.counts)
 	}
-	s.flushed = true
-	if !s.sawUsage {
-		return
-	}
-	s.tracker.Add(s.modelID, s.counts)
-}
-
-// jsonInterceptor buffers a non-streaming JSON response body, forwards
-// it to the caller as-is, and parses one usage block out of the
-// completed JSON on Close.
-type jsonInterceptor struct {
-	upstream io.ReadCloser
-	tracker  *Tracker
-	tee      bytes.Buffer
-}
-
-func (j *jsonInterceptor) Read(p []byte) (int, error) {
-	n, err := j.upstream.Read(p)
-	if n > 0 {
-		j.tee.Write(p[:n])
-	}
-	return n, err
-}
-
-func (j *jsonInterceptor) Close() error {
-	defer func() { _ = j.upstream.Close() }()
-	if j.tee.Len() == 0 {
-		return nil
-	}
-	var body struct {
-		Model string       `json:"model"`
-		Usage *TokenCounts `json:"usage"`
-	}
-	if err := json.Unmarshal(j.tee.Bytes(), &body); err != nil {
-		return nil
-	}
-	if body.Usage == nil {
-		return nil
-	}
-	j.tracker.Add(ModelID(body.Model), *body.Usage)
-	return nil
 }

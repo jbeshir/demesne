@@ -26,6 +26,8 @@ func (r *Runner) Exec(ctx context.Context, req ExecRequest) (ExecResult, error) 
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
 		Command: req.Command,
 		Cwd:     "/out",
+		// Timeout is in milliseconds per SDK api/execd/gen.go; sibling
+		// SandboxCreateOptions.TimeoutSeconds is seconds (units differ).
 		Timeout: commandTimeout.Milliseconds(),
 	}, nil)
 	if err != nil {

@@ -209,6 +209,8 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 		Command: command,
 		Cwd:     mountWorkspace,
 		Envs:    prep.agent.EnvVars(agentToken, prep.model),
+		// Timeout is in milliseconds per SDK api/execd/gen.go; sibling
+		// SandboxCreateOptions.TimeoutSeconds is seconds (units differ).
 		Timeout: commandTimeout.Milliseconds(),
 	}, nil)
 	if err != nil {

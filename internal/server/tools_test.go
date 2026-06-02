@@ -19,6 +19,7 @@ const (
 	msgNoCall        = "case %d: runner should not be called"
 	testCmdEcho      = "echo hello"
 	testCmdTrue      = "true"
+	testEgressOpen   = "open"
 	testStdoutHello  = "hello\n"
 	testFile         = "/some/file.txt"
 	testDir          = "/some/dir"
@@ -440,12 +441,37 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 	}, resultStructured[agentRunOutput](t, got))
 }
 
+func TestHandleSandboxScript_RejectsOpenEgress(t *testing.T) {
+	r := &fakeRunner{}
+	s := NewServer(r)
+	got, err := s.handleSandboxScript(context.Background(), newRequest(map[string]any{
+		paramCommand: testCmdTrue,
+		paramEgress:  testEgressOpen,
+	}))
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "open egress must be refused for sandbox_script")
+	assert.Contains(t, resultText(t, got), "sandbox_research")
+	assert.Zero(t, r.scriptCalls, "runner must not be called")
+}
+
+func TestHandleSandboxCreate_RejectsOpenEgress(t *testing.T) {
+	r := &fakeRunner{}
+	s := NewServer(r)
+	got, err := s.handleSandboxCreate(context.Background(), newRequest(map[string]any{
+		paramEgress: testEgressOpen,
+	}))
+	require.NoError(t, err)
+	assert.True(t, got.IsError, "open egress must be refused for sandbox_create")
+	assert.Contains(t, resultText(t, got), "sandbox_research")
+	assert.Zero(t, r.createCalls, "runner must not be called")
+}
+
 func TestHandleSandboxAgent_RejectsOpenEgress(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)
 	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
 		paramPrompt: "hi",
-		paramEgress: "open",
+		paramEgress: testEgressOpen,
 	}))
 	require.NoError(t, err)
 	assert.True(t, got.IsError, "open egress must be refused for sandbox_agent")

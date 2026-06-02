@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // JSON field names inside the auth.json tokens object. Declared as
@@ -29,8 +30,14 @@ const (
 // This is the host-side entry point: refresh+persist happen in the demesne
 // host process before each Codex sandbox launch, so auth.json (shared with
 // the host's own `codex`) always holds the current rotating refresh token.
+// refreshClient is a dedicated HTTP client for the OAuth refresh path:
+// 30s timeout so a hung auth.openai.com endpoint can't stall a Codex
+// agent launch indefinitely, and isolated from process-wide mutation of
+// http.DefaultClient.
+var refreshClient = &http.Client{Timeout: 30 * time.Second}
+
 func RefreshAuthFile(ctx context.Context, path string) (TokenSet, error) {
-	return refreshAuthFile(ctx, path, oauthRefreshURL, http.DefaultClient)
+	return refreshAuthFile(ctx, path, oauthRefreshURL, refreshClient)
 }
 
 func refreshAuthFile(ctx context.Context, path, tokenURL string, client *http.Client) (TokenSet, error) {

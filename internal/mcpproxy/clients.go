@@ -33,8 +33,9 @@ var clientInfo = mcp.Implementation{Name: "demesne-mcp", Version: "0"}
 // upstreamClient pairs a live mcp-go client with its expiry
 // timer. Both are guarded by Pool.mu in the surrounding pool.
 type upstreamClient struct {
-	c         *client.Client
-	idleTimer *time.Timer
+	c          *client.Client
+	idleTimer  *time.Timer
+	generation uint64 // race-safe via generation counter
 }
 
 // Pool manages lazy stdio MCP clients keyed by server name. The
@@ -217,14 +218,19 @@ func (p *Pool) resetIdleTimerLocked(server string, uc *upstreamClient) {
 	if uc.idleTimer != nil {
 		uc.idleTimer.Stop()
 	}
-	uc.idleTimer = time.AfterFunc(p.timeout, func() { p.evict(server) })
+	uc.generation++
+	gen := uc.generation
+	uc.idleTimer = time.AfterFunc(p.timeout, func() { p.evict(server, gen) })
 }
 
-func (p *Pool) evict(server string) {
+func (p *Pool) evict(server string, capturedGen uint64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	uc, ok := p.clients[server]
 	if !ok {
+		return
+	}
+	if uc.generation != capturedGen {
 		return
 	}
 	if err := uc.c.Close(); err != nil {

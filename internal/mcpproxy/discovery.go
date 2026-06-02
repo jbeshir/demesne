@@ -3,9 +3,8 @@
 // stdio MCP server subprocesses lazily on demand, and serves a
 // per-upstream Streamable HTTP MCP endpoint on host loopback. The
 // per-sandbox sidecar's MCP tunnel proxy points at these endpoints.
-// These upstreams are not advertised in the agent CLAUDE.md or MCP
-// tool catalogue; agents discover them on demand via the standard
-// MCP list methods.
+// Tools are advertised to the agent via the CLAUDE.md writer and the MCP config
+// writer in the agents package, then filtered through the read-only allowlist below.
 //
 // Tools are filtered through a read-only allowlist (built-in defaults
 // plus the user's optional override file). Resources, resource
@@ -21,6 +20,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"regexp"
 	"sort"
 )
 
@@ -28,6 +28,8 @@ import (
 // skip during discovery — it is the demesne MCP server itself,
 // re-proxying it would loop.
 const DemesneServerName = "demesne"
+
+var validServerName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,62}$`)
 
 // transportStdio is the only MCP transport demesne currently supports.
 const transportStdio = "stdio"
@@ -85,6 +87,10 @@ func parseUpstreams(data []byte) ([]UpstreamSpec, error) {
 	out := make([]UpstreamSpec, 0, len(cfg.MCPServers))
 	for name, s := range cfg.MCPServers {
 		if name == DemesneServerName {
+			continue
+		}
+		if !validServerName.MatchString(name) {
+			log.Printf("mcpproxy: skipping MCP server %q: name is not a valid slug (must match ^[a-z][a-z0-9_-]{0,62}$)", name)
 			continue
 		}
 		if s.Type != "" && s.Type != transportStdio {

@@ -1,7 +1,7 @@
 package openai
 
 import (
-	"strings"
+	"github.com/jbeshir/demesne/internal/proxies/proxycommon"
 )
 
 // USD represents US dollars (indicative).
@@ -26,6 +26,9 @@ type catalogEntry struct {
 	IDPrefix ModelID
 	Pricing
 }
+
+func (e catalogEntry) Prefix() string { return string(e.IDPrefix) }
+func (e catalogEntry) Price() Pricing { return e.Pricing }
 
 // TokenCounts is the per-request usage breakdown the OpenAI Responses
 // API reports in the usage block of response.completed events and
@@ -90,12 +93,7 @@ func Aliases() []string {
 // LookupPricing returns the Pricing for the given OpenAI model ID by
 // longest-prefix match, plus whether a match was found.
 func LookupPricing(id ModelID) (Pricing, bool) {
-	for _, e := range modelCatalog {
-		if strings.HasPrefix(string(id), string(e.IDPrefix)) {
-			return e.Pricing, true
-		}
-	}
-	return Pricing{}, false
+	return proxycommon.LookupPricing[catalogEntry, Pricing](modelCatalog, string(id))
 }
 
 // CostUSD computes the USD cost for the given token counts at the

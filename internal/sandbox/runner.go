@@ -142,6 +142,8 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
 		Command: wrapped,
 		Cwd:     mountOut,
+		// Timeout is in milliseconds per SDK api/execd/gen.go; sibling
+		// SandboxCreateOptions.TimeoutSeconds is seconds (units differ).
 		Timeout: commandTimeout.Milliseconds(),
 	}, nil)
 	if err != nil {
@@ -256,10 +258,12 @@ func (r *Runner) launchSandbox(
 		if attempt == createSandboxMaxAttempts-1 {
 			return nil, fmt.Errorf("create sandbox after %d attempts: %w", createSandboxMaxAttempts, err)
 		}
+		t := time.NewTimer(createSandboxBackoffs[attempt])
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			return nil, fmt.Errorf("create sandbox: %w", ctx.Err())
-		case <-time.After(createSandboxBackoffs[attempt]):
+		case <-t.C:
 		}
 	}
 	// Unreachable: loop always returns inside.

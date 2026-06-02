@@ -20,6 +20,9 @@ func (s *Server) handleSandboxScript(
 
 	image := request.GetString(paramImage, "")
 	egress := request.GetString(paramEgress, string(sandbox.EgressPackageManagers))
+	if res, rejected := rejectOpenEgress(egress); rejected {
+		return res, nil
+	}
 
 	files, err := optionalStringSlice(request, paramFiles)
 	if err != nil {
@@ -49,6 +52,9 @@ func (s *Server) handleSandboxCreate(
 ) (*mcp.CallToolResult, error) {
 	image := request.GetString(paramImage, "")
 	egress := request.GetString(paramEgress, string(sandbox.EgressPackageManagers))
+	if res, rejected := rejectOpenEgress(egress); rejected {
+		return res, nil
+	}
 
 	files, err := optionalStringSlice(request, paramFiles)
 	if err != nil {
@@ -182,16 +188,8 @@ func (s *Server) handleSandboxAgent(
 	model := request.GetString(paramModel, "")
 	preamble := request.GetString(paramPreamble, "")
 	egress := request.GetString(paramEgress, string(sandbox.EgressNone))
-	// sandbox_agent never permits open egress: the combination of
-	// read-only /in mounts and unrestricted outbound is the
-	// data-exfiltration shape we keep off the MCP surface. Callers
-	// that want open egress use sandbox_research (which has no
-	// inputs).
-	if sandbox.EgressMode(egress) == sandbox.EgressOpen {
-		return mcp.NewToolResultError(
-			"egress 'open' is not permitted for sandbox_agent; " +
-				"use sandbox_research for unrestricted egress",
-		), nil
+	if res, rejected := rejectOpenEgress(egress); rejected {
+		return res, nil
 	}
 
 	files, err := optionalStringSlice(request, paramFiles)
@@ -254,6 +252,20 @@ func requireNonEmpty(req mcp.CallToolRequest, key string) (string, *mcp.CallTool
 		return "", mcp.NewToolResultError(key + " is required")
 	}
 	return v, nil
+}
+
+// rejectOpenEgress returns a CallToolResult error when egress is
+// "open" (policy: open egress combined with read-only /in mounts is
+// the data-exfiltration shape demesne keeps off this surface; callers
+// wanting open egress must use sandbox_research, which has no /in
+// mounts). Returns (nil, false) when egress is not "open".
+func rejectOpenEgress(egress string) (*mcp.CallToolResult, bool) {
+	if sandbox.EgressMode(egress) != sandbox.EgressOpen {
+		return nil, false
+	}
+	return mcp.NewToolResultError(
+		"egress 'open' is not permitted; use sandbox_research for unrestricted egress",
+	), true
 }
 
 // optionalStringSlice returns the named argument as []string. It treats a

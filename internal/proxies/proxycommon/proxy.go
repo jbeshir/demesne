@@ -21,6 +21,7 @@ func Serve(ctx context.Context, bindAddr string, srv *http.Server, logName strin
 	}
 	log.Printf("%s: listening on %s", logName, ln.Addr())
 
+	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
 		// WithoutCancel preserves values/deadlines from ctx but drops
@@ -30,11 +31,13 @@ func Serve(ctx context.Context, bindAddr string, srv *http.Server, logName strin
 		if err := srv.Shutdown(shutCtx); err != nil {
 			log.Printf("%s: shutdown error: %v", logName, err)
 		}
+		close(done)
 	}()
 
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	<-done
 	return nil
 }
 

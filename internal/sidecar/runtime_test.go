@@ -93,6 +93,31 @@ func overrideExec(t *testing.T, fakeDockerPath, scenario, scenarioDir string) {
 	}
 }
 
+func TestValidateContainerID(t *testing.T) {
+	tests := []struct {
+		id      string
+		wantErr bool
+	}{
+		{id: "abcdef01", wantErr: false},              // 8-char hex ok
+		{id: strings.Repeat("a", 64), wantErr: false}, // 64-char hex ok
+		{id: "abcdef0", wantErr: true},                // 7-char rejected
+		{id: "ABCDEF01", wantErr: true},               // uppercase rejected
+		{id: strings.Repeat("a", 65), wantErr: true},  // too long
+		{id: "", wantErr: true},                       // empty rejected
+		{id: "abcdef01\n", wantErr: true},             // trailing newline rejected
+	}
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			err := validateContainerID(tt.id)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestRemove_Happy(t *testing.T) {
 	requireSh(t)
 	fakeDockerPath := writeFakeDocker(t)

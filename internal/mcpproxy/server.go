@@ -70,6 +70,7 @@ type Aggregator struct {
 	pool       *Pool
 	allow      map[string]ServerAllowlist
 	httpSrv    *http.Server
+	serveDone  chan struct{}
 	catalogue  ToolCatalogue
 	socketPath string
 	extra      []ExtraServer
@@ -152,7 +153,7 @@ func (a *Aggregator) Start(ctx context.Context) error {
 		return errors.New("mcpproxy: no upstreams produced exposable tools, resources, or prompts")
 	}
 
-	ln, err := a.listenSocket()
+	ln, err := a.listenSocket(ctx)
 	if err != nil {
 		return err
 	}
@@ -161,10 +162,12 @@ func (a *Aggregator) Start(ctx context.Context) error {
 		Handler:           mux,
 		ReadHeaderTimeout: 30 * time.Second,
 	}
+	a.serveDone = make(chan struct{})
 	go func() {
 		if err := a.httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("mcpproxy: http serve: %v", err)
 		}
+		close(a.serveDone)
 	}()
 	totalTools := 0
 	for _, v := range a.catalogue {
@@ -214,7 +217,7 @@ func (a *Aggregator) registerUpstream(ctx context.Context, mux *http.ServeMux, s
 
 // listenSocket creates the parent dir, removes any stale socket from
 // a prior run, and opens the unix listener.
-func (a *Aggregator) listenSocket() (net.Listener, error) {
+func (a *Aggregator) listenSocket(ctx context.Context) (net.Listener, error) {
 	if dir := filepath.Dir(a.socketPath); dir != "" {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return nil, fmt.Errorf("create %s: %w", dir, err)
@@ -224,7 +227,7 @@ func (a *Aggregator) listenSocket() (net.Listener, error) {
 		return nil, fmt.Errorf("remove stale socket %s: %w", a.socketPath, err)
 	}
 	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), "unix", a.socketPath)
+	ln, err := lc.Listen(ctx, "unix", a.socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("listen on unix socket %s: %w", a.socketPath, err)
 	}
@@ -267,6 +270,9 @@ func (a *Aggregator) Shutdown(ctx context.Context) error {
 		if err := a.httpSrv.Shutdown(ctx); err != nil {
 			firstErr = err
 		}
+	}
+	if a.serveDone != nil {
+		<-a.serveDone
 	}
 	a.pool.Shutdown()
 	return firstErr

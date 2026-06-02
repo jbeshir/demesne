@@ -52,6 +52,24 @@ func TestParseUpstreams(t *testing.T) {
 	}
 }
 
+func TestParseUpstreams_InvalidNames(t *testing.T) {
+	input := `{
+		"mcpServers": {
+			"good":      {"command": "/bin/good"},
+			"bad/name":  {"command": "/bin/bad"},
+			"UPPER":     {"command": "/bin/upper"},
+			"":          {"command": "/bin/empty"},
+			"has.dot":   {"command": "/bin/dot"},
+			"1starts":   {"command": "/bin/digit"},
+			"has space": {"command": "/bin/space"}
+		}
+	}`
+	got, err := parseUpstreams([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "good", got[0].Name)
+}
+
 func TestParseUpstreams_MalformedJSON(t *testing.T) {
 	_, err := parseUpstreams([]byte(`{not json}`))
 	assert.Error(t, err)

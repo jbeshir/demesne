@@ -111,14 +111,14 @@ See [`../usage-json.md`](../usage-json.md) and [`../results-json.md`](../results
 
 ### Host MCP proxy note
 
-When demesne is configured with host MCP servers, the agent sees those servers through the sidecar tunnel. These servers are not advertised in the agent CLAUDE.md or MCP tool catalogue; agents discover them on demand via the standard MCP list methods. Tools are filtered through the read-only allowlist; calls that reach blocked servers or tools surface as errors from the agent's MCP calls, not directly from `sandbox_agent`. Resources, resource templates, prompts, and completion are relayed in full from any exposed upstream without allowlist filtering. Listings reflect a static snapshot taken at aggregator start. See `internal/mcpproxy/server.go` for the filtering logic.
+When demesne is configured with host MCP servers, the agent sees those servers through the sidecar tunnel. These servers are advertised in the agent's CLAUDE.md under `## Available host tools` and wired into the agent's MCP config. Tools are filtered through the read-only allowlist; calls that reach blocked servers or tools surface as errors from the agent's MCP calls, not directly from `sandbox_agent`. Resources, resource templates, prompts, and completion are relayed in full from any exposed upstream without allowlist filtering. Listings reflect a static snapshot taken at aggregator start. See `internal/mcpproxy/server.go` for the filtering logic.
 
 ## Errors
 
 | Error | When it occurs |
 |-------|----------------|
 | `prompt is required` | `prompt` parameter is present but empty or whitespace-only. |
-| `egress 'open' is not permitted for sandbox_agent; use sandbox_research for unrestricted egress` | `egress` was set to `open`; use `sandbox_research` instead. |
+| `egress 'open' is not permitted; use sandbox_research for unrestricted egress` | `egress` was set to `open`; use `sandbox_research` instead. |
 | `agent "<name>" is not registered (available: [...])` | The `agent` parameter names an unknown provider. |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for sandbox_agent (run 'claude setup-token' to obtain one)` | The Claude Code OAuth token env var is not set on the demesne process. Required for `agent=claude-code`. |
 | `DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) is required for sandbox_agent when agent="codex"` | The Codex auth file is not set. Required for `agent=codex`. |

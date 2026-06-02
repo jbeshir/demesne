@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -91,11 +92,15 @@ func readResultsFile(dir string) (Results, bool) {
 func writeResultsFile(outHost string, res Results) {
 	data, err := json.MarshalIndent(res, "", "  ")
 	if err != nil {
+		log.Printf("sandbox: write results.json: marshal: %v", err)
 		return
 	}
 	tmp := filepath.Join(outHost, ".results.json.tmp")
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		log.Printf("sandbox: write results.json: write tmp: %v", err)
 		return
 	}
-	_ = os.Rename(tmp, filepath.Join(outHost, "results.json"))
+	if err := os.Rename(tmp, filepath.Join(outHost, "results.json")); err != nil {
+		log.Printf("sandbox: write results.json: rename: %v", err)
+	}
 }

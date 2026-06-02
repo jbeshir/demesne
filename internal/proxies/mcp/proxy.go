@@ -156,6 +156,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}(b)
 	}
 
+	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -165,9 +166,11 @@ func (s *Server) Start(ctx context.Context) error {
 				log.Printf("mcp tunnel: shutdown error: %v", err)
 			}
 		}
+		close(done)
 	}()
 
 	wg.Wait()
+	<-done
 	select {
 	case err := <-errCh:
 		return err

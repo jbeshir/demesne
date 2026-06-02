@@ -182,6 +182,7 @@ func (p *ProxyServer) Start(ctx context.Context) error {
 	}
 	log.Printf("go-mod proxy: listening on %s", ln.Addr())
 
+	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -189,10 +190,12 @@ func (p *ProxyServer) Start(ctx context.Context) error {
 		if err := p.server.Shutdown(shutCtx); err != nil {
 			log.Printf("go-mod proxy: shutdown error: %v", err)
 		}
+		close(done)
 	}()
 
 	if err := p.server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	<-done
 	return nil
 }
