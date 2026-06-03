@@ -79,6 +79,17 @@ boundary. Change two settings before starting the server:
   demesne's `DEMESNE_ALLOWED_PATHS` must include each host path you
   intend to mount.
 
+### Rootless podman: lift the pipe-page cap
+
+If OpenSandbox runs on rootless podman (including podman serving the Docker-compatible API), set the per-user pipe-page soft cap to unlimited:
+
+```bash
+sudo sysctl -w fs.pipe-user-pages-soft=0                                     # now
+echo 'fs.pipe-user-pages-soft = 0' | sudo tee /etc/sysctl.d/99-demesne.conf   # persist
+```
+
+Each sandbox's `pasta` network helper holds several 1 MiB pipes, so a fan-out of ~10+ concurrent sandboxes (routine for multi-agent pipelines) exceeds the default cap. Above it the kernel shrinks every new pipe to 8 KiB — too small for buildah's image-distribution copier, which then fails with `DOCKER::SANDBOX_EXECD_DISTRIBUTION_FAILED: passing bulk input to subprocess`. `0` disables the soft cap; the hard cap is unlimited by default.
+
 #### Expected output
 
 ```
