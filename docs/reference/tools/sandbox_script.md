@@ -105,7 +105,7 @@ Files written: `stdout.log` (full stdout) and `stderr.log` (full stderr). The MC
 | `mount basename "<base>" would collide: <p1> and <p2>` | Two input paths share the same basename; they would both map to `/in/<basename>`. |
 | `<path> is not a regular file` | A path supplied in `files` is a directory or special file. |
 | `<path> is not a directory` | A path supplied in `directories` is a regular file. |
-| `DOCKER::SANDBOX_EXECD_DISTRIBUTION_FAILED … passing bulk input to subprocess` | Transient buildah-copier race (buildah issue #6573). Demesne retries up to 3 times with backoff; the error surfaces only if all attempts fail. |
+| `DOCKER::SANDBOX_EXECD_DISTRIBUTION_FAILED … passing bulk input to subprocess` | Transient buildah-copier race. Demesne retries up to 3 times; surfaces only if all attempts fail. |
 | `VOLUME::HOST_PATH_NOT_ALLOWED` | OpenSandbox server rejected the bind mount because the host path is not in the server's `allowed_host_paths` list. Check `~/.sandbox.toml`. |
 | `create sandbox: <error>` | OpenSandbox SDK returned an error during sandbox creation. |
 

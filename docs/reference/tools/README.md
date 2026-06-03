@@ -15,4 +15,4 @@ Demesne exposes eight MCP tools over its stdio JSON-RPC interface. Three categor
 
 ## Structured output
 
-Every tool returns its result as both a human-readable text payload and a `structuredContent` object validated against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume the structured object and ignore the text block, which remains as a fallback for clients that don't. Each tool page lists its specific `structuredContent` fields.
+Every tool returns its result as both a human-readable text payload and a `structuredContent` object validated against a declared [`outputSchema`](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#output-schema). Clients that support structured output — including Claude Code and the Codex CLI — consume the structured object and ignore the text block, which remains as a fallback for clients that don't. Each tool page lists its specific `structuredContent` fields.
