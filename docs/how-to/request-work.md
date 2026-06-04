@@ -20,7 +20,7 @@ See the [`sandbox_research` tool reference](../reference/tools/sandbox_research.
 
 ## Delegated agent tasks
 
-Hand off a multi-step coding or analysis task to a child agent that inherits your input files and shares your workspace. Use when the work needs its own reasoning loop — reading, planning, writing, checking.
+Hand off a multi-step coding or analysis task to a sandboxed sub-agent with its own inputs and scratch workspace. Use when the work needs its own reasoning loop — reading, planning, writing, checking.
 
 > "Analyse the files in `/in/repo` and write a refactoring plan to `/out/plan.md`."
 

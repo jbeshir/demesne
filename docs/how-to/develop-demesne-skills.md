@@ -27,14 +27,14 @@ Decide what each phase produces, where, and in what format — then follow that 
 | Phase output | Location |
 |---|---|
 | Plan / in-progress findings | `/workspace/<phase>.md` — shared scratch, visible to all siblings |
-| Final artefacts | `/out/<name>` — your output dir; copy child results here explicitly |
+| Final artefacts | `/out/<name>` — the orchestrator's output dir; child results are copied here explicitly |
 | Sibling outputs | `/in/previous-jobs/<name>/` — read-only mount of a completed sibling |
 
 Spell the contract in the skill definition. A phase that writes to an undeclared path is likely to be silently lost.
 
 ## Verifier/judge pattern
 
-After a worker phase, spawn a second `sandbox_agent` that reads the worker's output (available at `/in/previous-jobs/<worker-name>/`) and writes `PASS` or `FAIL` to `/out/verdict.txt`. An external judge has a fresh context and no stake in the worker's output — it cannot rationalise away errors it did not produce.
+After a worker phase, a second `sandbox_agent` reads the worker's output (available at `/in/previous-jobs/<worker-name>/`) and writes `PASS` or `FAIL` to `/out/verdict.txt`. An external judge has a fresh context and no stake in the worker's output — it cannot rationalise away errors it did not produce.
 
 Cap retries (e.g. two worker attempts before escalating). Without a cap, a retry loop on a hard task can burn significant tokens before surfacing to the user.
 
@@ -53,7 +53,7 @@ Try a single well-prompted agent before fanning out. Three parallel workers each
 
 ## Checkpointing
 
-For long pipelines, write findings to `/workspace/<phase>.md` at the end of each phase. A fresh next-phase agent reads the checkpoint to pick up where the last one left off. Write partial findings to `/out` early — progress survives interruption and you can read intermediate results without waiting for the full pipeline to finish.
+For long pipelines, each phase writes its findings to `/workspace/<phase>.md` before it ends, and a fresh next-phase agent reads the checkpoint to pick up where the last one left off. Writing partial findings to `/out` early means progress survives interruption, and you can read intermediate results without waiting for the full pipeline to finish.
 
 ## Wiring it into your agent
 
@@ -61,4 +61,4 @@ Encode the recipe wherever your agent reads its skills or instructions: a Claude
 
 ---
 
-For the layout rules a child agent must follow at runtime, see [Nested sandboxes reference](../reference/nested-sandboxes.md).
+For the full layout and conventions of nested runs, see [Nested sandboxes reference](../reference/nested-sandboxes.md).
