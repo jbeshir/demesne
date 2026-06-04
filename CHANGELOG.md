@@ -38,7 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-sandbox sidecar tunnel: one listener per server, sharing a single egress-bypass
   `http.Transport`; agents see each server under its upstream's own native tool names.
 - Aggregator listens on a unix socket (`DEMESNE_MCP_SOCKET`, default
-  `/tmp/demesne-mcp/aggregator.sock`) so the tunnel works under rootless podman where host TCP
+  `/tmp/demesne-mcp/aggregator.sock`; per-PID path `/tmp/demesne-mcp/<pid>/aggregator.sock`
+  introduced in M6) so the tunnel works under rootless podman where host TCP
   ports are unreachable from the sandbox network namespace.
 - Per-server tool allowlist: built-in read-only defaults (`internal/mcpproxy/defaults.go`),
   overridable via `DEMESNE_MCP_ALLOWLIST` JSON file; auto-seeded on first run.

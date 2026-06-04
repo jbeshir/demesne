@@ -350,7 +350,7 @@ The sandbox is built from the agent's own container image (built lazily on
 first use) and torn down when the agent exits. Working directory is /workspace.
 
 The agent reads its provider-specific context file (e.g.
-/in/CLAUDE.md for claude-code) before processing the task. The file
+/in/.agent/CLAUDE.md for claude-code) before processing the task. The file
 is generated from the optional 'preamble' parameter plus an
 auto-generated 'Environment' section listing any /in/<basename>
 inputs and the /out writable mount.

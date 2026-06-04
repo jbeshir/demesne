@@ -8,7 +8,7 @@ Use `egress=none` when you want to guarantee that code running inside a sandbox 
 - You want to prevent accidental data exfiltration during a build or test step.
 - You are running `sandbox_agent` and want to restrict the agent to only its vendor API proxy (this is already the default for `sandbox_agent`).
 
-Note: effective `egress=none` requires your OpenSandbox server to be configured with `[egress] mode = "dns+nft"` in `~/.sandbox.toml`. The default `"dns"` mode only filters at DNS resolution; raw-IP connections still succeed, so `none` is not fully enforced without the `dns+nft` setting. See [Step 2 of the Quickstart](../tutorial/quickstart.md#step-2-run-a-local-opensandbox) for the required config.
+Note: effective `egress=none` requires your OpenSandbox server to be configured with `[egress] mode = "dns+nft"` in `~/.sandbox.toml`. The default `"dns"` mode only filters at DNS resolution; raw-IP connections still succeed, so `none` is not fully enforced without the `dns+nft` setting. See [docs/reference/requirements.md §OpenSandbox configuration](../reference/requirements.md#opensandbox-configuration) for the required config.
 
 ## What still works under `egress=none`
 
@@ -20,7 +20,7 @@ For more detail on how the sidecar bypass is wired, see [Trust boundary, agents,
 
 ### Agent vendor API (sandbox_agent)
 
-For `sandbox_agent`, the Anthropic API proxy (`127.0.0.1:8088`) is always reachable from the sandbox regardless of the `egress` setting, because it runs in the sidecar's network namespace and uses the same SO_MARK bypass. The `egress` parameter for `sandbox_agent` controls what is reachable *in addition to* the vendor proxy, not whether the vendor proxy itself is accessible.
+For `sandbox_agent`, the vendor proxy is always reachable from the sandbox regardless of the `egress` setting: the Anthropic API proxy (`127.0.0.1:8088`) for `agent=claude-code`, or the OpenAI/Codex proxy (`127.0.0.1:8086`) for `agent=codex`. Both run in the sidecar's network namespace and use the same SO_MARK bypass. The `egress` parameter controls what is reachable *in addition to* the vendor proxy, not whether the vendor proxy itself is accessible.
 
 ## What breaks under `egress=none`
 

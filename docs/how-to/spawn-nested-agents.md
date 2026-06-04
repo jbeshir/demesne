@@ -2,6 +2,8 @@
 
 When your agent is running inside a `sandbox_agent` or `sandbox_research` sandbox, demesne re-exposes its own tools so the agent can spawn child sandboxes. This page covers the conventions and gotchas for that pattern.
 
+> **Prerequisites**: rootless podman hosts need the `fs.pipe-user-pages-soft=0` sysctl set — see [docs/reference/requirements.md §Rootless Podman pipe-page cap](../reference/requirements.md#rootless-podman-pipe-page-cap). The whole sandbox-fan-out pattern this page describes hits the default cap routinely.
+
 ## Available child tools
 
 Inside a `sandbox_agent` or `sandbox_research` sandbox, the following demesne tools are available:

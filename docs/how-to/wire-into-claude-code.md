@@ -13,7 +13,7 @@ Claude Desktop, and VS Code. For a step-by-step install walkthrough, see the
 | `OPEN_SANDBOX_API_KEY` | API key for the OpenSandbox server |
 | `DEMESNE_ALLOWED_PATHS` | Colon-separated host paths permitted as mount sources |
 
-See the [full environment variable reference](#environment-variables) below.
+See the [full environment variable reference](../reference/configuration.md#environment-variables) below.
 
 ---
 
@@ -140,21 +140,7 @@ instead of `inputs` to load a `.env` file.
 
 All env vars are read by `demesne-mcp` at startup from `internal/sandbox/config.go`:
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DEMESNE_ALLOWED_PATHS` | **yes** | — | Colon-separated host paths under which tools may mount files/directories or upload from. Symlinks are resolved before the containment check. |
-| `OPEN_SANDBOX_DOMAIN` | **yes** | — | Host:port of the OpenSandbox lifecycle server (e.g. `localhost:8080`). |
-| `OPEN_SANDBOX_API_KEY` | **yes** | — | API key for the OpenSandbox lifecycle server. |
-| `OPEN_SANDBOX_PROTOCOL` | no | `http` | `http` or `https`. |
-| `DEMESNE_OUTPUT_ROOT` | no | `/tmp/demesne/out` | Host directory under which per-job `/out` mounts are created. |
-| `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no* | — | Long-lived Claude Code OAuth token from `claude setup-token`. **Required by `sandbox_agent` and `sandbox_research`**; other tools work without it. |
-| `DEMESNE_CODEX_AUTH_FILE` | no | `~/.codex/auth.json` | Path to the Codex ChatGPT-OAuth token file (from `codex login`). Required only when using `agent="codex"` with `sandbox_agent` or `sandbox_research`. |
-| `DEMESNE_HOST_MCP_CONFIG` | no | `~/.claude.json` | Claude Code MCP config file demesne reads to discover host stdio MCP servers to re-expose. |
-| `DEMESNE_MCP_ALLOWLIST` | no | `~/.config/demesne/mcp-allowlist.json` | Per-server tool allowlist override file (auto-seeded with built-in read-only defaults on first run). |
-| `DEMESNE_MCP_SOCKET` | no | `/tmp/demesne-mcp/<pid>/aggregator.sock` | Host path of the MCP aggregator unix socket. The runner bind-mounts it into each sandbox sidecar. |
-
-\* `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` is optional at the env level but required at runtime when
-`sandbox_agent` or `sandbox_research` is called.
+For the full table, see [docs/reference/configuration.md](../reference/configuration.md#environment-variables).
 
 ---
 

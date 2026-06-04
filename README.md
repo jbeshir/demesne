@@ -34,7 +34,7 @@ For developers running a single local AI coding agent and wanting a hardened san
 }
 ```
 
-`sandbox_agent` and `sandbox_research` additionally need `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) — see [docs/how-to/wire-into-claude-code.md](docs/how-to/wire-into-claude-code.md) for the full env reference.
+`sandbox_agent` and `sandbox_research` additionally need `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) for the default `claude-code` agent, or `DEMESNE_CODEX_AUTH_FILE` (from `codex login`) for `agent="codex"` — see [docs/how-to/wire-into-claude-code.md](docs/how-to/wire-into-claude-code.md) for the full env reference.
 
 See [docs/how-to/wire-into-claude-code.md](docs/how-to/wire-into-claude-code.md) for Claude Desktop, VS Code, and full env var reference.
 
@@ -56,6 +56,8 @@ Demesne embeds a `linux/amd64` helper binary that runs inside every sandbox cont
 
 Releases are published for `linux/amd64`, `darwin/amd64`, `darwin/arm64`, and `windows/amd64`. **Only `linux/amd64` is actively tested**; the other platforms build cleanly but are best-effort. linux/arm64 is reachable with `qemu-user-static` binfmt but no native binary is shipped.
 
+Building from source via `go install` requires Go 1.26+ (see [docs/reference/requirements.md](docs/reference/requirements.md) for the full host-prerequisites checklist).
+
 ## Status
 
 See [CHANGELOG.md](CHANGELOG.md) for milestone history.
@@ -70,7 +72,7 @@ See [CHANGELOG.md](CHANGELOG.md) for milestone history.
 | `sandbox_upload`   | Copy a host file into an existing sandbox.                                                                                                                                                                                                  | [ref](docs/reference/tools/sandbox_upload.md) |
 | `sandbox_download` | Copy a file out of an existing sandbox; written under `<output_dir>/downloads/<basename>`. Returns the host path.                                                                                                                           | [ref](docs/reference/tools/sandbox_download.md) |
 | `sandbox_destroy`  | Kill an existing sandbox. Host output dir is preserved.                                                                                                                                                                                     | [ref](docs/reference/tools/sandbox_destroy.md) |
-| `sandbox_agent`    | Run an AI coding agent (currently the Claude Code CLI) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the vendor proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.              | [ref](docs/reference/tools/sandbox_agent.md) |
+| `sandbox_agent`    | Run an AI coding agent (`claude-code` by default, or `codex` — experimental) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the vendor proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.              | [ref](docs/reference/tools/sandbox_agent.md) |
 | `sandbox_research` | Run a long-running research agent with no input mounts and unrestricted outbound internet access. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.                                                     | [ref](docs/reference/tools/sandbox_research.md) |
 
 For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Quickstart](docs/tutorial/quickstart.md) and the [`sandbox_create`](docs/reference/tools/sandbox_create.md) / [`sandbox_exec`](docs/reference/tools/sandbox_exec.md) reference pages.
@@ -90,6 +92,8 @@ For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Qui
 | `DEMESNE_MCP_ALLOWLIST`  | no | `~/.config/demesne/mcp-allowlist.json` | Path to the per-server tool allowlist override file (auto-seeded with built-in read-only defaults on first run). |
 | `DEMESNE_MCP_SOCKET`     | no | `/tmp/demesne-mcp/<pid>/aggregator.sock` | Host path of the MCP aggregator's unix socket. The runner bind-mounts it into each sandbox sidecar; a socket (not a host TCP port) is what lets the sandbox reach the aggregator under rootless podman. |
 
+Full reference: [docs/reference/configuration.md](docs/reference/configuration.md).
+
 ## Run a local OpenSandbox
 
 The reference OpenSandbox server runs locally against Docker:
@@ -103,7 +107,7 @@ uvx opensandbox-server --config ~/.sandbox.toml
 Feed the lifecycle host:port and API key to Demesne via `OPEN_SANDBOX_DOMAIN`
 and `OPEN_SANDBOX_API_KEY`.
 
-See [Step 2 of the Quickstart](docs/tutorial/quickstart.md#step-2-run-a-local-opensandbox) for the required `~/.sandbox.toml` edits.
+See [docs/reference/requirements.md §OpenSandbox configuration](docs/reference/requirements.md#opensandbox-configuration) for the required `~/.sandbox.toml` edits.
 
 ## Build and run
 

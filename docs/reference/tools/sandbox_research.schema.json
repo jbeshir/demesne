@@ -14,7 +14,7 @@
     },
     "model": {
       "type": "string",
-      "description": "Model for the agent. Provider-specific: claude-code uses 'opus', 'sonnet' (default), or 'haiku'; codex uses the gpt-5.x family."
+      "description": "Model for the agent. Provider-specific: claude-code uses 'opus', 'sonnet' (default), or 'haiku'; codex uses 'gpt-5.5' (default) or 'gpt-5.4-mini'."
     },
     "preamble": {
       "type": "string",

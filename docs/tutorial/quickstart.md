@@ -58,37 +58,7 @@ OpenSandbox is **long-running** — it must stay up for the entire demesne sessi
    tmux new-session -d -s opensandbox 'uvx opensandbox-server --config ~/.sandbox.toml'
    ```
 
-### Required `~/.sandbox.toml` edits
-
-The packaged docker example defaults are too permissive for use as a security
-boundary. Change two settings before starting the server:
-
-- **`[egress] mode = "dns+nft"`** (default is `"dns"`). The default only
-  filters egress at DNS lookup; raw-IP outbound traffic still succeeds, so
-  `egress: "none"` in `sandbox_script` does not actually deny network. The
-  `dns+nft` mode adds nftables-based IP filtering and makes `none` mean
-  none.
-- **`[server] api_key = "<some-secret>"`** (default is empty). With an empty
-  key, the server requires either an interactive `YES` at startup or
-  `OPENSANDBOX_INSECURE_SERVER=YES` in the environment.
-- **`[storage] allowed_host_paths = ["/tmp", "/home/<you>/code"]`** (or
-  whichever directories you want bind-mountable). The example sets `[]`
-  with a comment saying "all paths allowed", but empirically empty means
-  *nothing* is allowed — every bind mount fails with
-  `VOLUME::HOST_PATH_NOT_ALLOWED`. Both OpenSandbox's allowlist and
-  demesne's `DEMESNE_ALLOWED_PATHS` must include each host path you
-  intend to mount.
-
-### Rootless podman: lift the pipe-page cap
-
-If OpenSandbox runs on rootless podman (including podman serving the Docker-compatible API), set the per-user pipe-page soft cap to unlimited:
-
-```bash
-sudo sysctl -w fs.pipe-user-pages-soft=0                                     # now
-echo 'fs.pipe-user-pages-soft = 0' | sudo tee /etc/sysctl.d/99-demesne.conf   # persist
-```
-
-Each sandbox's `pasta` network helper holds several 1 MiB pipes, so a fan-out of ~10+ concurrent sandboxes (routine for multi-agent pipelines) exceeds the default cap. Above it the kernel shrinks every new pipe to 8 KiB — too small for buildah's image-distribution copier, which then fails with `DOCKER::SANDBOX_EXECD_DISTRIBUTION_FAILED: passing bulk input to subprocess`. `0` disables the soft cap; the hard cap is unlimited by default.
+> **Before starting OpenSandbox**, complete the host-prerequisites checklist in [docs/reference/requirements.md](../reference/requirements.md) — `.sandbox.toml` security settings and the rootless-podman pipe-cap sysctl.
 
 #### Expected output
 
@@ -178,7 +148,7 @@ tools/call sandbox_script command="echo hello && uname -a"
 
 ```
 exit_code: 0
-output_dir: /tmp/demesne/out/<job-id>/out
+output_dir: /tmp/demesne/out/<job-id>
 job_id: <uuid>
 ---
 hello
@@ -186,7 +156,7 @@ Linux <container-hostname> 6.x.x ... x86_64 GNU/Linux
 ---stderr---
 ```
 
-The command ran inside a disposable `continuumio/anaconda3` container (the default image). The `/tmp/demesne/out/<job-id>/out` directory on your host contains any files the command wrote to `/out` inside the sandbox.
+The command ran inside a disposable `continuumio/anaconda3` container (the default image). The `/tmp/demesne/out/<job-id>` directory on your host contains any files the command wrote to `/out` inside the sandbox.
 
 ---
 
