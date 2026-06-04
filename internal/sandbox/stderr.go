@@ -38,6 +38,36 @@ func tailStderr(b []byte) string {
 	return stderrTruncationMarker + string(b[off:])
 }
 
+// stdoutResultLimit is the maximum number of bytes of an agent's final
+// answer surfaced in the MCP result's `stdout` field. /out/transcript.jsonl
+// is always the complete record; this cap exists because the result field
+// is fed into the calling model's context window. 32 KiB is roomier than
+// stderr's 16 KiB because stdout is the primary return channel.
+const stdoutResultLimit = 32 * 1024
+
+// stdoutTruncationMarker is prefixed to the surfaced stdout when the
+// underlying stream exceeded stdoutResultLimit. Bracket-delimited so it
+// reads cleanly when concatenated; names the full-record path.
+var stdoutTruncationMarker = fmt.Sprintf(
+	"[stdout truncated to last %d bytes; full transcript in output_dir/%s]\n",
+	stdoutResultLimit, agentTranscriptBasename)
+
+// tailStdout returns the last stdoutResultLimit bytes of s (treated as
+// raw bytes), prefixed by stdoutTruncationMarker when truncation
+// occurred. Short inputs pass through unchanged. To avoid surfacing a
+// partial UTF-8 codepoint at the cut, the start offset is advanced past
+// any UTF-8 continuation bytes (those with the top two bits == 10).
+func tailStdout(s string) string {
+	if len(s) <= stdoutResultLimit {
+		return s
+	}
+	off := len(s) - stdoutResultLimit
+	for off < len(s) && s[off]&0xC0 == 0x80 {
+		off++
+	}
+	return stdoutTruncationMarker + s[off:]
+}
+
 // combineMessages flattens a slice of OutputMessage into a single string,
 // joining the messages' Text fields with a single newline between each
 // pair. Matches opensandbox.Execution.Text()'s format — used so the exec

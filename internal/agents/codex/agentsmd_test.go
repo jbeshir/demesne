@@ -12,20 +12,22 @@ const (
 	promptDefault = "do the thing"
 	wantTask      = "## Task"
 	wantEnv       = "## Environment"
+	wantDefOfDone = "## Definition of done"
 	inDataMount   = "/in/data"
 )
 
 func TestGenerateContext(t *testing.T) {
 	tests := []struct {
-		name         string
-		preamble     string
-		prompt       string
-		egress       egress.Mode
-		inputs       []agents.InputInfo
-		mcpServers   []agents.MCPServerInfo
-		previousJobs []string
-		want         []string
-		notWant      []string
+		name           string
+		preamble       string
+		prompt         string
+		egress         egress.Mode
+		inputs         []agents.InputInfo
+		mcpServers     []agents.MCPServerInfo
+		previousJobs   []string
+		outputContract agents.OutputContract
+		want           []string
+		notWant        []string
 	}{
 		{
 			name:   "no preamble no inputs",
@@ -34,6 +36,7 @@ func TestGenerateContext(t *testing.T) {
 			want: []string{
 				wantEnv, "No caller-supplied inputs", wantTask, promptDefault,
 				"restricted to the OpenAI API",
+				"Flush partial findings to `/out`",
 			},
 			// The egress sentence must name OpenAI, not Anthropic (this is
 			// the Codex provider, mirrored from claude-code).
@@ -100,7 +103,6 @@ func TestGenerateContext(t *testing.T) {
 			egress: egress.Open,
 			want: []string{
 				"Outbound network access is unrestricted",
-				"long-running research task",
 				"Flush partial findings to `/out`",
 			},
 			notWant: []string{
@@ -129,9 +131,21 @@ func TestGenerateContext(t *testing.T) {
 				"## Orchestrating child agents",
 				"Delivering results is your job",
 				"copy it into your own `/out` with plain `cp`",
-				"Validate with real builds/tests",
+				"Verify with an external signal",
+				"transcript.jsonl",
 				"including `.git`",
 				"Plan and enforce the handoff",
+				"Do not spawn a child for what your own tools can complete",
+				"Match effort to task",
+			},
+		},
+		{
+			name:   "sandbox environment restrictions",
+			prompt: promptDefault,
+			egress: egress.None,
+			want: []string{
+				"Do not start persistent daemons",
+				"`stdout` field of the parent's tool result",
 			},
 		},
 		{
@@ -142,6 +156,7 @@ func TestGenerateContext(t *testing.T) {
 			want: []string{
 				"`/in/previous-jobs/<name>`",
 				"read earlier siblings' results",
+				"ls /in/previous-jobs/",
 			},
 		},
 		{
@@ -166,17 +181,48 @@ func TestGenerateContext(t *testing.T) {
 			},
 			notWant: []string{"workflowy__search_nodes"},
 		},
+		{
+			name:    "empty contract emits no definition of done",
+			prompt:  promptDefault,
+			egress:  egress.None,
+			notWant: []string{wantDefOfDone},
+		},
+		{
+			name:           "contract with path only",
+			prompt:         promptDefault,
+			egress:         egress.None,
+			outputContract: agents.OutputContract{Path: "/out/foo.md"},
+			want:           []string{wantDefOfDone, "/out/foo.md"},
+		},
+		{
+			name:   "contract with all three fields",
+			prompt: promptDefault,
+			egress: egress.None,
+			outputContract: agents.OutputContract{
+				Path:            "/out/report.md",
+				Format:          "Markdown report",
+				SuccessCriteria: []string{"covers all sections", "no broken links"},
+			},
+			want: []string{
+				wantDefOfDone,
+				"/out/report.md",
+				"Markdown report",
+				"covers all sections",
+				"no broken links",
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := generateContext(agents.ContextParams{
-				Preamble:     tt.preamble,
-				Prompt:       tt.prompt,
-				Egress:       tt.egress,
-				Inputs:       tt.inputs,
-				MCPServers:   tt.mcpServers,
-				PreviousJobs: tt.previousJobs,
+				Preamble:       tt.preamble,
+				Prompt:         tt.prompt,
+				Egress:         tt.egress,
+				Inputs:         tt.inputs,
+				MCPServers:     tt.mcpServers,
+				PreviousJobs:   tt.previousJobs,
+				OutputContract: tt.outputContract,
 			})
 			for _, s := range tt.want {
 				assert.Contains(t, got, s)

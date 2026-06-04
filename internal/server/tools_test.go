@@ -441,6 +441,38 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 	}, resultStructured[agentRunOutput](t, got))
 }
 
+func TestHandleSandboxAgent_OutputContractWired(t *testing.T) {
+	r := &fakeRunner{agentRes: sandbox.AgentResult{JobID: "x", OutputPath: "/tmp/x"}}
+	s := NewServer(r)
+	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
+		paramPrompt:          "do something",
+		paramOutputPath:      "/out/result.md",
+		paramOutputFormat:    "Markdown report",
+		paramSuccessCriteria: []any{"section A present", "no errors"},
+	}))
+	require.NoError(t, err)
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
+	assert.Equal(t, "/out/result.md", r.gotAgentReq.OutputPath)
+	assert.Equal(t, "Markdown report", r.gotAgentReq.OutputFormat)
+	assert.Equal(t, []string{"section A present", "no errors"}, r.gotAgentReq.SuccessCriteria)
+}
+
+func TestHandleSandboxResearch_OutputContractWired(t *testing.T) {
+	r := &fakeRunner{researchRes: sandbox.AgentResult{JobID: "y", OutputPath: "/tmp/y"}}
+	s := NewServer(r)
+	got, err := s.handleSandboxResearch(context.Background(), newRequest(map[string]any{
+		paramPrompt:          "investigate this",
+		paramOutputPath:      "/out/report.md",
+		paramOutputFormat:    "JSON: {result: string}",
+		paramSuccessCriteria: []any{"valid JSON"},
+	}))
+	require.NoError(t, err)
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
+	assert.Equal(t, "/out/report.md", r.gotResearchReq.OutputPath)
+	assert.Equal(t, "JSON: {result: string}", r.gotResearchReq.OutputFormat)
+	assert.Equal(t, []string{"valid JSON"}, r.gotResearchReq.SuccessCriteria)
+}
+
 func TestHandleSandboxScript_RejectsOpenEgress(t *testing.T) {
 	r := &fakeRunner{}
 	s := NewServer(r)

@@ -13,6 +13,9 @@ Run an AI agent inside a fresh sandbox against the caller's prompt.
 | `egress` | string | no | `none` | Additional outbound network policy on top of the agent's backend proxy (which is always reachable). `none` (default) means only the proxy; `package-managers` also allows npm/PyPI/conda registries. `open` is rejected — use `sandbox_research` for unrestricted egress (which has no input mounts). |
 | `files` | array of strings | no | — | Host file paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. |
 | `directories` | array of strings | no | — | Host directory paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. |
+| `output_path` | string | no | — | Optional. Where the agent should write its final artefact. Rendered as a Definition of done block. |
+| `output_format` | string | no | — | Optional. Expected shape/format of the output. |
+| `success_criteria` | array of strings | no | — | Optional. Checklist of conditions the output must satisfy. |
 
 ## Annotations
 

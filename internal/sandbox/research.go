@@ -14,12 +14,15 @@ import "context"
 // instead.
 func (r *Runner) Research(ctx context.Context, req ResearchRequest) (AgentResult, error) {
 	spec := internalAgentSpec{
-		agentName: req.Agent,
-		model:     req.Model,
-		prompt:    req.Prompt,
-		preamble:  req.Preamble,
-		egress:    EgressOpen,
-		tool:      ToolSandboxResearch,
+		agentName:       req.Agent,
+		model:           req.Model,
+		prompt:          req.Prompt,
+		preamble:        req.Preamble,
+		egress:          EgressOpen,
+		tool:            ToolSandboxResearch,
+		outputPath:      req.OutputPath,
+		outputFormat:    req.OutputFormat,
+		successCriteria: req.SuccessCriteria,
 	}
 	res, err := r.runAgent(ctx, spec)
 	if err != nil {

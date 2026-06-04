@@ -39,6 +39,19 @@
       "items": {
         "type": "string"
       }
+    },
+    "output_path": {
+      "type": "string",
+      "description": "Optional. Where the agent should write its final artefact (e.g. /out/summary.md)."
+    },
+    "output_format": {
+      "type": "string",
+      "description": "Optional. Expected shape/format of the output."
+    },
+    "success_criteria": {
+      "type": "array",
+      "description": "Optional. Checklist of conditions the output must satisfy.",
+      "items": { "type": "string" }
     }
   },
   "required": ["prompt"],

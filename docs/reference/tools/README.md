@@ -21,3 +21,4 @@ Every tool returns its result as both a human-readable text payload and a `struc
 
 - [Host requirements](../requirements.md) — container runtime, Go build, `.sandbox.toml`, rootless podman pipe-page cap.
 - [Configuration](../configuration.md) — environment variables and container image allowlist.
+- [transcript.jsonl](../transcript-jsonl.md) — NDJSON written to `<output_dir>/transcript.jsonl` by every agent run; event format, `ResultText` extraction, and relationship to the MCP `stdout` field (32 KiB cap).

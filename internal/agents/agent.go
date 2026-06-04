@@ -41,15 +41,30 @@ const (
 // this from operational (infra) errors without inspecting the text.
 var ErrUnknownAgent = errors.New("is not registered")
 
+// OutputContract captures an optional "definition of done" supplied by the caller to scope the
+// agent's terminating handoff: where to write the artefact, what shape it should take, and which
+// checks must pass. Empty fields are omitted; an entirely-zero contract emits no extra context.
+type OutputContract struct {
+	Path            string
+	Format          string
+	SuccessCriteria []string
+}
+
+// IsEmpty reports whether every field is empty (so WriteDefinitionOfDone can skip the section).
+func (c OutputContract) IsEmpty() bool {
+	return c.Path == "" && c.Format == "" && len(c.SuccessCriteria) == 0
+}
+
 // ContextParams is the input to GenerateContext: all per-run context the
 // provider needs to emit the agent's context file (e.g. CLAUDE.md).
 type ContextParams struct {
-	Preamble     string
-	Prompt       string
-	Egress       egress.Mode
-	Inputs       []InputInfo
-	MCPServers   []MCPServerInfo
-	PreviousJobs []string
+	Preamble       string
+	Prompt         string
+	Egress         egress.Mode
+	Inputs         []InputInfo
+	MCPServers     []MCPServerInfo
+	PreviousJobs   []string
+	OutputContract OutputContract
 }
 
 // InputInfo summarises one /in/<basename> mount for an agent's context

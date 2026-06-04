@@ -200,15 +200,24 @@ func (s *Server) handleSandboxAgent(
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	outputPath := request.GetString(paramOutputPath, "")
+	outputFormat := request.GetString(paramOutputFormat, "")
+	successCriteria, err := optionalStringSlice(request, paramSuccessCriteria)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
 	res, err := s.runner.Agent(ctx, sandbox.AgentRequest{
-		Agent:       agentName,
-		Model:       model,
-		Prompt:      prompt,
-		Preamble:    preamble,
-		Files:       files,
-		Directories: directories,
-		Egress:      sandbox.EgressMode(egress),
+		Agent:           agentName,
+		Model:           model,
+		Prompt:          prompt,
+		Preamble:        preamble,
+		Files:           files,
+		Directories:     directories,
+		Egress:          sandbox.EgressMode(egress),
+		OutputPath:      outputPath,
+		OutputFormat:    outputFormat,
+		SuccessCriteria: successCriteria,
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -228,12 +237,21 @@ func (s *Server) handleSandboxResearch(
 	agentName := request.GetString(paramAgent, "")
 	model := request.GetString(paramModel, "")
 	preamble := request.GetString(paramPreamble, "")
+	outputPath := request.GetString(paramOutputPath, "")
+	outputFormat := request.GetString(paramOutputFormat, "")
+	successCriteria, err := optionalStringSlice(request, paramSuccessCriteria)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
 	res, err := s.runner.Research(ctx, sandbox.ResearchRequest{
-		Agent:    agentName,
-		Model:    model,
-		Prompt:   prompt,
-		Preamble: preamble,
+		Agent:           agentName,
+		Model:           model,
+		Prompt:          prompt,
+		Preamble:        preamble,
+		OutputPath:      outputPath,
+		OutputFormat:    outputFormat,
+		SuccessCriteria: successCriteria,
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil

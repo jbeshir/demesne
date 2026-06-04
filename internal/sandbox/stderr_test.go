@@ -71,6 +71,66 @@ func TestTailStderrUTF8(t *testing.T) {
 		"offset must advance at most 3 bytes past boundary")
 }
 
+func TestTailStdoutSmall(t *testing.T) {
+	assert.Empty(t, tailStdout(""))
+	small := "hello stdout"
+	assert.Equal(t, "hello stdout", tailStdout(small))
+	assert.NotContains(t, tailStdout(small), stdoutTruncationMarker)
+}
+
+func TestTailStdoutExactlyLimit(t *testing.T) {
+	// Exactly 32768 bytes — no truncation, no marker.
+	s := strings.Repeat("a", stdoutResultLimit)
+	result := tailStdout(s)
+	assert.Equal(t, s, result)
+	assert.NotContains(t, result, stdoutTruncationMarker)
+}
+
+func TestTailStdoutLarge(t *testing.T) {
+	s := strings.Repeat("x", 40000)
+	result := tailStdout(s)
+	require.True(t, strings.HasPrefix(result, stdoutTruncationMarker),
+		"result must start with truncation marker")
+	tail := result[len(stdoutTruncationMarker):]
+	assert.Len(t, tail, stdoutResultLimit,
+		"tail after marker must be exactly stdoutResultLimit bytes")
+	assert.Equal(t, s[len(s)-stdoutResultLimit:], tail,
+		"tail content must match last stdoutResultLimit bytes of input")
+}
+
+func TestTailStdoutUTF8(t *testing.T) {
+	// Build a string where the raw byte boundary (len-stdoutResultLimit) lands
+	// on a UTF-8 continuation byte inside '中' (U+4E2D = E4 B8 AD, 3 bytes).
+	//
+	// Layout: prefixLen('a') + '中'(3 bytes) + tailLen('b')
+	// boundary = len(s) - stdoutResultLimit
+	//          = prefixLen + 3 + tailLen - stdoutResultLimit
+	// We want boundary == prefixLen+1 (pointing at 0xB8, the continuation byte),
+	// so tailLen = stdoutResultLimit - 2 = 32766.
+	const prefixLen = 10
+	const tailLen = stdoutResultLimit - 2
+	cjk := "\xe4\xb8\xad" // '中': E4 B8 AD
+	var buf []byte
+	buf = append(buf, bytes.Repeat([]byte{'a'}, prefixLen)...)
+	buf = append(buf, []byte(cjk)...)
+	buf = append(buf, bytes.Repeat([]byte{'b'}, tailLen)...)
+	s := string(buf)
+
+	boundary := len(s) - stdoutResultLimit
+	require.Equal(t, prefixLen+1, boundary, "test setup: boundary must be at index of continuation byte")
+	require.Equal(t, byte(0xB8), s[boundary], "boundary must land on UTF-8 continuation byte 0xB8")
+
+	result := tailStdout(s)
+	require.True(t, strings.HasPrefix(result, stdoutTruncationMarker),
+		"large input must be truncated")
+	tail := result[len(stdoutTruncationMarker):]
+
+	assert.True(t, utf8.ValidString(tail), "surfaced tail must be valid UTF-8")
+	assert.LessOrEqual(t, len(tail), stdoutResultLimit, "tail must not exceed limit")
+	assert.GreaterOrEqual(t, len(tail), stdoutResultLimit-3,
+		"offset must advance at most 3 bytes past boundary")
+}
+
 func TestCombineMessagesEmpty(t *testing.T) {
 	assert.Empty(t, combineMessages(nil))
 	assert.Empty(t, combineMessages([]opensandbox.OutputMessage{}))

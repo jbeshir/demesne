@@ -10,6 +10,9 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 | `agent` | string | no | `claude-code` | Agent provider. `claude-code` (default) or `codex` (OpenAI Codex CLI, experimental — see README). |
 | `model` | string | no | `sonnet` | Model for the agent. Provider-specific: claude-code uses `opus`, `sonnet` (default), or `haiku`; codex uses `gpt-5.5` (default) or `gpt-5.4-mini`. |
 | `preamble` | string | no | — | Optional prose prepended verbatim to the generated agent context file (e.g. CLAUDE.md for claude-code) before the auto-generated environment section. |
+| `output_path` | string | no | — | Optional. Where the agent should write its final artefact. Rendered as a Definition of done block. |
+| `output_format` | string | no | — | Optional. Expected shape/format of the output. |
+| `success_criteria` | array of strings | no | — | Optional. Checklist of conditions the output must satisfy. |
 
 ## Annotations
 

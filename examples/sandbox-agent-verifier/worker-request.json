@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "sandbox_agent",
+    "arguments": {
+      "prompt": "Write a haiku about distributed systems to /out/haiku.txt. A haiku is three lines: 5 syllables, 7 syllables, 5 syllables.",
+      "model": "haiku",
+      "output_path": "/out/haiku.txt",
+      "success_criteria": [
+        "haiku.txt exists",
+        "exactly three lines",
+        "5-7-5 syllable structure"
+      ]
+    }
+  }
+}

@@ -25,15 +25,18 @@ const keepaliveInterval = 15 * time.Second
 const keepaliveProgressID = "demesne-keepalive"
 
 const (
-	childParamName      = "name"
-	childParamCommand   = "command"
-	childParamImage     = "image"
-	childParamEgress    = "egress"
-	childParamPrompt    = "prompt"
-	childParamAgent     = "agent"
-	childParamModel     = "model"
-	childParamPreamble  = "preamble"
-	childParamSandboxID = "sandbox_id"
+	childParamName            = "name"
+	childParamCommand         = "command"
+	childParamImage           = "image"
+	childParamEgress          = "egress"
+	childParamPrompt          = "prompt"
+	childParamAgent           = "agent"
+	childParamModel           = "model"
+	childParamPreamble        = "preamble"
+	childParamSandboxID       = "sandbox_id"
+	childParamOutputPath      = "output_path"
+	childParamOutputFormat    = "output_format"
+	childParamSuccessCriteria = "success_criteria"
 )
 
 // keepAlive holds the nested MCP connection open while a child runs. A
@@ -113,20 +116,44 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 	add(mcp.NewTool(ToolSandboxAgent,
 		mcp.WithDescription(childAgentDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
-		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description("Task for the child agent.")),
+		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description(childPromptDescription)),
 		mcp.WithString(childParamAgent, mcp.Description("Agent provider. Defaults to 'claude-code'.")),
-		mcp.WithString(childParamModel, mcp.Description("Model: 'opus', 'sonnet' (default), or 'haiku'.")),
-		mcp.WithString(childParamPreamble, mcp.Description("Prose prepended to the child's context file.")),
-		mcp.WithString(childParamEgress, mcp.Description(childEgressDescription)),
+		mcp.WithString(childParamModel, mcp.Description(childModelDescription)),
+		mcp.WithString(childParamPreamble, mcp.Description(childPreambleDescription)),
+		mcp.WithString(childParamEgress, mcp.Description(childEgressDescriptionAgent)),
+		mcp.WithString(childParamOutputPath,
+			mcp.Description("Optional. Where the agent should write its final artefact. "+
+				"Rendered as a Definition of done block."),
+		),
+		mcp.WithString(childParamOutputFormat,
+			mcp.Description("Optional. Expected shape/format of the output. "+
+				"Rendered as a Definition of done block."),
+		),
+		mcp.WithArray(childParamSuccessCriteria,
+			mcp.Description("Optional. Checklist of conditions the output must satisfy."),
+			mcp.Items(map[string]any{"type": "string"}),
+		),
 	), r.handleChildAgent)
 
 	add(mcp.NewTool(ToolSandboxResearch,
 		mcp.WithDescription(childResearchDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
-		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description("Research task for the child agent.")),
+		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description(childResearchPromptDescription)),
 		mcp.WithString(childParamAgent, mcp.Description("Agent provider. Defaults to 'claude-code'.")),
-		mcp.WithString(childParamModel, mcp.Description("Model: 'opus', 'sonnet' (default), or 'haiku'.")),
-		mcp.WithString(childParamPreamble, mcp.Description("Prose prepended to the child's context file.")),
+		mcp.WithString(childParamModel, mcp.Description(childModelDescription)),
+		mcp.WithString(childParamPreamble, mcp.Description(childPreambleDescription)),
+		mcp.WithString(childParamOutputPath,
+			mcp.Description("Optional. Where the agent should write its final artefact. "+
+				"Rendered as a Definition of done block."),
+		),
+		mcp.WithString(childParamOutputFormat,
+			mcp.Description("Optional. Expected shape/format of the output. "+
+				"Rendered as a Definition of done block."),
+		),
+		mcp.WithArray(childParamSuccessCriteria,
+			mcp.Description("Optional. Checklist of conditions the output must satisfy."),
+			mcp.Items(map[string]any{"type": "string"}),
+		),
 	), r.handleChildResearch)
 
 	add(mcp.NewTool(ToolSandboxCreate,
@@ -189,8 +216,8 @@ func (r *Runner) handleChildScript(ctx context.Context, req mcp.CallToolRequest)
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return mcp.NewToolResultText(fmt.Sprintf(
-		"name: %s\nexit_code: %d\noutput_dir: %s\n---\n%s",
-		name, res.ExitCode, res.OutputPath, res.Stdout,
+		"name: %s\nexit_code: %d\noutput_dir: %s\n---\n%s\n---stderr---\n%s",
+		name, res.ExitCode, res.OutputPath, res.Stdout, res.Stderr,
 	)), nil
 }
 
@@ -208,14 +235,21 @@ func (r *Runner) handleChildAgent(ctx context.Context, req mcp.CallToolRequest) 
 	if errResult := rejectOpenEgress(egress); errResult != nil {
 		return errResult, nil
 	}
+	sc, err := childOptionalStringSlice(req, childParamSuccessCriteria)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	spec := internalAgentSpec{
-		agentName: req.GetString(childParamAgent, ""),
-		model:     req.GetString(childParamModel, ""),
-		prompt:    prompt,
-		preamble:  req.GetString(childParamPreamble, ""),
-		egress:    EgressMode(egress),
-		tool:      ToolSandboxAgent,
-		child:     &childSpawn{name: name, parent: parent},
+		agentName:       req.GetString(childParamAgent, ""),
+		model:           req.GetString(childParamModel, ""),
+		prompt:          prompt,
+		preamble:        req.GetString(childParamPreamble, ""),
+		egress:          EgressMode(egress),
+		tool:            ToolSandboxAgent,
+		child:           &childSpawn{name: name, parent: parent},
+		outputPath:      req.GetString(childParamOutputPath, ""),
+		outputFormat:    req.GetString(childParamOutputFormat, ""),
+		successCriteria: sc,
 	}
 	res, err := r.runAgent(ctx, spec)
 	if err != nil {
@@ -234,13 +268,20 @@ func (r *Runner) handleChildResearch(ctx context.Context, req mcp.CallToolReques
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	sc, err := childOptionalStringSlice(req, childParamSuccessCriteria)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	spec := internalAgentSpec{
-		agentName: req.GetString(childParamAgent, ""),
-		model:     req.GetString(childParamModel, ""),
-		prompt:    prompt,
-		preamble:  req.GetString(childParamPreamble, ""),
-		egress:    EgressOpen,
-		tool:      ToolSandboxResearch,
+		agentName:       req.GetString(childParamAgent, ""),
+		model:           req.GetString(childParamModel, ""),
+		prompt:          prompt,
+		preamble:        req.GetString(childParamPreamble, ""),
+		egress:          EgressOpen,
+		tool:            ToolSandboxResearch,
+		outputPath:      req.GetString(childParamOutputPath, ""),
+		outputFormat:    req.GetString(childParamOutputFormat, ""),
+		successCriteria: sc,
 		// Research is isolated like the host tool: no inherited /in or
 		// shared /workspace, just a fresh sandbox with open egress —
 		// inputs + open egress is the exfil shape we keep off the surface.
@@ -304,6 +345,32 @@ func (r *Runner) handleChildDestroy(ctx context.Context, req mcp.CallToolRequest
 	return mcp.NewToolResultText("destroyed: " + sandboxID), nil
 }
 
+// childOptionalStringSlice reads an optional array-of-strings param from a child tool request.
+// Missing or nil → nil slice. Present but wrong type → error.
+func childOptionalStringSlice(req mcp.CallToolRequest, key string) ([]string, error) {
+	args := req.GetArguments()
+	raw, present := args[key]
+	if !present || raw == nil {
+		return nil, nil
+	}
+	switch v := raw.(type) {
+	case []string:
+		return v, nil
+	case []any:
+		out := make([]string, 0, len(v))
+		for i, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s[%d] is not a string", key, i)
+			}
+			out = append(out, s)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("%s must be an array of strings", key)
+	}
+}
+
 // childSpawnParams resolves the parent context and the required name
 // shared by every spawning tool. On error it returns a tool-result
 // error (the caller returns it directly) instead of a Go error so the
@@ -340,8 +407,8 @@ func rejectOpenEgress(egress string) *mcp.CallToolResult {
 
 func formatChildAgentResult(name string, res AgentResult) string {
 	return fmt.Sprintf(
-		"name: %s\nexit_code: %d\noutput_dir: %s\ncost_usd: %.4f\ntotal_usage_usd: %.4f\n---\n%s",
-		name, res.ExitCode, res.OutputPath, res.CostUSD, res.TotalUsageUSD, res.Stdout,
+		"name: %s\nexit_code: %d\noutput_dir: %s\ncost_usd: %.4f\ntotal_usage_usd: %.4f\n---\n%s\n---stderr---\n%s",
+		name, res.ExitCode, res.OutputPath, res.CostUSD, res.TotalUsageUSD, res.Stdout, res.Stderr,
 	)
 }
 
@@ -354,11 +421,19 @@ const childImageDescription = "Container image: 'node', 'python', 'go', or 'anac
 
 const childEgressDescription = "Outbound policy: 'package-managers' (default) or 'none'."
 
+const childEgressDescriptionAgent = "Outbound policy: 'none' (default) or 'package-managers'."
+
 const childScriptDescription = `Run one shell command in a fresh child sandbox and return its stdout.
 
 The child inherits this sandbox's read-only /in inputs and shared
 /workspace; its /out is /out/child/<name>, which you can read back
-afterwards. The child is destroyed when the command returns.`
+afterwards. The child is destroyed when the command returns.
+
+Result fields: name, exit_code, output_dir, stdout, stderr (tail-bounded;
+full log at output_dir/stderr.log).
+
+Not for: long-running agentic work — use sandbox_agent. For repeated
+commands in the same sandbox, use sandbox_create + sandbox_exec.`
 
 const childAgentDescription = `Spawn a child AI agent in a fresh sandbox against a prompt.
 
@@ -366,13 +441,44 @@ The child inherits this sandbox's read-only /in inputs and shared
 /workspace (collaborate via absolute /workspace paths). It cannot be
 given its own input mounts. Its output lands at /out/child/<name>;
 deeper descendants nest further under that path. 'open' egress is not
-permitted here — use sandbox_research.`
+permitted here — use sandbox_research.
+
+Result fields: name, exit_code, output_dir, cost_usd, total_usage_usd,
+stdout (the child's final answer, bounded), stderr (the child's tail-
+bounded stderr; full log at output_dir/stderr.log).
+
+Not for: deterministic verification or shell scripting — use sandbox_script
+(or sandbox_create+sandbox_exec for repeated runs).
+
+Model: 'haiku' for lookup, 'sonnet' (default) for general agentic work,
+'opus' for complex synthesis. Hand off via /workspace files referenced
+from the child's prompt; copy artefacts you want returned into your own
+/out.`
 
 const childResearchDescription = `Spawn a long-running child research agent with open internet egress.
 
 Like sandbox_agent but with unrestricted outbound access and no extra
 egress knob. Runs in a FRESH private workspace with NO /in mounts
-(unlike sandbox_agent); output at /out/child/<name>.`
+(unlike sandbox_agent); output at /out/child/<name>.
+
+Result fields: name, exit_code, output_dir, cost_usd, total_usage_usd,
+stdout, stderr (tail-bounded).
+
+Model: see sandbox_agent. Use this for tasks that need the open web.`
+
+const childPromptDescription = "Task for the child agent. " +
+	"Name the expected output path (e.g. /workspace/findings.md or /out/<name>.json) " +
+	"and a short 'definition of done' checklist."
+
+const childResearchPromptDescription = "Research task for the child agent. " +
+	"Name the expected output path and a short 'definition of done' checklist."
+
+const childPreambleDescription = "Prose prepended to the child's context file. " +
+	"The right place for role framing and 'must not' constraints (e.g. " +
+	"'you are a code reviewer; do not modify files')."
+
+const childModelDescription = "Model: 'opus' (complex synthesis), " +
+	"'sonnet' (default; general agentic work), 'haiku' (lookup / cheap)."
 
 const childCreateDescription = `Create a persistent child sandbox and return its handle.
 

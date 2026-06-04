@@ -66,15 +66,18 @@ type agentPrep struct {
 // before handing off. child is nil for host-invoked runs and set for
 // in-sandbox-spawned children (which inherit inputs + workspace).
 type internalAgentSpec struct {
-	agentName   string
-	model       string
-	prompt      string
-	preamble    string
-	files       []string
-	directories []string
-	egress      EgressMode
-	tool        string
-	child       *childSpawn
+	agentName       string
+	model           string
+	prompt          string
+	preamble        string
+	files           []string
+	directories     []string
+	egress          EgressMode
+	tool            string
+	child           *childSpawn
+	outputPath      string
+	outputFormat    string
+	successCriteria []string
 }
 
 // Agent runs an agent (e.g. claude-code) inside a fresh sandbox against
@@ -94,14 +97,17 @@ type internalAgentSpec struct {
 // CLI finds it via the usual cwd lookup.
 func (r *Runner) Agent(ctx context.Context, req AgentRequest) (AgentResult, error) {
 	spec := internalAgentSpec{
-		agentName:   req.Agent,
-		model:       req.Model,
-		prompt:      req.Prompt,
-		preamble:    req.Preamble,
-		files:       req.Files,
-		directories: req.Directories,
-		egress:      egressOrDefault(req.Egress, EgressNone),
-		tool:        ToolSandboxAgent,
+		agentName:       req.Agent,
+		model:           req.Model,
+		prompt:          req.Prompt,
+		preamble:        req.Preamble,
+		files:           req.Files,
+		directories:     req.Directories,
+		egress:          egressOrDefault(req.Egress, EgressNone),
+		tool:            ToolSandboxAgent,
+		outputPath:      req.OutputPath,
+		outputFormat:    req.OutputFormat,
+		successCriteria: req.SuccessCriteria,
 	}
 	res, err := r.runAgent(ctx, spec)
 	if err != nil {
@@ -224,7 +230,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 
 	// The agent's stdout went to the transcript file (not the SDK
 	// stream), so recover the final answer from it for the MCP result.
-	stdout := prep.agent.ResultText(readAgentTranscript(layout.outHost))
+	stdout := tailStdout(prep.agent.ResultText(readAgentTranscript(layout.outHost)))
 
 	usage := readUsageSnapshot(layout.resultsHost)
 	// Copy the usage record into /out so it's surfaced alongside the
@@ -514,6 +520,11 @@ func (r *Runner) createSandbox(
 		Inputs:       prep.inputs,
 		MCPServers:   mcpServers,
 		PreviousJobs: previousJobNames(layout.previousJobs),
+		OutputContract: agents.OutputContract{
+			Path:            spec.outputPath,
+			Format:          spec.outputFormat,
+			SuccessCriteria: spec.successCriteria,
+		},
 	})
 	contextHost := filepath.Join(layout.configDir, ctxName)
 	if err := os.WriteFile(contextHost, []byte(body), 0o600); err != nil {

@@ -10,19 +10,22 @@ import (
 )
 
 const (
-	paramSandboxID    = "sandbox_id"
-	paramCommand      = "command"
-	paramImage        = "image"
-	paramEgress       = "egress"
-	paramFiles        = "files"
-	paramDirectories  = "directories"
-	paramPrompt       = "prompt"
-	paramAgent        = "agent"
-	paramModel        = "model"
-	paramPreamble     = "preamble"
-	paramSrc          = "src"
-	paramDst          = "dst"
-	sandboxHandleDesc = "Sandbox handle returned by sandbox_create."
+	paramSandboxID       = "sandbox_id"
+	paramCommand         = "command"
+	paramImage           = "image"
+	paramEgress          = "egress"
+	paramFiles           = "files"
+	paramDirectories     = "directories"
+	paramPrompt          = "prompt"
+	paramAgent           = "agent"
+	paramModel           = "model"
+	paramPreamble        = "preamble"
+	paramSrc             = "src"
+	paramDst             = "dst"
+	paramOutputPath      = "output_path"
+	paramOutputFormat    = "output_format"
+	paramSuccessCriteria = "success_criteria"
+	sandboxHandleDesc    = "Sandbox handle returned by sandbox_create."
 )
 
 // Runner is the dependency the server uses to drive sandbox lifecycle
@@ -198,7 +201,11 @@ func (s *Server) registerTools() {
 		mcp.WithOutputSchema[agentRunOutput](),
 		mcp.WithString(paramPrompt,
 			mcp.Required(),
-			mcp.Description("Task for the agent. Free-form text."),
+			mcp.Description(
+				"Task for the agent. Name the expected output path "+
+					"(e.g. /workspace/findings.md or /out/<name>.json) and a "+
+					"short 'definition of done' checklist.",
+			),
 		),
 		mcp.WithString(paramAgent,
 			mcp.Description(
@@ -209,14 +216,16 @@ func (s *Server) registerTools() {
 		mcp.WithString(paramModel,
 			mcp.Description(
 				"Model for the agent. Provider-specific: claude-code uses "+
-					"'opus', 'sonnet' (default), or 'haiku'; codex uses the gpt-5.x family.",
+					"'opus' (complex synthesis), 'sonnet' (default; general agentic work), "+
+					"or 'haiku' (lookup / cheap); codex uses the gpt-5.x family.",
 			),
 		),
 		mcp.WithString(paramPreamble,
 			mcp.Description(
 				"Optional prose prepended verbatim to the generated agent "+
 					"context file (e.g. CLAUDE.md for claude-code) before the "+
-					"auto-generated environment section.",
+					"auto-generated environment section. The right place for "+
+					"role framing and 'must not' constraints.",
 			),
 		),
 		mcp.WithString(paramEgress,
@@ -237,6 +246,19 @@ func (s *Server) registerTools() {
 			mcp.Description(directoriesParamDescription),
 			mcp.Items(stringArrayItems()),
 		),
+		mcp.WithString(paramOutputPath,
+			mcp.Description("Optional. Where the agent should write its final artefact (e.g. /out/summary.md). "+
+				"Rendered as a Definition of done block in the agent's context."),
+		),
+		mcp.WithString(paramOutputFormat,
+			mcp.Description("Optional. Expected shape/format of the output (e.g. 'Markdown report', "+
+				"'JSON: {result: string}'). Rendered as a Definition of done block in the agent's context."),
+		),
+		mcp.WithArray(paramSuccessCriteria,
+			mcp.Description("Optional. Checklist of conditions the output must satisfy. "+
+				"Rendered as a bulleted Definition of done block."),
+			mcp.Items(stringArrayItems()),
+		),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(false),
@@ -248,7 +270,10 @@ func (s *Server) registerTools() {
 		mcp.WithOutputSchema[agentRunOutput](),
 		mcp.WithString(paramPrompt,
 			mcp.Required(),
-			mcp.Description("Research task for the agent. Free-form text."),
+			mcp.Description(
+				"Research task for the agent. Name the expected output path "+
+					"and a short 'definition of done' checklist.",
+			),
 		),
 		mcp.WithString(paramAgent,
 			mcp.Description(
@@ -259,15 +284,30 @@ func (s *Server) registerTools() {
 		mcp.WithString(paramModel,
 			mcp.Description(
 				"Model for the agent. Provider-specific: claude-code uses "+
-					"'opus', 'sonnet' (default), or 'haiku'; codex uses the gpt-5.x family.",
+					"'opus' (complex synthesis), 'sonnet' (default; general agentic work), "+
+					"or 'haiku' (lookup / cheap); codex uses the gpt-5.x family.",
 			),
 		),
 		mcp.WithString(paramPreamble,
 			mcp.Description(
 				"Optional prose prepended verbatim to the generated agent "+
 					"context file (e.g. CLAUDE.md for claude-code) before the "+
-					"auto-generated environment section.",
+					"auto-generated environment section. The right place for "+
+					"role framing and 'must not' constraints.",
 			),
+		),
+		mcp.WithString(paramOutputPath,
+			mcp.Description("Optional. Where the agent should write its final artefact (e.g. /out/summary.md). "+
+				"Rendered as a Definition of done block in the agent's context."),
+		),
+		mcp.WithString(paramOutputFormat,
+			mcp.Description("Optional. Expected shape/format of the output (e.g. 'Markdown report', "+
+				"'JSON: {result: string}'). Rendered as a Definition of done block in the agent's context."),
+		),
+		mcp.WithArray(paramSuccessCriteria,
+			mcp.Description("Optional. Checklist of conditions the output must satisfy. "+
+				"Rendered as a bulleted Definition of done block."),
+			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),

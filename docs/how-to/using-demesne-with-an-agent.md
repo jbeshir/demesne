@@ -57,6 +57,42 @@ The host MCP servers (e.g. workflowy, alignment, anki) appear in your tool list 
 
 See [Spawn nested agents](spawn-nested-agents.md) for the output-path convention and the copy-to-`/out` rule outside the system-prompt context.
 
+## Composing a scoped task prompt
+
+When calling `sandbox_agent` or `sandbox_research`, split the instructions across five fields:
+
+| Field | Purpose |
+|-------|---------|
+| `preamble` | Role and must-not constraints — prepended verbatim before the auto-generated environment block. |
+| `prompt` | The actual task: what to do, what to read, where to write output. |
+| `output_path` | Where the agent must write its final artefact. |
+| `output_format` | Expected shape or format of the output. |
+| `success_criteria` | Checklist of conditions the output must satisfy. |
+
+`output_path`, `output_format`, and `success_criteria` are rendered as a `## Definition of done` block prepended to the task in the child's context file. The agent reads the acceptance bar before reading the task.
+
+**Worked example** — spawn a research summariser:
+
+```json
+{
+  "name": "sandbox_agent",
+  "arguments": {
+    "name": "summariser",
+    "preamble": "You are a technical writer. Write in plain English. Do not fabricate citations.",
+    "prompt": "Read /in/paper.pdf. Write a structured summary (background, method, results, limitations) to /out/summary.md.",
+    "output_path": "/out/summary.md",
+    "output_format": "Markdown with four H2 sections: Background, Method, Results, Limitations",
+    "success_criteria": [
+      "summary.md exists",
+      "contains all four sections",
+      "no fabricated citations"
+    ]
+  }
+}
+```
+
+See [Writing the task prompt](spawn-nested-agents.md#writing-the-task-prompt) for a fuller discussion of the three-layer structure, including how `preamble` composes with the auto-generated environment section.
+
 ## Why each claim
 
 - **sandbox_agent refuses `egress: "open"`** — `rejectOpenEgress` in `internal/sandbox/childserver.go:326-339` returns a tool-result error for any egress value of `"open"` on `sandbox_script`, `sandbox_agent`, and `sandbox_create` children. The comment names the exact threat: "inputs plus unrestricted outbound is the data-exfiltration shape demesne keeps off the child surface."

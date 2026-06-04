@@ -96,3 +96,87 @@ Each child agent run writes `results.json` and `usage.json` to its output direct
 ```
 
 The root run's `results.json` already sums the whole tree in `total_usage_usd`, so you rarely need to read children's `results.json` directly. See [`../reference/results-json.md`](../reference/results-json.md) and [`../reference/usage-json.md`](../reference/usage-json.md) for the field reference.
+
+## Spawning a verifier/judge child
+
+Use a second `sandbox_agent` to evaluate a worker's output against explicit criteria rather than self-critiquing in the same context window. An external judge has a fresh context and cannot rationalise away errors it did not produce.
+
+Spawn the judge as a sibling of the worker. After the worker completes, the judge sees the worker's output at `/in/previous-jobs/<worker-name>/`. The full reasoning trace is at `/in/previous-jobs/<worker-name>/transcript.jsonl` — see [`../reference/transcript-jsonl.md`](../reference/transcript-jsonl.md).
+
+```json
+{
+  "name": "sandbox_agent",
+  "arguments": {
+    "name": "judge",
+    "preamble": "You are a strict reviewer. Do not modify files.",
+    "prompt": "Read /in/previous-jobs/worker/report.md. Does it satisfy the criteria? Write PASS or FAIL followed by one sentence to /out/verdict.txt.",
+    "output_path": "/out/verdict.txt",
+    "success_criteria": [
+      "verdict.txt exists",
+      "first word is PASS or FAIL"
+    ]
+  }
+}
+```
+
+The `output_path` and `success_criteria` params render as a `## Definition of done` block prepended to the task in the judge's context file.
+
+## Recommended artefact layout
+
+| Purpose | Path |
+|---------|------|
+| Plan / in-progress findings | `/workspace/<phase>.md` — shared scratch, visible to all siblings |
+| Final artefacts | `/out/<name>` — your output directory; copy child results here explicitly |
+| Sibling outputs | `/in/previous-jobs/<name>/` — read-only mount of a completed sibling |
+
+Enumerate available previous-job mounts with:
+
+```bash
+ls /in/previous-jobs/
+```
+
+Use stable sorted names for phases — `phase01-gather`, `phase02-analyse`, `phase03-report` — so ordering is unambiguous when siblings consume one another's results.
+
+## Writing the task prompt
+
+Structure every child call in three layers:
+
+| Layer | Parameter | Purpose |
+|-------|-----------|---------|
+| Role | `preamble` | Agent identity, must-not constraints, style rules — prepended verbatim before the auto-generated context. |
+| Task | `prompt` | What to do and where to write output. |
+| Success criteria | `output_path`, `output_format`, `success_criteria` | Rendered as a `## Definition of done` block before `## Task` in the child's context file. |
+
+The `## Definition of done` block appears before the task body, so the agent reads the acceptance bar before the instructions.
+
+Example using all three layers:
+
+```json
+{
+  "name": "sandbox_agent",
+  "arguments": {
+    "name": "summariser",
+    "preamble": "You are a technical writer. Write in plain English. Do not use bullet points.",
+    "prompt": "Read /in/data.json and write a one-paragraph summary to /out/summary.txt.",
+    "output_path": "/out/summary.txt",
+    "output_format": "plain text, one paragraph, ≤ 200 words",
+    "success_criteria": [
+      "summary.txt exists",
+      "word count ≤ 200",
+      "no bullet points or headers"
+    ]
+  }
+}
+```
+
+## Context management across phases
+
+For work that would fill a single context window, split into checkpointed phases:
+
+1. Write the plan and in-progress findings to `/workspace/<phase>.md`.
+2. Spawn a fresh `sandbox_agent` referencing the checkpoint file path in its prompt.
+3. Repeat as needed; each fresh agent starts with a clean context window.
+
+A fresh window is cheaper than letting one context grow unbounded — token costs scale with context length and model reliability decreases at long contexts.
+
+Pair with **match effort to task**: run deterministic checks (lint, tests, file comparisons) through `sandbox_script`; route reasoning work by model size — haiku for classification or routing, sonnet for standard tasks, opus for tasks requiring extended reasoning.

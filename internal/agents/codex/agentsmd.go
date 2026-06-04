@@ -19,6 +19,7 @@ func generateContext(p agents.ContextParams) string {
 	agentcommon.WriteEnvironment(&b, p, agentcommon.EgressSentence(p.Egress, "the OpenAI API"))
 	agentcommon.WriteHostTools(&b, p.MCPServers)
 	agentcommon.WriteOrchestration(&b)
+	agentcommon.WriteDefinitionOfDone(&b, p.OutputContract)
 	agentcommon.WriteTask(&b, p.Prompt)
 	return b.String()
 }
