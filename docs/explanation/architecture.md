@@ -14,7 +14,7 @@ For a glossary of the terms used throughout this document see [key-concepts.md](
 | `cmd/demesne-sidecar` | Entry point for the per-sandbox sidecar binary. Launched inside the sidecar container; registers and starts whichever proxies the sandbox needs. |
 | `internal/server` | Registers the eight MCP tools, parses tool arguments, and delegates to `internal/sandbox`. |
 | `internal/sandbox` | Core runner: validates mounts, resolves images, builds network policies, calls the OpenSandbox SDK, and implements each tool's lifecycle (create, exec, agent, research, …). Also owns the child-sandbox registry and results roll-up. |
-| `internal/agents` | Agent provider implementations under `internal/agents/anthropic` (claude-code) and `internal/agents/codex` (codex, experimental). Each subpackage owns the provider's Dockerfile, wrapper script, context-file renderer, and MCP config generator. |
+| `internal/agents` | Agent provider implementations under `internal/agents/anthropic` (claude-code) and `internal/agents/codex` (codex). Each subpackage owns the provider's Dockerfile, wrapper script, context-file renderer, and MCP config generator. |
 | `internal/proxies` | Proxy implementations used by the sidecar, organised by vendor: `anthropic` (port 8088), `openai` (port 8086), `goproxy` (port 8087), `mcp` (ports 8089+). Shared base logic lives in `proxycommon`. |
 | `internal/mcpproxy` | Host-side MCP aggregator: discovers stdio servers from `~/.claude.json`, enforces the tool allowlist, and serves one HTTP MCP endpoint per server on a unix socket. |
 | `internal/sidecar` | Sidecar runtime: builds and starts the sidecar container via the OpenSandbox SDK, waits for it to be ready, and tears it down with the parent sandbox. |

@@ -382,7 +382,11 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 	if strings.TrimSpace(spec.prompt) == "" {
 		return agentPrep{}, errors.New("prompt is required")
 	}
-	agent, err := agents.Lookup(spec.agentName)
+	name := spec.agentName
+	if name == "" {
+		name = resolveDefaultAgent(r.cfg)
+	}
+	agent, err := agents.Lookup(name)
 	if err != nil {
 		return agentPrep{}, err
 	}
@@ -417,6 +421,38 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 		return agentPrep{}, fmt.Errorf("build agent image: %w", err)
 	}
 	return agentPrep{agent: agent, model: model, inputs: inputs, tag: ImageURI(imgTag), codexTokens: codexTokens}, nil
+}
+
+// Agent-provider names used by resolveDefaultAgent. Mirrored from the
+// vendor packages' own AgentName constants to avoid importing the vendor
+// subpackages here (which would couple the runner to specific providers).
+const (
+	agentNameCodex      = "codex"
+	agentNameClaudeCode = "claude-code"
+)
+
+// resolveDefaultAgent picks the default agent provider when the caller
+// leaves the `agent` MCP parameter empty. It prefers Codex: both or
+// neither set → codex; only claude-code set → claude-code; only codex
+// set → codex. The neither-set branch falls through to codex so the
+// missing-auth error names the Codex setup path consistently.
+//
+// Codex availability is determined by the resolved auth file path
+// existing on disk (matching how checkAgentCredentials and
+// resolveCodexTokens use it). claude-code availability is the OAuth
+// token field being non-empty.
+func resolveDefaultAgent(cfg Config) string {
+	codexAvailable := false
+	if cfg.CodexAuthFile != "" {
+		if _, err := os.Stat(cfg.CodexAuthFile); err == nil {
+			codexAvailable = true
+		}
+	}
+	claudeAvailable := cfg.ClaudeCodeOAuthToken != ""
+	if claudeAvailable && !codexAvailable {
+		return agentNameClaudeCode
+	}
+	return agentNameCodex
 }
 
 // buildLayout produces the host paths + mounts for an agent run,

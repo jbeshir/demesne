@@ -209,8 +209,8 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithString(paramAgent,
 			mcp.Description(
-				"Agent provider. 'claude-code' (default) or 'codex' "+
-					"(OpenAI Codex CLI, experimental — see README). Defaults to 'claude-code'.",
+				"Agent provider. `codex` or `claude-code` — defaults to `codex` "+
+					"when Codex credentials are configured, otherwise `claude-code`.",
 			),
 		),
 		mcp.WithString(paramModel,
@@ -277,8 +277,8 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithString(paramAgent,
 			mcp.Description(
-				"Agent provider. 'claude-code' (default) or 'codex' "+
-					"(OpenAI Codex CLI, experimental — see README). Defaults to 'claude-code'.",
+				"Agent provider. `codex` or `claude-code` — defaults to `codex` "+
+					"when Codex credentials are configured, otherwise `claude-code`.",
 			),
 		),
 		mcp.WithString(paramModel,

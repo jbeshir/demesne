@@ -29,7 +29,7 @@ A typical result-event line:
 
 For the full event schema see the Claude Code CLI reference or the parser source at `internal/agents/anthropic/streamjson.go`.
 
-**codex** (experimental agent): invoked with `--json`. The terminal event is `{"type":"item.completed","item":{"type":"agent_message","text":"..."}}`. Parser source: `internal/agents/codex/streamjson.go`.
+**codex**: invoked with `--json`. The terminal event is `{"type":"item.completed","item":{"type":"agent_message","text":"..."}}`. Parser source: `internal/agents/codex/streamjson.go`.
 
 ## How `ResultText` extracts the final answer
 

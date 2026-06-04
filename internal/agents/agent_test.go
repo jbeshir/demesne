@@ -7,8 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/jbeshir/demesne/internal/agents"
-	// Trigger the anthropic init so "claude-code" is registered before any test runs.
+	// Side-effect imports register both agents so DefaultAgent is resolvable.
 	_ "github.com/jbeshir/demesne/internal/agents/anthropic"
+	_ "github.com/jbeshir/demesne/internal/agents/codex"
 )
 
 func TestLookup_Default(t *testing.T) {

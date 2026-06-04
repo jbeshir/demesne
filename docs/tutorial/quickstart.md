@@ -97,7 +97,7 @@ No output on startup is correct — it is waiting for a client. This manual invo
 
 ---
 
-## Step 4: Wire into Claude Code
+## Step 4: Wire into your agent (Claude Code or Codex)
 
 Create or edit `.mcp.json` in your project root (this is the project-scoped MCP config committed to git) with one entry for demesne:
 
@@ -120,7 +120,7 @@ Create or edit `.mcp.json` in your project root (this is the project-scoped MCP 
 
 Replace `/usr/local/bin/demesne-mcp` with the actual path from Step 1 (e.g. `~/go/bin/demesne-mcp`). Claude Code will spawn `demesne-mcp` as a child process and communicate over stdio.
 
-For Claude Desktop and VS Code MCP config variants, see [Wire demesne into your MCP client](../how-to/wire-into-mcp-client.md).
+Using Codex (or another client)? See [Wire demesne into your MCP client](../how-to/wire-into-mcp-client.md) for the Codex `config.toml` block and Claude Desktop / VS Code pointers.
 
 #### Expected output
 

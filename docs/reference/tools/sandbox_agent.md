@@ -7,7 +7,7 @@ Run an AI agent inside a fresh sandbox against the caller's prompt.
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `prompt` | string | yes | — | Task for the agent. Free-form text. |
-| `agent` | string | no | `claude-code` | Agent provider. `claude-code` (default) or `codex` (OpenAI Codex CLI, experimental — see README). |
+| `agent` | string | no | auto | Agent provider. `codex` or `claude-code` — defaults to `codex` when Codex credentials are configured, otherwise `claude-code`. |
 | `model` | string | no | `sonnet` | Model for the agent. Provider-specific: claude-code uses `opus`, `sonnet` (default), or `haiku`; codex uses `gpt-5.5` (default) or `gpt-5.4-mini`. |
 | `preamble` | string | no | — | Optional prose prepended verbatim to the generated agent context file (e.g. CLAUDE.md for claude-code) before the auto-generated environment section. |
 | `egress` | string | no | `none` | Additional outbound network policy on top of the agent's backend proxy (which is always reachable). `none` (default) means only the proxy; `package-managers` also allows npm/PyPI/conda registries. `open` is rejected — use `sandbox_research` for unrestricted egress (which has no input mounts). |

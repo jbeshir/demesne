@@ -1,9 +1,15 @@
 # Wire demesne into your MCP client
 
 Demesne speaks JSON-RPC over stdio and wires into any MCP-compatible client by pointing the client
-at the `demesne-mcp` binary with the required environment variables. This page covers Claude Code,
-Claude Desktop, and VS Code. For a step-by-step install walkthrough, see the
-[Quickstart](../tutorial/quickstart.md).
+at the `demesne-mcp` binary with the required environment variables.
+
+This page centres the two coding-agent CLIs that can drive demesne's full feature set —
+**Claude Code** and **Codex** — because demesne's file features (mounting host paths via
+`files`/`directories` and returning host `output_dir` paths) only work for a client that runs
+locally with host-filesystem access and can choose paths / read results back. Other MCP clients
+can still call demesne but are text-only (see [Other MCP clients](#other-mcp-clients) below).
+
+For a step-by-step install walkthrough, see the [Quickstart](../tutorial/quickstart.md).
 
 **Required env vars for all clients:**
 
@@ -13,7 +19,7 @@ Claude Desktop, and VS Code. For a step-by-step install walkthrough, see the
 | `OPEN_SANDBOX_API_KEY` | API key for the OpenSandbox server |
 | `DEMESNE_ALLOWED_PATHS` | Colon-separated host paths permitted as mount sources |
 
-See the [full environment variable reference](../reference/configuration.md#environment-variables) below.
+See the [full environment variable reference](../reference/configuration.md#environment-variables).
 
 ---
 
@@ -59,86 +65,75 @@ claude mcp add --transport stdio \
   demesne -- /usr/local/bin/demesne-mcp
 ```
 
+Keep `--transport stdio` between the last `--env` and the server name `demesne` — `--env` must
+not be immediately followed by the server name.
+
 Scope flags: `--scope local` (default, `~/.claude.json`), `--scope project` (`.mcp.json`),
 `--scope user` (`~/.claude.json`, all projects).
 
 ---
 
-## Claude Desktop
+## Codex
 
-Claude Desktop reads `claude_desktop_config.json`. Note that `type` is **not** required here —
-stdio is implied.
+Codex (OpenAI's coding-agent CLI) reads MCP servers from `~/.codex/config.toml`. Add a
+`[mcp_servers.demesne]` block:
 
-**File locations:**
-
-| Platform | Path |
-|---|---|
-| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
-
-Add a `demesne` entry under `mcpServers`:
-
-```json
-{
-  "mcpServers": {
-    "demesne": {
-      "command": "/usr/local/bin/demesne-mcp",
-      "args": [],
-      "env": {
-        "OPEN_SANDBOX_DOMAIN": "localhost:8080",
-        "OPEN_SANDBOX_API_KEY": "<your-api-key>",
-        "DEMESNE_ALLOWED_PATHS": "/home/you/code:/tmp/demesne-test"
-      }
-    }
-  }
-}
+```toml
+[mcp_servers.demesne]
+command = "/usr/local/bin/demesne-mcp"
+args = []
+env = { OPEN_SANDBOX_DOMAIN = "localhost:8080", OPEN_SANDBOX_API_KEY = "<your-api-key>", DEMESNE_ALLOWED_PATHS = "/home/you/code:/tmp/demesne-test" }
 ```
 
-On macOS the binary path is typically `~/go/bin/demesne-mcp` or wherever `make build` placed it.
-Restart Claude Desktop after editing this file.
+The transport is inferred from `command` — there is no `type` key.
+
+To forward variables from Codex's own environment instead of hardcoding the values, use
+`env_vars` (a TOML array of variable names to pass through from the parent process):
+
+```toml
+[mcp_servers.demesne]
+command = "/usr/local/bin/demesne-mcp"
+args = []
+env_vars = ["OPEN_SANDBOX_API_KEY"]
+env = { OPEN_SANDBOX_DOMAIN = "localhost:8080", DEMESNE_ALLOWED_PATHS = "/home/you/code" }
+```
+
+### `codex mcp add` CLI shortcut
+
+```bash
+codex mcp add \
+  --env OPEN_SANDBOX_DOMAIN=localhost:8080 \
+  --env OPEN_SANDBOX_API_KEY=<key> \
+  --env DEMESNE_ALLOWED_PATHS=/home/you/code \
+  demesne -- /usr/local/bin/demesne-mcp
+```
 
 ---
 
-## VS Code
+## Other MCP clients
 
-VS Code uses `.vscode/mcp.json` with a `servers` key (not `mcpServers`). The `inputs` array lets
-you prompt for secrets rather than hard-coding them.
+demesne wires into any MCP-compatible client over stdio, but its **file features** — mounting
+host paths via `files`/`directories` and returning host `output_dir` paths the caller can open —
+need a co-located, filesystem-aware client like Claude Code or Codex on the same host.
 
-Create or edit `.vscode/mcp.json` in your project:
+File-path-blind clients — for example Claude Desktop, or containerized/remote agents reached
+through an MCP proxy — can still run sandboxed work and receive the text result (stdout, stderr,
+cost summary), but can't mount their own files or open the returned `output_dir` unless they're
+paired with a filesystem MCP server on the same host that can do that for them.
 
-```json
-{
-  "inputs": [
-    {
-      "type": "promptString",
-      "id": "opensandbox-api-key",
-      "description": "OpenSandbox API key for demesne",
-      "password": true
-    }
-  ],
-  "servers": {
-    "demesne": {
-      "type": "stdio",
-      "command": "/usr/local/bin/demesne-mcp",
-      "args": [],
-      "env": {
-        "OPEN_SANDBOX_DOMAIN": "localhost:8080",
-        "OPEN_SANDBOX_API_KEY": "${input:opensandbox-api-key}",
-        "DEMESNE_ALLOWED_PATHS": "/home/you/code:/tmp/demesne-test"
-      }
-    }
-  }
-}
-```
+Config-location pointers for two common file-blind clients:
 
-VS Code prompts you for the API key on first use and stores it securely. You can also use `envFile`
-instead of `inputs` to load a `.env` file.
+- **Claude Desktop** — `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`,
+  Windows: `%APPDATA%\Claude\`). Same `mcpServers` JSON shape as Claude Code; no `type` key
+  required.
+- **VS Code** — `.vscode/mcp.json` with a `servers` key (not `mcpServers`); supports `inputs` for
+  prompting for secrets.
 
 ---
 
 ## Environment variables
 
-All env vars are read by `demesne-mcp` at startup from `internal/sandbox/config.go`:
+All env vars are read by `demesne-mcp` at startup from `internal/sandbox/config.go`.
 
 For the full table, see [docs/reference/configuration.md](../reference/configuration.md#environment-variables).
 

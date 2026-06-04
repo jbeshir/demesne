@@ -11,13 +11,22 @@ All env vars are read by `demesne-mcp` at startup. Source of truth: `internal/sa
 | `OPEN_SANDBOX_API_KEY` | **yes** | — | API key for the OpenSandbox lifecycle server. |
 | `OPEN_SANDBOX_PROTOCOL` | no | `http` | `http` or `https`. |
 | `DEMESNE_OUTPUT_ROOT` | no | `/tmp/demesne/out` | Host directory under which per-job `/out` mounts are created. |
-| `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no* | — | Long-lived Claude Code OAuth token from `claude setup-token`. Required by `sandbox_agent` and `sandbox_research` with the default `claude-code` agent. |
-| `DEMESNE_CODEX_AUTH_FILE` | no | `~/.codex/auth.json` | Path to the Codex ChatGPT-OAuth token file (from `codex login`). Required by `sandbox_agent` and `sandbox_research` when called with `agent="codex"`. |
+| `DEMESNE_CODEX_AUTH_FILE` | no* | `~/.codex/auth.json` | Path to the Codex ChatGPT-OAuth token file (from `codex login`). Used by `sandbox_agent` and `sandbox_research`; when present, demesne prefers Codex as the default agent. Required when calling either tool with `agent="codex"`. |
+| `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no* | — | Long-lived Claude Code OAuth token from `claude setup-token`. Used by `sandbox_agent` and `sandbox_research`. Required when calling either tool with `agent="claude-code"` or when no Codex auth file is configured. |
 | `DEMESNE_HOST_MCP_CONFIG` | no | `~/.claude.json` | Claude Code MCP config file demesne reads to discover host stdio MCP servers to re-expose. |
 | `DEMESNE_MCP_ALLOWLIST` | no | `~/.config/demesne/mcp-allowlist.json` | Per-server tool allowlist override file (auto-seeded with built-in read-only defaults on first run). |
 | `DEMESNE_MCP_SOCKET` | no | `/tmp/demesne-mcp/<pid>/aggregator.sock` | Host path of the MCP aggregator unix socket. The runner bind-mounts it into each sandbox sidecar; a unix socket (rather than a host TCP port) is what lets the sandbox reach the aggregator under rootless podman — see [architecture.md](../explanation/architecture.md). |
 
-\* `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` is optional at the env level but required at runtime when `sandbox_agent` or `sandbox_research` is called with the default `claude-code` agent.
+\* `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` and `DEMESNE_CODEX_AUTH_FILE` are both optional at the env level. `sandbox_agent` and `sandbox_research` require whichever credential matches the resolved agent at runtime: when the `agent` parameter is omitted, demesne prefers `codex` if its auth file exists and falls back to `claude-code` if only that token is set.
+
+## Agent providers
+
+`sandbox_agent` and `sandbox_research` run one of two coding-agent providers in the sandbox:
+
+- **Codex** (preferred default). Authenticate with `codex login` (the OpenAI Codex CLI); point demesne at the resulting `auth.json` via `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`). When this file exists, demesne uses Codex by default.
+- **Claude Code** (fallback default). Produce a long-lived token with `claude setup-token`; export it as `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN`. Used by default when Codex is not configured.
+
+When the `agent` parameter is omitted demesne picks Codex if its credentials are configured, otherwise Claude Code; explicit `agent="codex"` or `agent="claude-code"` always wins. Configuring both providers is fine — Codex is still preferred. Set neither and demesne errors with a Codex setup-path message.
 
 ## Container images
 

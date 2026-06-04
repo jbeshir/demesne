@@ -181,8 +181,10 @@ func Register(name string, a Agent) {
 }
 
 // Lookup returns the agent registered under the given name. The empty
-// string resolves to the default agent (currently "claude-code"; this is
-// a hardcoded default that ships with demesne's Anthropic provider).
+// string resolves to the static DefaultAgent (currently "codex"); the
+// runner resolves the credential-aware default before calling Lookup,
+// so this fallback is only used when no Config is available (e.g.
+// tests).
 func Lookup(name string) (Agent, error) {
 	registryMu.RLock()
 	defer registryMu.RUnlock()
@@ -201,6 +203,10 @@ func Lookup(name string) (Agent, error) {
 }
 
 // DefaultAgent is the name resolved when sandbox_agent's `agent`
-// parameter is left empty. claude-code is the default provider; demesne
-// also ships codex as an experimental provider.
-const DefaultAgent = "claude-code"
+// parameter is left empty AND the runner cannot make a
+// credential-aware choice (e.g. tests calling agents.Lookup("")
+// directly without a Config). The real default lives in
+// `internal/sandbox.resolveDefaultAgent`, which prefers codex when
+// its credentials are configured and falls back to claude-code
+// otherwise.
+const DefaultAgent = "codex"

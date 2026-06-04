@@ -20,7 +20,13 @@ Ask your agent to run through demesne:
 - **Long-running research with open internet** — spawn a research agent with unrestricted outbound access. [Reference](docs/reference/tools/sandbox_research.md)
 - **Delegated coding-agent tasks** — hand off a prompt to a sub-agent running inside a sandbox. [Example](examples/sandbox-agent-hello/)
 - **Persistent sessions** — create a sandbox, run multiple commands, upload/download files, then destroy it. [Example](examples/persistent-session/)
-- **Multi-agent orchestration** — orchestrator dispatches to workers, a verifier judges the result. [Example](examples/sandbox-agent-verifier/)
+- **Multi-agent orchestration** — the orchestrator agent is itself a sandboxed run that spawns child sandboxes for its workers and verifier, dispatching tasks and judging results across the tree. [Example](examples/sandbox-agent-verifier/)
+
+Together these let your agent take on larger tasks autonomously **and** safely: you can push security-review-awkward script execution, autonomous research, and entire multi-agent pipelines into sandboxes that run with no permission prompts — the autonomy you'd otherwise reach for `--dangerously-skip-permissions` to get, but without the risk, because each run is contained, host mounts are read-only, and egress is allowlisted. And you don't pre-declare the pipeline: your agent composes the orchestration prompt itself for the task at hand, and the sandboxed orchestrator adapts the layout and subagents as it runs.
+
+## How it works
+
+Sandboxed agents can themselves spawn sandboxes, and — when you opt in — get a read-only subset of your host's MCP server tools proxied in through a per-sandbox tunnel. See [docs/reference/nested-sandboxes.md](docs/reference/nested-sandboxes.md).
 
 ## Get started
 
@@ -34,9 +40,9 @@ To build from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 demesne needs a running OpenSandbox instance. See [docs/reference/requirements.md](docs/reference/requirements.md) for prerequisites; Step 2 of the [Quickstart](docs/tutorial/quickstart.md) walks through launching one locally.
 
-### c. Wire into your MCP client
+### c. Wire into Claude Code or Codex
 
-See [docs/how-to/wire-into-mcp-client.md](docs/how-to/wire-into-mcp-client.md) for the config snippet and full env var reference.
+See [docs/how-to/wire-into-mcp-client.md](docs/how-to/wire-into-mcp-client.md) for the per-client config snippets and full env var reference.
 
 For the full walkthrough, see [Quickstart](docs/tutorial/quickstart.md).
 
@@ -50,7 +56,7 @@ For the full walkthrough, see [Quickstart](docs/tutorial/quickstart.md).
 | `sandbox_upload`   | Copy a host file into an existing sandbox.                                                                                                                                                                                                  | [ref](docs/reference/tools/sandbox_upload.md) |
 | `sandbox_download` | Copy a file out of an existing sandbox; written under `<output_dir>/downloads/<basename>`. Returns the host path.                                                                                                                           | [ref](docs/reference/tools/sandbox_download.md) |
 | `sandbox_destroy`  | Kill an existing sandbox. Host output dir is preserved.                                                                                                                                                                                     | [ref](docs/reference/tools/sandbox_destroy.md) |
-| `sandbox_agent`    | Run an AI coding agent (`claude-code` by default, or `codex` — experimental) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the vendor proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary. | [ref](docs/reference/tools/sandbox_agent.md) |
+| `sandbox_agent`    | Run an AI coding agent (`codex` or `claude-code` — defaults to `codex` when Codex credentials are configured, otherwise `claude-code`) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the vendor proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary. | [ref](docs/reference/tools/sandbox_agent.md) |
 | `sandbox_research` | Run a long-running research agent with no input mounts and unrestricted outbound internet access. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.                                              | [ref](docs/reference/tools/sandbox_research.md) |
 
 For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Quickstart](docs/tutorial/quickstart.md) and the [`sandbox_create`](docs/reference/tools/sandbox_create.md) / [`sandbox_exec`](docs/reference/tools/sandbox_exec.md) reference pages.

@@ -10,7 +10,7 @@
     },
     "agent": {
       "type": "string",
-      "description": "Agent provider. 'claude-code' (default) or 'codex' (OpenAI Codex CLI, experimental). Defaults to 'claude-code'."
+      "description": "Agent provider. 'codex' or 'claude-code' — defaults to 'codex' when Codex credentials are configured, otherwise 'claude-code'."
     },
     "model": {
       "type": "string",

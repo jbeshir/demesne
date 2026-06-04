@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/jbeshir/demesne/internal/agents"
@@ -58,6 +59,39 @@ func TestEgressOrDefault(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, egressOrDefault(tt.mode, tt.def))
+		})
+	}
+}
+
+// TestResolveDefaultAgent verifies the credential-aware default-agent
+// resolution: prefer codex when its auth file exists, fall back to
+// claude-code only when claude-code is configured and codex is not,
+// and prefer codex when neither (or both) are configured so the
+// missing-auth error names the Codex setup path.
+func TestResolveDefaultAgent(t *testing.T) {
+	dir := t.TempDir()
+	codexAuth := filepath.Join(dir, "auth.json")
+	require.NoError(t, os.WriteFile(codexAuth, []byte("{}"), 0o600))
+	missingAuth := filepath.Join(dir, "does-not-exist.json")
+	const claudeTok = "tok"
+
+	tests := []struct {
+		name        string
+		codexFile   string
+		claudeToken string
+		want        string
+	}{
+		{"both configured prefers codex", codexAuth, claudeTok, agentNameCodex},
+		{"only claude configured", missingAuth, claudeTok, agentNameClaudeCode},
+		{"only codex configured", codexAuth, "", agentNameCodex},
+		{"neither configured falls through to codex", missingAuth, "", agentNameCodex},
+		{"empty codex path with claude token", "", claudeTok, agentNameClaudeCode},
+		{"empty codex path with no claude token", "", "", agentNameCodex},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}
+			assert.Equal(t, tt.want, resolveDefaultAgent(cfg))
 		})
 	}
 }

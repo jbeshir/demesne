@@ -117,7 +117,7 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		mcp.WithDescription(childAgentDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description(childPromptDescription)),
-		mcp.WithString(childParamAgent, mcp.Description("Agent provider. Defaults to 'claude-code'.")),
+		mcp.WithString(childParamAgent, mcp.Description(childAgentDescriptionParam)),
 		mcp.WithString(childParamModel, mcp.Description(childModelDescription)),
 		mcp.WithString(childParamPreamble, mcp.Description(childPreambleDescription)),
 		mcp.WithString(childParamEgress, mcp.Description(childEgressDescriptionAgent)),
@@ -139,7 +139,7 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		mcp.WithDescription(childResearchDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description(childResearchPromptDescription)),
-		mcp.WithString(childParamAgent, mcp.Description("Agent provider. Defaults to 'claude-code'.")),
+		mcp.WithString(childParamAgent, mcp.Description(childAgentDescriptionParam)),
 		mcp.WithString(childParamModel, mcp.Description(childModelDescription)),
 		mcp.WithString(childParamPreamble, mcp.Description(childPreambleDescription)),
 		mcp.WithString(childParamOutputPath,
@@ -479,6 +479,9 @@ const childPreambleDescription = "Prose prepended to the child's context file. "
 
 const childModelDescription = "Model: 'opus' (complex synthesis), " +
 	"'sonnet' (default; general agentic work), 'haiku' (lookup / cheap)."
+
+const childAgentDescriptionParam = "Agent provider. `codex` or `claude-code` — " +
+	"defaults to `codex` when Codex credentials are configured, otherwise `claude-code`."
 
 const childCreateDescription = `Create a persistent child sandbox and return its handle.
 

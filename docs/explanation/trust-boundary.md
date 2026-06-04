@@ -5,7 +5,7 @@ coding agent inside a fresh sandbox against a caller-supplied prompt.
 Two providers are registered: **claude-code** (the Anthropic Claude
 Code CLI), which authenticates with a long-lived `CLAUDE_CODE_OAUTH_TOKEN`
 generated on the host via `claude setup-token`; and **codex**
-(the OpenAI Codex CLI, **experimental**), which talks to the ChatGPT
+(the OpenAI Codex CLI), which talks to the ChatGPT
 Codex backend via a mirrored credential-holding proxy on loopback. Codex
 uses ChatGPT-OAuth (not an API key): demesne reads the host's OAuth token
 set from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written
