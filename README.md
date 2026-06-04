@@ -26,7 +26,7 @@ Together these let your agent take on larger tasks autonomously **and** safely: 
 
 ## How it works
 
-Sandboxed agents can themselves spawn sandboxes, and — when you opt in — get a read-only subset of your host's MCP server tools proxied in through a per-sandbox tunnel. See [docs/reference/nested-sandboxes.md](docs/reference/nested-sandboxes.md).
+Sandboxed agents can themselves spawn sandboxes, and — with appropriate configuration — get a read-only subset of your host's MCP server tools proxied in through a per-sandbox tunnel. See [docs/reference/nested-sandboxes.md](docs/reference/nested-sandboxes.md).
 
 ## Get started
 
