@@ -1,20 +1,22 @@
 # Hello, script — single-shot `sandbox_script` with a mounted host file
 
-This example runs a single shell command in a fresh disposable sandbox using `sandbox_script`. It mounts one host file read-only into the sandbox at `/in/greeting.txt`, reads it back with `cat`, and prints the kernel version alongside it. After the sandbox exits, demesne preserves the output directory on the host.
+This example shows the simplest demesne pipeline: run one shell command in a fresh disposable sandbox, with a host file mounted read-only inside it. The sandbox exits, demesne returns the stdout, and the output directory is preserved on the host.
 
-It demonstrates:
+## Ask your agent
 
-- **Host file mount** — the `files` parameter makes a host path available inside the sandbox at `/in/<basename>`.
-- **`/in/` read-only** — files mounted via `files` are read-only inside the sandbox; the command cannot modify them.
-- **`/out` artefact pickup** — anything the command writes to `/out` inside the sandbox is preserved in the `output_dir` returned by the tool.
+> "I've got a file at /tmp/demesne-example/greeting.txt — can you cat it in a sandbox and tell me what kernel that sandbox is running?"
 
-## Prerequisites
+The agent will reach for `sandbox_script`, pass the host path via `files`, and set `egress: "none"` since the command has no network dependency. You need `DEMESNE_ALLOWED_PATHS` to include `/tmp/demesne-example` so demesne accepts the mount.
 
-- demesne is running and reachable (i.e., you can pipe JSON-RPC to `demesne-mcp` on `$PATH`).
-- OpenSandbox is running and `OPEN_SANDBOX_DOMAIN` / `OPEN_SANDBOX_API_KEY` are set on the demesne process.
-- `DEMESNE_ALLOWED_PATHS` includes `/tmp/demesne-example` (demesne will reject mounts outside this list).
+## What you get
 
-## Setup
+The tool returns `exit_code: 0`, the stdout from the command (the file contents followed by `uname -a` output), and an `output_dir` host path where anything the sandbox wrote to `/out` would be preserved. Because this command only reads and prints, the output directory exists but is empty.
+
+`egress: "none"` ensured the sandbox had no outbound network access. The host file appeared at `/in/greeting.txt` inside the sandbox — demesne mounts each path in `files` read-only at `/in/<basename>`.
+
+## Under the hood
+
+### Setup
 
 Create the host file that will be mounted into the sandbox:
 
@@ -22,7 +24,7 @@ Create the host file that will be mounted into the sandbox:
 mkdir -p /tmp/demesne-example && echo 'hello, world' > /tmp/demesne-example/greeting.txt
 ```
 
-## The call
+### The call
 
 The request is a standard JSON-RPC 2.0 `tools/call` envelope:
 
@@ -49,7 +51,7 @@ The request is a standard JSON-RPC 2.0 `tools/call` envelope:
 - `egress` — outbound network policy. `none` blocks all egress; the example has no network dependency.
 - `files` — list of absolute host paths to mount read-only at `/in/<basename>`. `/tmp/demesne-example/greeting.txt` appears as `/in/greeting.txt` inside the sandbox.
 
-## Run it
+### Run it
 
 ```bash
 bash run.sh
@@ -57,7 +59,7 @@ bash run.sh
 
 See [run.sh](run.sh) for the full script.
 
-## What you'll see
+### What you'll see
 
 A JSON-RPC response containing the tool result:
 

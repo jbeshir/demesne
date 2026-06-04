@@ -51,4 +51,4 @@ The `stdout` field in the MCP result is the *parsed final answer* from `ResultTe
 The transcript file is the authoritative full record. Read it when:
 
 - The `stdout` field contains the truncation marker.
-- You need intermediate reasoning steps or tool-call traces (e.g. a verifier child needs the full reasoning trail — see [Spawning a verifier/judge child](../../how-to/spawn-nested-agents.md#spawning-a-verifierjudge-child)).
+- You need intermediate reasoning steps or tool-call traces (e.g. a verifier child needs the full reasoning trail — see [Spawning a verifier/judge child](nested-sandboxes.md#spawning-a-verifierjudge-child)).

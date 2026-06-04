@@ -1,10 +1,11 @@
 # demesne examples
 
-These are runnable example MCP calls demonstrating the three main usage patterns for `demesne-mcp`. Each example contains a `README.md` explaining the call, one or more `request.json` files with complete JSON-RPC payloads, and a `run.sh` that pipes those payloads to the demesne stdio server.
+These are runnable examples of the kinds of work you can ask your agent to run through demesne. Each example shows the natural-language request a user would make to their Claude Code/agent, what they get back, and (for reference) the raw JSON-RPC payload the agent ends up issuing to the demesne stdio server.
 
-1. [`hello-script/`](hello-script/) — single-shot `sandbox_script` with a mounted host file.
-2. [`persistent-session/`](persistent-session/) — full create → exec → upload → exec → download → destroy lifecycle.
-3. [`sandbox-agent-hello/`](sandbox-agent-hello/) — `sandbox_agent` with token-usage artefacts.
+- [`hello-script/`](hello-script/) — **one-off script**: run a single shell command in a fresh sandbox.
+- [`persistent-session/`](persistent-session/) — **persistent session**: create → exec → upload → exec → download → destroy lifecycle.
+- [`sandbox-agent-hello/`](sandbox-agent-hello/) — **delegated agent task**: hand a one-shot prompt to a sub-agent.
+- [`sandbox-agent-verifier/`](sandbox-agent-verifier/) — **multi-agent orchestration**: worker + verifier pattern.
 
 ## Running an example
 
@@ -22,11 +23,11 @@ Then run any example with:
 bash hello-script/run.sh
 ```
 
-For the agent example you also need:
+For the agent examples you also need:
 
 ```bash
 export DEMESNE_CLAUDE_CODE_OAUTH_TOKEN=your-token-here
 bash sandbox-agent-hello/run.sh
 ```
 
-For the production path — running demesne through an MCP client rather than raw stdio — see the "Wire into Claude Code" section of the main README.
+For the production path — running demesne through an MCP client rather than raw stdio — see [Wire demesne into your MCP client](../docs/how-to/wire-into-mcp-client.md).

@@ -1,12 +1,10 @@
 # Share a host directory with a sandbox
 
-When you want to make a directory on your host available as read-only input inside a sandbox, demesne needs two things: the path must be under an allowed host root, and you must pass it as a `directories` parameter when creating the sandbox.
+For demesne to mount a host directory into a sandbox, the path must be allowlisted on BOTH sides:
 
-## Steps
+## 1. `DEMESNE_ALLOWED_PATHS` on the demesne process
 
-### 1. Add the directory to `DEMESNE_ALLOWED_PATHS`
-
-`DEMESNE_ALLOWED_PATHS` is a colon-separated list of host path prefixes. Any path passed in `files` or `directories` must be inside (or equal to) one of these prefixes after symlink resolution. Set it on the demesne process — either in the environment or in your MCP client config's `env` block:
+Colon-separated list of host path prefixes; any candidate path must resolve (after symlink resolution) under one of them. Set it on the demesne process — environment or MCP-client config `env` block:
 
 ```bash
 export DEMESNE_ALLOWED_PATHS=/home/alice/projects:/tmp/shared-data
@@ -30,43 +28,23 @@ Or in `.mcp.json`:
 }
 ```
 
-Note also that your OpenSandbox server's `~/.sandbox.toml` must list the same paths in `[storage] allowed_host_paths`; if OpenSandbox doesn't allow a path, every bind mount attempt returns `VOLUME::HOST_PATH_NOT_ALLOWED`.
+## 2. OpenSandbox `[storage] allowed_host_paths` in `~/.sandbox.toml`
 
-### 2. Pass the directory via the `directories` parameter
+Must list the same paths:
 
-All of `sandbox_script`, `sandbox_create`, and `sandbox_agent` accept a `directories` parameter (array of absolute host paths). Demesne mounts each directory read-only at `/in/<basename>` inside the sandbox:
-
-```json
-{
-  "name": "sandbox_script",
-  "arguments": {
-    "command": "ls /in/my-data",
-    "directories": ["/home/alice/projects/my-data"]
-  }
-}
+```toml
+[storage]
+allowed_host_paths = ["/home/alice/projects", "/tmp/shared-data"]
 ```
 
-### 3. Access the directory at `/in/<basename>` inside the sandbox
+If only one side is configured, every bind mount fails with `VOLUME::HOST_PATH_NOT_ALLOWED`.
 
-The directory is mounted at `/in/<basename>` where `<basename>` is the last path component of the host path — so `/home/alice/projects/my-data` appears at `/in/my-data`. The mount is read-only; any writes inside the sandbox to paths under `/in/<basename>` will fail.
+## Symlink resolution
 
-```bash
-# Inside the sandbox, read the directory:
-ls /in/my-data
-cat /in/my-data/config.json
-```
+Both the candidate path and each allowed-paths entry are symlink-resolved before the containment check. A path that points outside the allowed prefix via a symlink is rejected. An allowed-paths entry that is itself a symlink is resolved to its real path; the candidate is then checked against that real path.
 
-To work with the files, copy them to `/workspace` or `/out` first:
+If you see `mount path <path> is not within DEMESNE_ALLOWED_PATHS` but the path looks correct, check for symlinks with `realpath`.
 
-```bash
-cp -r /in/my-data /workspace/my-data
-```
+## How agents pass the path in
 
-## Pitfall: symlink resolution
-
-Both the candidate path (the value in `directories`) and each entry in `DEMESNE_ALLOWED_PATHS` are **symlink-resolved** before the containment check. This means:
-
-- A path that points outside the allowed prefix via a symlink is **rejected**, even if the unresolved path looks like it's inside the prefix.
-- An `DEMESNE_ALLOWED_PATHS` entry that is itself a symlink is resolved to the real path; the candidate is then checked against that real path.
-
-If you see `mount path <path> is not within DEMESNE_ALLOWED_PATHS` but the path looks correct, check for symlinks in either the candidate path or the allowed-paths entries using `realpath`.
+Agents use the `directories` parameter on tools that accept it — see [`sandbox_script`](../reference/tools/sandbox_script.md) for the per-tool shape. The mount appears at `/in/<basename>` inside the sandbox.

@@ -4,17 +4,9 @@ This tutorial takes you from a clean machine to a successful `sandbox_script` ca
 
 ## Step 1: Install demesne
 
-### Option A: `go install` (requires Go 1.26+)
+### Option A: Download a release binary (recommended)
 
-```bash
-go install github.com/jbeshir/demesne/cmd/demesne-mcp@latest
-```
-
-The binary lands in `$(go env GOPATH)/bin/demesne-mcp` (typically `~/go/bin/demesne-mcp`).
-
-### Option B: Download a release binary
-
-Pre-built binaries for `linux/amd64`, `darwin/amd64`, `darwin/arm64`, and `windows/amd64` are published on the [GitHub releases page](https://github.com/jbeshir/demesne/releases). Download the archive for your platform, extract it, and place `demesne-mcp` (or `demesne-mcp.exe` on Windows) somewhere on your `PATH`.
+Pre-built binaries for `linux/amd64`, `darwin/amd64`, `darwin/arm64`, and `windows/amd64` are published on the [GitHub releases page](https://github.com/jbeshir/demesne/releases). Download the archive for your platform, extract it, and place `demesne-mcp` (or `demesne-mcp.exe` on Windows) somewhere on your `PATH`. No Go toolchain required.
 
 ```bash
 # Example for linux/amd64 — replace VERSION with the latest release tag
@@ -22,6 +14,16 @@ VERSION=v0.5.0
 curl -L "https://github.com/jbeshir/demesne/releases/download/${VERSION}/demesne-mcp_${VERSION#v}_linux_amd64.tar.gz" \
   | tar xz -C /usr/local/bin demesne-mcp
 ```
+
+### Option B: Build from source (requires Go 1.26+)
+
+```bash
+go install github.com/jbeshir/demesne/cmd/demesne-mcp@latest
+```
+
+The binary lands in `$(go env GOPATH)/bin/demesne-mcp` (typically `~/go/bin/demesne-mcp`).
+
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for the local `make build` development flow.
 
 #### Expected output
 
@@ -71,7 +73,7 @@ INFO  Listening on :8080
 
 ## Step 3: Set env vars and start `demesne-mcp`
 
-At minimum you need the three required variables from the [Configuration table](../../README.md#configuration):
+At minimum you need the three required variables from the [Configuration reference](../reference/configuration.md#environment-variables):
 
 ```bash
 export OPEN_SANDBOX_DOMAIN=localhost:8080
@@ -118,7 +120,7 @@ Create or edit `.mcp.json` in your project root (this is the project-scoped MCP 
 
 Replace `/usr/local/bin/demesne-mcp` with the actual path from Step 1 (e.g. `~/go/bin/demesne-mcp`). Claude Code will spawn `demesne-mcp` as a child process and communicate over stdio.
 
-For Claude Desktop and VS Code MCP config variants, see [Wire demesne into your MCP client](../how-to/wire-into-claude-code.md).
+For Claude Desktop and VS Code MCP config variants, see [Wire demesne into your MCP client](../how-to/wire-into-mcp-client.md).
 
 #### Expected output
 

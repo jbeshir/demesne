@@ -1,6 +1,6 @@
-# Using demesne tools from inside an AI agent
+# Equip your agent for demesne
 
-When an AI agent is running inside a `sandbox_agent` or `sandbox_research` sandbox, demesne re-exposes its own tools to that agent as an in-process `demesne` MCP server, wired through the same per-sandbox sidecar tunnel as the host MCP servers (see `internal/sandbox/childserver.go` and `internal/sandbox/agent.go`). The block below is a ready-to-paste addition to any agent's system prompt — including top-level orchestrators that will spawn `sandbox_agent` or `sandbox_research` children. Every behavioural claim in the block is grounded in `internal/sandbox/agent.go`, `internal/sandbox/children.go`, `internal/sandbox/childserver.go`, and the [key-concepts](../explanation/key-concepts.md) and [trust-boundary](../explanation/trust-boundary.md) docs.
+When you want a top-level Claude Code (or other) agent to spawn demesne sandboxes, paste this block into that agent's system prompt. It's self-contained and doesn't depend on the auto-generated context demesne writes for the child agents.
 
 ## System prompt block
 
@@ -55,7 +55,7 @@ Completed siblings' outputs are mounted read-only under /in/previous-jobs/<name>
 The host MCP servers (e.g. workflowy, alignment, anki) appear in your tool list under their native tool names. Only tools on the built-in read-only allowlist (or the operator's override) are available; calls to non-allowlisted tools will fail. There is no auth between you, the sidecar tunnel, and the aggregator — the sandbox edge is the trust boundary.
 ```
 
-See [Spawn nested agents](spawn-nested-agents.md) for the output-path convention and the copy-to-`/out` rule outside the system-prompt context.
+See [Nested sandboxes reference](../reference/nested-sandboxes.md) for the output-path convention and the copy-to-`/out` rule outside the system-prompt context.
 
 ## Composing a scoped task prompt
 
@@ -91,15 +91,4 @@ When calling `sandbox_agent` or `sandbox_research`, split the instructions acros
 }
 ```
 
-See [Writing the task prompt](spawn-nested-agents.md#writing-the-task-prompt) for a fuller discussion of the three-layer structure, including how `preamble` composes with the auto-generated environment section.
-
-## Why each claim
-
-- **sandbox_agent refuses `egress: "open"`** — `rejectOpenEgress` in `internal/sandbox/childserver.go:326-339` returns a tool-result error for any egress value of `"open"` on `sandbox_script`, `sandbox_agent`, and `sandbox_create` children. The comment names the exact threat: "inputs plus unrestricted outbound is the data-exfiltration shape demesne keeps off the child surface."
-- **sandbox_research children are isolated (no /in, fresh workspace)** — `handleChildResearch` in `childserver.go:227-254` always sets `isolated: true` on the `childSpawn`; `buildChildLayout` in `agent.go:441-469` creates a fresh private workspace and skips inheriting `inputVolumes` / `previousJobs` when `c.isolated` is true.
-- **Children inherit /in and share /workspace** — `buildChildLayout` in `agent.go:460-464`: non-isolated children copy `c.parent.inputVolumes` and set `workspaceHost = c.parent.workspaceHost`.
-- **Child /out is /out/child/<name>** — `buildChildLayout` in `agent.go:449`: `outHost: filepath.Join(c.parent.outHost, "child", c.name)`.
-- **Name rules: ≤40 chars, DNS-1123** — `validateChildName` in `internal/sandbox/children.go:129-147`: checks length > 40 and validates char-by-char (lowercase letters, digits, interior hyphens only).
-- **Name uniqueness per parent** — `reserveName` in `children.go:49-60` uses a `usedNames` map and returns an error on collision.
-- **Host MCP tools via sidecar tunnel** — `buildMCPWiring` and `ChildMCPServer` in `agent.go:653-676` and `childserver.go:96-152` wire the demesne self-server and host MCP servers through the aggregator + sidecar tunnel. Trust model: `docs/explanation/trust-boundary.md` §Host MCP tools.
-- **Completed siblings under /in/previous-jobs** — `previousJobVolumes` in `children.go:101-120` mounts each sibling's outHost at `/in/previous-jobs/<name>` read-only.
+See [Nested sandboxes reference](../reference/nested-sandboxes.md#writing-the-task-prompt) for a fuller discussion of the three-layer structure, including how `preamble` composes with the auto-generated environment section.

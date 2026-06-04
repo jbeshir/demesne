@@ -12,9 +12,9 @@ Demesne embeds a `linux/amd64` helper binary that runs inside every sandbox cont
 
 Releases are published for `linux/amd64`, `darwin/amd64`, `darwin/arm64`, and `windows/amd64`. **Only `linux/amd64` is actively tested**; the other platforms build cleanly but are best-effort. linux/arm64 is reachable with `qemu-user-static` binfmt but no native binary is shipped.
 
-## Build (Go 1.26+ for `go install`)
+## Building from source (optional)
 
-Building from source via `go install github.com/jbeshir/demesne/cmd/demesne-mcp@latest` requires Go 1.26 or later (see `go.mod`). Pre-built release binaries have no Go toolchain requirement.
+The release binaries linked from the quickstart need no Go toolchain. If you want to build from source instead (e.g. as a contributor), see [CONTRIBUTING.md](../../CONTRIBUTING.md). The build requires Go 1.26 or later (see `go.mod`).
 
 ## OpenSandbox configuration
 

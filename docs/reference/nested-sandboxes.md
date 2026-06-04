@@ -1,8 +1,8 @@
-# Spawn nested agents
+# Nested sandboxes reference
 
-When your agent is running inside a `sandbox_agent` or `sandbox_research` sandbox, demesne re-exposes its own tools so the agent can spawn child sandboxes. This page covers the conventions and gotchas for that pattern.
+When an agent is running inside a `sandbox_agent` or `sandbox_research` sandbox, demesne re-exposes its own tools so the agent can spawn child sandboxes. This page is the reference for the layout and conventions those calls follow.
 
-> **Prerequisites**: rootless podman hosts need the `fs.pipe-user-pages-soft=0` sysctl set — see [docs/reference/requirements.md §Rootless Podman pipe-page cap](../reference/requirements.md#rootless-podman-pipe-page-cap). The whole sandbox-fan-out pattern this page describes hits the default cap routinely.
+> **Prerequisites**: rootless podman hosts need the `fs.pipe-user-pages-soft=0` sysctl set — see [requirements.md §Rootless Podman pipe-page cap](requirements.md#rootless-podman-pipe-page-cap). The sandbox fan-out pattern this page describes hits the default cap routinely.
 
 ## Available child tools
 
@@ -19,7 +19,7 @@ Inside a `sandbox_agent` or `sandbox_research` sandbox, the following demesne to
 
 ## The `name` parameter
 
-Every child-spawning call requires a `name` parameter. The name rules are enforced by `validateChildName` in `internal/sandbox/children.go`:
+Every child-spawning call requires a `name` parameter. Rules:
 
 - **Lowercase letters, digits, and interior hyphens only.** No underscores, dots, uppercase letters, or spaces.
 - **Interior hyphens only** — the name may not start or end with a hyphen.
@@ -53,14 +53,13 @@ Grandchildren nest further under the child:
 
 Inside the sandbox, the parent sees its own output dir at `/out`. A child named `analyzer` therefore lands at `/out/child/analyzer/` from the parent's perspective.
 
-## The copy-to-`/out` gotcha
+### The copy-to-`/out` gotcha
 
-A child's `/out/child/<name>` is the **child's** output directory. Files the child writes there are visible to the parent at `/out/child/<name>` (inside the sandbox) or at `<parent-out-host>/child/<name>` on the host — but they do NOT automatically appear in the parent's own `/out`.
+A child's `/out/child/<name>` is the **child's** output directory. Files the child writes there are visible to the parent at `/out/child/<name>` — but they do NOT automatically appear in the parent's own `/out`.
 
 To hand a child-produced artefact back to your caller, you must explicitly copy it into your own `/out`:
 
 ```bash
-# Inside a sandbox_script or sandbox_exec run in the parent:
 cp /out/child/analyzer/report.txt /out/report.txt
 ```
 
@@ -95,13 +94,13 @@ Each child agent run writes `results.json` and `usage.json` to its output direct
 /out/child/<name>/usage.json
 ```
 
-The root run's `results.json` already sums the whole tree in `total_usage_usd`, so you rarely need to read children's `results.json` directly. See [`../reference/results-json.md`](../reference/results-json.md) and [`../reference/usage-json.md`](../reference/usage-json.md) for the field reference.
+The root run's `results.json` already sums the whole tree in `total_usage_usd`, so you rarely need to read children's `results.json` directly. See [`results-json.md`](results-json.md) and [`usage-json.md`](usage-json.md) for the field reference.
 
 ## Spawning a verifier/judge child
 
 Use a second `sandbox_agent` to evaluate a worker's output against explicit criteria rather than self-critiquing in the same context window. An external judge has a fresh context and cannot rationalise away errors it did not produce.
 
-Spawn the judge as a sibling of the worker. After the worker completes, the judge sees the worker's output at `/in/previous-jobs/<worker-name>/`. The full reasoning trace is at `/in/previous-jobs/<worker-name>/transcript.jsonl` — see [`../reference/transcript-jsonl.md`](../reference/transcript-jsonl.md).
+Spawn the judge as a sibling of the worker. After the worker completes, the judge sees the worker's output at `/in/previous-jobs/<worker-name>/`. The full reasoning trace is at `/in/previous-jobs/<worker-name>/transcript.jsonl` — see [`transcript-jsonl.md`](transcript-jsonl.md).
 
 ```json
 {
@@ -178,5 +177,3 @@ For work that would fill a single context window, split into checkpointed phases
 3. Repeat as needed; each fresh agent starts with a clean context window.
 
 A fresh window is cheaper than letting one context grow unbounded — token costs scale with context length and model reliability decreases at long contexts.
-
-Pair with **match effort to task**: run deterministic checks (lint, tests, file comparisons) through `sandbox_script`; route reasoning work by model size — haiku for classification or routing, sonnet for standard tasks, opus for tasks requiring extended reasoning.

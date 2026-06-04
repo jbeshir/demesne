@@ -109,7 +109,7 @@ alongside the discovered upstreams (via its `ExtraServers` hook), so
 it rides the same socket + tunnel. The agent can spawn child
 sandboxes — `sandbox_script` / `sandbox_agent` / `sandbox_research` / `sandbox_create` /
 `sandbox_exec` / `sandbox_destroy` (no `upload`/`download`) — none of which take
-mount params. `sandbox_agent` children inherit the parent's read-only `/in` and share the parent's `/workspace`; `sandbox_research` children are isolated. See [Spawn nested agents](../how-to/spawn-nested-agents.md) for the output-path convention, the copy-to-`/out` rule, and grandchild nesting.
+mount params. `sandbox_agent` children inherit the parent's read-only `/in` and share the parent's `/workspace`; `sandbox_research` children are isolated. See [Nested sandboxes reference](../reference/nested-sandboxes.md) for the output-path convention, the copy-to-`/out` rule, and grandchild nesting.
 
 The host process does the actual spawning (a sibling sandbox, not
 podman-in-podman). Because the `demesne` server is per-caller while
