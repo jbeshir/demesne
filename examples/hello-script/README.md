@@ -4,9 +4,9 @@ This example shows the simplest demesne pipeline: run one shell command in a fre
 
 ## Ask your agent
 
-> "I've got a file at /tmp/demesne-example/greeting.txt — can you cat it in a sandbox and tell me what kernel that sandbox is running?"
+> "I've got a file at /home/username/demesne-example/greeting.txt — can you cat it in a sandbox and tell me what kernel that sandbox is running?"
 
-The agent will reach for `sandbox_script`, pass the host path via `files`, and set `egress: "none"` since the command has no network dependency. You need `DEMESNE_ALLOWED_PATHS` to include `/tmp/demesne-example` so demesne accepts the mount.
+The agent will reach for `sandbox_script`, pass the host path via `files`, and set `egress: "none"` since the command has no network dependency. You need `DEMESNE_ALLOWED_PATHS` to include `/home/username/demesne-example` so demesne accepts the mount.
 
 ## What you get
 
@@ -21,7 +21,7 @@ The tool returns `exit_code: 0`, the stdout from the command (the file contents 
 Create the host file that will be mounted into the sandbox:
 
 ```bash
-mkdir -p /tmp/demesne-example && echo 'hello, world' > /tmp/demesne-example/greeting.txt
+mkdir -p /home/username/demesne-example && echo 'hello, world' > /home/username/demesne-example/greeting.txt
 ```
 
 ### The call
@@ -39,7 +39,7 @@ The request is a standard JSON-RPC 2.0 `tools/call` envelope:
       "command": "cat /in/greeting.txt && echo \"--- ran in $(uname -a)\"",
       "image": "anaconda",
       "egress": "none",
-      "files": ["/tmp/demesne-example/greeting.txt"]
+      "files": ["/home/username/demesne-example/greeting.txt"]
     }
   }
 }
@@ -49,7 +49,7 @@ The request is a standard JSON-RPC 2.0 `tools/call` envelope:
 - `command` — the shell command to run inside the sandbox with `/bin/sh -c`. The working directory inside the sandbox is `/out`.
 - `image` — the container image. `anaconda` (the default) is used here.
 - `egress` — outbound network policy. `none` blocks all egress; the example has no network dependency.
-- `files` — list of absolute host paths to mount read-only at `/in/<basename>`. `/tmp/demesne-example/greeting.txt` appears as `/in/greeting.txt` inside the sandbox.
+- `files` — list of absolute host paths to mount read-only at `/in/<basename>`. `/home/username/demesne-example/greeting.txt` appears as `/in/greeting.txt` inside the sandbox.
 
 ### Run it
 

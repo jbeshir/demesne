@@ -14,7 +14,7 @@ Make sure demesne is running and the following environment variables are set:
 ```bash
 export OPEN_SANDBOX_DOMAIN=localhost:8080   # your OpenSandbox server
 export OPEN_SANDBOX_API_KEY=your-key-here
-export DEMESNE_ALLOWED_PATHS=/tmp/demesne-example
+export DEMESNE_ALLOWED_PATHS=/home/username/demesne-example
 ```
 
 Then run any example with:

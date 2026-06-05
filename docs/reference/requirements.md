@@ -22,7 +22,7 @@ Demesne talks to a long-running [OpenSandbox](https://github.com/alibaba/OpenSan
 
 - **`[egress] mode = "dns+nft"`** (default `"dns"`). The default only filters egress at DNS lookup; raw-IP outbound traffic still succeeds, so `egress: "none"` in `sandbox_script` does not actually deny network. The `dns+nft` mode adds nftables-based IP filtering and makes `none` mean none.
 - **`[server] api_key = "<some-secret>"`** (default is empty). With an empty key, the server requires either an interactive `YES` at startup or `OPENSANDBOX_INSECURE_SERVER=YES` in the environment.
-- **`[storage] allowed_host_paths = ["/tmp", "/home/<you>/code"]`** (or whichever directories you want bind-mountable). The example sets `[]` with a comment saying "all paths allowed", but empirically empty means *nothing* is allowed — every bind mount fails with `VOLUME::HOST_PATH_NOT_ALLOWED`.
+- **`[storage] allowed_host_paths = ["/home/username/code"]`** (or whichever directories you want bind-mountable). The example sets `[]` with a comment saying "all paths allowed", but empirically empty means *nothing* is allowed — every bind mount fails with `VOLUME::HOST_PATH_NOT_ALLOWED`. OpenSandbox's allowed_host_paths must also include the demesne output root (default ~/.demesne/out, override with DEMESNE_OUTPUT_ROOT) so demesne's /out and previous-job mounts are accepted by OpenSandbox.
 
 ### Allowed paths (both sides)
 

@@ -8,7 +8,7 @@
       "command": "cat /in/greeting.txt && echo \"--- ran in $(uname -a)\"",
       "image": "anaconda",
       "egress": "none",
-      "files": ["/tmp/demesne-example/greeting.txt"]
+      "files": ["/home/username/demesne-example/greeting.txt"]
     }
   }
 }

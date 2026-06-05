@@ -4,7 +4,7 @@ This example walks through the full lifecycle of a persistent sandbox. Unlike `s
 
 ## Ask your agent
 
-> "Open a persistent Python sandbox, install pandas, upload /tmp/demesne-example/data.csv, run a .describe() on it, download the result, then tear the sandbox down."
+> "Open a persistent Python sandbox, install pandas, upload /home/username/demesne-example/data.csv, run a .describe() on it, download the result, then tear the sandbox down."
 
 The agent will issue six sequential tool calls using `sandbox_create`, `sandbox_exec`, `sandbox_upload`, `sandbox_exec` again, `sandbox_download`, and `sandbox_destroy`. Each call after the first reuses the `sandbox_id` returned by `sandbox_create`.
 
@@ -37,8 +37,8 @@ After the six steps complete, `results.json` (the pandas `.describe()` output) i
 Create a sample CSV file to upload:
 
 ```bash
-mkdir -p /tmp/demesne-example
-printf 'name,value\nalpha,10\nbeta,20\ngamma,30\n' > /tmp/demesne-example/data.csv
+mkdir -p /home/username/demesne-example
+printf 'name,value\nalpha,10\nbeta,20\ngamma,30\n' > /home/username/demesne-example/data.csv
 ```
 
 ### Run it

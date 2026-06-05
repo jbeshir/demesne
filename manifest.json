@@ -50,8 +50,7 @@
     "output_root": {
       "type": "string",
       "title": "Output root",
-      "description": "Host directory under which per-job /out mounts are created. Defaults to /tmp/demesne/out.",
-      "default": "/tmp/demesne/out",
+      "description": "Host directory under which per-job /out mounts are created. Defaults to ~/.demesne/out under the user's home. The output root is always added to the mount allowlist.",
       "required": false
     },
     "opensandbox_domain": {

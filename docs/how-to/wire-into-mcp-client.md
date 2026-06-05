@@ -42,7 +42,7 @@ Create or edit `.mcp.json` in your project root:
       "env": {
         "OPEN_SANDBOX_DOMAIN": "localhost:8080",
         "OPEN_SANDBOX_API_KEY": "<your-api-key>",
-        "DEMESNE_ALLOWED_PATHS": "/home/you/code:/tmp/demesne-test"
+        "DEMESNE_ALLOWED_PATHS": "/home/username/code"
       }
     }
   }
@@ -61,7 +61,7 @@ claude mcp add --transport stdio --scope project demesne -- /usr/local/bin/demes
 claude mcp add --transport stdio \
   --env OPEN_SANDBOX_DOMAIN=localhost:8080 \
   --env OPEN_SANDBOX_API_KEY=<key> \
-  --env DEMESNE_ALLOWED_PATHS=/home/you/code \
+  --env DEMESNE_ALLOWED_PATHS=/home/username/code \
   demesne -- /usr/local/bin/demesne-mcp
 ```
 
@@ -82,7 +82,7 @@ Codex (OpenAI's coding-agent CLI) reads MCP servers from `~/.codex/config.toml`.
 [mcp_servers.demesne]
 command = "/usr/local/bin/demesne-mcp"
 args = []
-env = { OPEN_SANDBOX_DOMAIN = "localhost:8080", OPEN_SANDBOX_API_KEY = "<your-api-key>", DEMESNE_ALLOWED_PATHS = "/home/you/code:/tmp/demesne-test" }
+env = { OPEN_SANDBOX_DOMAIN = "localhost:8080", OPEN_SANDBOX_API_KEY = "<your-api-key>", DEMESNE_ALLOWED_PATHS = "/home/username/code" }
 ```
 
 The transport is inferred from `command` — there is no `type` key.
@@ -95,7 +95,7 @@ To forward variables from Codex's own environment instead of hardcoding the valu
 command = "/usr/local/bin/demesne-mcp"
 args = []
 env_vars = ["OPEN_SANDBOX_API_KEY"]
-env = { OPEN_SANDBOX_DOMAIN = "localhost:8080", DEMESNE_ALLOWED_PATHS = "/home/you/code" }
+env = { OPEN_SANDBOX_DOMAIN = "localhost:8080", DEMESNE_ALLOWED_PATHS = "/home/username/code" }
 ```
 
 ### `codex mcp add` CLI shortcut
@@ -104,7 +104,7 @@ env = { OPEN_SANDBOX_DOMAIN = "localhost:8080", DEMESNE_ALLOWED_PATHS = "/home/y
 codex mcp add \
   --env OPEN_SANDBOX_DOMAIN=localhost:8080 \
   --env OPEN_SANDBOX_API_KEY=<key> \
-  --env DEMESNE_ALLOWED_PATHS=/home/you/code \
+  --env DEMESNE_ALLOWED_PATHS=/home/username/code \
   demesne -- /usr/local/bin/demesne-mcp
 ```
 

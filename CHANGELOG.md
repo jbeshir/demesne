@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Default `DEMESNE_OUTPUT_ROOT` is now `~/.demesne/out` under the user's home, replacing the previous world-readable `/tmp/demesne/out`. Set `DEMESNE_OUTPUT_ROOT` explicitly to override.
+- The effective output root is always appended to `DEMESNE_ALLOWED_PATHS`, so `/out` and nested `/in/previous-jobs/<name>` mounts work without the user listing the output root.
+
 ## [0.1.0] - 2026-06-05
 
 First public release — an agent-agnostic, local, sandboxed agent-orchestration MCP server you drive from your agent of choice. It runs untrusted shell, scripts, and AI coding agents in disposable OpenSandbox containers, with read-only host mounts and egress allowlists.

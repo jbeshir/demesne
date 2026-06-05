@@ -39,16 +39,16 @@ A child sandbox's output goes to:
 <parent-output-dir>/child/<name>/
 ```
 
-For example, if the parent's output dir is `/tmp/demesne/out/<parent-job-id>/out`, a child named `analyzer` writes to:
+For example, if the parent's output dir is `~/.demesne/out/<parent-job-id>/out`, a child named `analyzer` writes to:
 
 ```
-/tmp/demesne/out/<parent-job-id>/out/child/analyzer/
+~/.demesne/out/<parent-job-id>/out/child/analyzer/
 ```
 
 Grandchildren nest further under the child:
 
 ```
-/tmp/demesne/out/<parent-job-id>/out/child/analyzer/child/sub-task/
+~/.demesne/out/<parent-job-id>/out/child/analyzer/child/sub-task/
 ```
 
 Inside the sandbox, the parent sees its own output dir at `/out`. A child named `analyzer` therefore lands at `/out/child/analyzer/` from the parent's perspective.

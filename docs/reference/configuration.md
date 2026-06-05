@@ -6,11 +6,11 @@ All env vars are read by `demesne-mcp` at startup. Source of truth: `internal/sa
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DEMESNE_ALLOWED_PATHS` | **yes** | — | Colon-separated list of host paths under which tools may mount files/directories or upload from. Anything outside is rejected. Symlinks are resolved before the containment check. |
+| `DEMESNE_ALLOWED_PATHS` | **yes** | — | Colon-separated list of host paths under which tools may mount files/directories or upload from. Anything outside is rejected. Symlinks are resolved before the containment check. The effective list also always includes DEMESNE_OUTPUT_ROOT (see below). |
 | `OPEN_SANDBOX_DOMAIN` | **yes** | — | Host:port of the OpenSandbox lifecycle server (e.g. `localhost:8080`). |
 | `OPEN_SANDBOX_API_KEY` | **yes** | — | API key for the OpenSandbox lifecycle server. |
 | `OPEN_SANDBOX_PROTOCOL` | no | `http` | `http` or `https`. |
-| `DEMESNE_OUTPUT_ROOT` | no | `/tmp/demesne/out` | Host directory under which per-job `/out` mounts are created. |
+| `DEMESNE_OUTPUT_ROOT` | no | `~/.demesne/out` | Host directory under which per-job `/out` mounts are created. |
 | `DEMESNE_CODEX_AUTH_FILE` | no* | `~/.codex/auth.json` | Path to the Codex ChatGPT-OAuth token file (from `codex login`). Used by `sandbox_agent` and `sandbox_research`; when present, demesne prefers Codex as the default agent. Required when calling either tool with `agent="codex"`. |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no* | — | Long-lived Claude Code OAuth token from `claude setup-token`. Used by `sandbox_agent` and `sandbox_research`. Required when calling either tool with `agent="claude-code"` or when no Codex auth file is configured. |
 | `DEMESNE_HOST_MCP_CONFIG` | no | `~/.claude.json` | Claude Code MCP config file demesne reads to discover host stdio MCP servers to re-expose. |
@@ -18,6 +18,8 @@ All env vars are read by `demesne-mcp` at startup. Source of truth: `internal/sa
 | `DEMESNE_MCP_SOCKET` | no | `/tmp/demesne-mcp/<pid>/aggregator.sock` | Host path of the MCP aggregator unix socket. The runner bind-mounts it into each sandbox sidecar; a unix socket (rather than a host TCP port) is what lets the sandbox reach the aggregator under rootless podman — see [architecture.md](../explanation/architecture.md). |
 
 \* `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` and `DEMESNE_CODEX_AUTH_FILE` are both optional at the env level. `sandbox_agent` and `sandbox_research` require whichever credential matches the resolved agent at runtime: when the `agent` parameter is omitted, demesne prefers `codex` if its auth file exists and falls back to `claude-code` if only that token is set.
+
+The output root is always appended to the effective mount allowlist, so /out and nested /in/previous-jobs/<name> mounts work without the user listing the output root in DEMESNE_ALLOWED_PATHS.
 
 ## Agent providers
 

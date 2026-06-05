@@ -78,7 +78,7 @@ At minimum you need the three required variables from the [Configuration referen
 ```bash
 export OPEN_SANDBOX_DOMAIN=localhost:8080
 export OPEN_SANDBOX_API_KEY=your-secret-key
-export DEMESNE_ALLOWED_PATHS=/tmp
+export DEMESNE_ALLOWED_PATHS=/home/username/code
 ```
 
 Optionally verify the binary starts cleanly (this is a smoke-check — Ctrl-C to exit; the real run happens in Step 4 when Claude Code spawns it):
@@ -109,7 +109,7 @@ Create or edit `.mcp.json` in your project root (this is the project-scoped MCP 
       "command": "/usr/local/bin/demesne-mcp",
       "args": [],
       "env": {
-        "DEMESNE_ALLOWED_PATHS": "/tmp",
+        "DEMESNE_ALLOWED_PATHS": "/home/username/code",
         "OPEN_SANDBOX_DOMAIN": "localhost:8080",
         "OPEN_SANDBOX_API_KEY": "your-secret-key"
       }
@@ -150,7 +150,7 @@ tools/call sandbox_script command="echo hello && uname -a"
 
 ```
 exit_code: 0
-output_dir: /tmp/demesne/out/<job-id>
+output_dir: ~/.demesne/out/<job-id>
 job_id: <uuid>
 ---
 hello
@@ -158,7 +158,7 @@ Linux <container-hostname> 6.x.x ... x86_64 GNU/Linux
 ---stderr---
 ```
 
-The command ran inside a disposable `continuumio/anaconda3` container (the default image). The `/tmp/demesne/out/<job-id>` directory on your host contains any files the command wrote to `/out` inside the sandbox.
+The command ran inside a disposable `continuumio/anaconda3` container (the default image). The `~/.demesne/out/<job-id>` directory on your host contains any files the command wrote to `/out` inside the sandbox.
 
 ---
 

@@ -7,7 +7,7 @@ For demesne to mount a host directory into a sandbox, the path must be allowlist
 Colon-separated list of host path prefixes; any candidate path must resolve (after symlink resolution) under one of them. Set it on the demesne process — environment or MCP-client config `env` block:
 
 ```bash
-export DEMESNE_ALLOWED_PATHS=/home/alice/projects:/tmp/shared-data
+export DEMESNE_ALLOWED_PATHS=/home/username/projects
 ```
 
 Or in `.mcp.json`:
@@ -19,7 +19,7 @@ Or in `.mcp.json`:
       "type": "stdio",
       "command": "/usr/local/bin/demesne-mcp",
       "env": {
-        "DEMESNE_ALLOWED_PATHS": "/home/alice/projects:/tmp/shared-data",
+        "DEMESNE_ALLOWED_PATHS": "/home/username/projects",
         "OPEN_SANDBOX_DOMAIN": "localhost:8080",
         "OPEN_SANDBOX_API_KEY": "your-key"
       }
@@ -34,7 +34,7 @@ Must list the same paths:
 
 ```toml
 [storage]
-allowed_host_paths = ["/home/alice/projects", "/tmp/shared-data"]
+allowed_host_paths = ["/home/username/projects"]
 ```
 
 If only one side is configured, every bind mount fails with `VOLUME::HOST_PATH_NOT_ALLOWED`.

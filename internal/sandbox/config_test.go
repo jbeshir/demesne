@@ -60,6 +60,8 @@ func TestLoadConfigFromEnv(t *testing.T) {
 				t.Helper()
 				assert.Equal(t, testDomain, cfg.OpenSandboxDomain)
 				assert.Equal(t, "test-key", cfg.OpenSandboxAPIKey)
+				// Length stays at 1 because the configured path and the output root
+				// coincide — the auto-include de-dups them.
 				require.Len(t, cfg.AllowedPaths, 1)
 				assert.Equal(t, outRoot, cfg.AllowedPaths[0])
 				assert.Equal(t, outRoot, cfg.OutputRoot)
@@ -73,9 +75,24 @@ func TestLoadConfigFromEnv(t *testing.T) {
 			apiKey:       "test-key",
 			checkCfg: func(t *testing.T, cfg Config) {
 				t.Helper()
-				require.Len(t, cfg.AllowedPaths, 2)
+				require.Len(t, cfg.AllowedPaths, 3)
 				assert.Equal(t, "/a", cfg.AllowedPaths[0])
 				assert.Equal(t, "/b", cfg.AllowedPaths[1])
+				assert.Equal(t, outRoot, cfg.AllowedPaths[2])
+			},
+		},
+		{
+			name:         "output root auto-included when not in DEMESNE_ALLOWED_PATHS",
+			allowedPaths: "/a",
+			outputRoot:   outRoot,
+			domain:       testDomain,
+			apiKey:       testKey,
+			checkCfg: func(t *testing.T, cfg Config) {
+				t.Helper()
+				require.Len(t, cfg.AllowedPaths, 2)
+				assert.Equal(t, "/a", cfg.AllowedPaths[0])
+				assert.Equal(t, outRoot, cfg.AllowedPaths[1])
+				assert.Equal(t, outRoot, cfg.OutputRoot)
 			},
 		},
 	}

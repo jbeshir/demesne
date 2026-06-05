@@ -9,8 +9,8 @@
 #   - jq installed and on $PATH
 #   - demesne-mcp on $PATH (or DEMESNE_MCP set to its path)
 #   - OPEN_SANDBOX_DOMAIN, OPEN_SANDBOX_API_KEY set on the demesne process
-#   - DEMESNE_ALLOWED_PATHS includes /tmp/demesne-example
-#   - /tmp/demesne-example/data.csv exists (see README.md Setup section)
+#   - DEMESNE_ALLOWED_PATHS includes /home/username/demesne-example
+#   - /home/username/demesne-example/data.csv exists (see README.md Setup section)
 
 set -euo pipefail
 
