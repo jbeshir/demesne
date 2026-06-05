@@ -62,12 +62,19 @@ codex mcp add \
 
 ## Claude Code
 
-Claude Code loads MCP servers from `.mcp.json` in your project root (project scope, committed to
-git) or from `~/.claude.json` (local/user scope, private).
+Add demesne to your user-level MCP config (`~/.claude.json`, picked up in every project) with `claude mcp add`:
 
-### `.mcp.json` (project scope — recommended)
+```bash
+claude mcp add --transport stdio --scope user \
+  --env OPEN_SANDBOX_DOMAIN=localhost:8080 \
+  --env OPEN_SANDBOX_API_KEY=<key> \
+  --env DEMESNE_ALLOWED_PATHS=/home/username/code \
+  demesne -- /usr/local/bin/demesne-mcp
+```
 
-Create or edit `.mcp.json` in your project root:
+Replace `/usr/local/bin/demesne-mcp` with the actual path to the binary (e.g. `~/go/bin/demesne-mcp`). Keep `--transport stdio` ahead of the server name `demesne` — `--env` must not be immediately followed by it.
+
+Or add the entry to `~/.claude.json` by hand under `mcpServers`:
 
 ```json
 {
@@ -86,36 +93,14 @@ Create or edit `.mcp.json` in your project root:
 }
 ```
 
-Replace `/usr/local/bin/demesne-mcp` with the actual path to the binary (e.g. `~/go/bin/demesne-mcp`).
-
-### `claude mcp add` CLI shortcut
-
-```bash
-# Add to project scope (writes .mcp.json):
-claude mcp add --transport stdio --scope project demesne -- /usr/local/bin/demesne-mcp
-
-# Then set env vars manually in .mcp.json, or pass them inline:
-claude mcp add --transport stdio \
-  --env OPEN_SANDBOX_DOMAIN=localhost:8080 \
-  --env OPEN_SANDBOX_API_KEY=<key> \
-  --env DEMESNE_ALLOWED_PATHS=/home/username/code \
-  demesne -- /usr/local/bin/demesne-mcp
-```
-
-Keep `--transport stdio` between the last `--env` and the server name `demesne` — `--env` must
-not be immediately followed by the server name.
-
-Scope flags: `--scope local` (default, `~/.claude.json`), `--scope project` (`.mcp.json`),
-`--scope user` (`~/.claude.json`, all projects).
-
 ---
 
 ## Let your agent read demesne's output
 
-demesne writes each run's files to its output directory — default `~/.demesne/out` (set by `DEMESNE_OUTPUT_ROOT`) — and returns that host path as `output_dir`. For your agent to open those result files, grant it read access to that directory during setup:
+demesne writes each run's files to its output directory — default `~/.demesne/out` (set by `DEMESNE_OUTPUT_ROOT`) — and returns that host path as `output_dir`. So your agent can open those result files without a permission prompt on every read, grant it read access to that directory during setup:
 
 - **Codex** — if its sandbox is configured to restrict reads outside the workspace, allow `~/.demesne/out` among its readable paths so it can open the results.
-- **Claude Code** — add it to `permissions.additionalDirectories` in `.claude/settings.json` (project) or `~/.claude/settings.json` (user), or start the session with `--add-dir ~/.demesne/out`:
+- **Claude Code** — add it to `permissions.additionalDirectories` in `~/.claude/settings.json`, or start the session with `--add-dir ~/.demesne/out`:
   ```json
   {
     "permissions": {
@@ -124,7 +109,7 @@ demesne writes each run's files to its output directory — default `~/.demesne/
   }
   ```
 
-Without this, the agent still receives each run's stdout, stderr, and cost summary in the tool result — it just can't open the files a run wrote to `/out`.
+Without this, the agent still gets each run's stdout, stderr, and cost summary in the tool result and can still open the output files — it just has to approve a read-permission prompt each time it opens one.
 
 ---
 

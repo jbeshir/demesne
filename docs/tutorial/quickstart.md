@@ -130,28 +130,19 @@ No output on startup is correct — it is waiting for a client. This manual invo
 
 ## Step 4: Wire into your agent (Claude Code or Codex)
 
-Create or edit `.mcp.json` in your project root (this is the project-scoped MCP config committed to git) with one entry for demesne:
+Add demesne to your user-level Claude Code config (`~/.claude.json`, available in every project) with `claude mcp add`:
 
-```json
-{
-  "mcpServers": {
-    "demesne": {
-      "type": "stdio",
-      "command": "/usr/local/bin/demesne-mcp",
-      "args": [],
-      "env": {
-        "DEMESNE_ALLOWED_PATHS": "/home/username/code",
-        "OPEN_SANDBOX_DOMAIN": "localhost:8080",
-        "OPEN_SANDBOX_API_KEY": "your-secret-key"
-      }
-    }
-  }
-}
+```bash
+claude mcp add --transport stdio --scope user \
+  --env OPEN_SANDBOX_DOMAIN=localhost:8080 \
+  --env OPEN_SANDBOX_API_KEY=your-secret-key \
+  --env DEMESNE_ALLOWED_PATHS=/home/username/code \
+  demesne -- /usr/local/bin/demesne-mcp
 ```
 
-Replace `/usr/local/bin/demesne-mcp` with the actual path from Step 1 (e.g. `~/go/bin/demesne-mcp`), and use the same `OPEN_SANDBOX_API_KEY` you set as `[server] api_key` in Step 2. Claude Code will spawn `demesne-mcp` as a child process and communicate over stdio.
+Replace `/usr/local/bin/demesne-mcp` with the actual path from Step 1 (e.g. `~/go/bin/demesne-mcp`), and use the same `OPEN_SANDBOX_API_KEY` you set as `[server] api_key` in Step 2. Keep `--transport stdio` ahead of the server name `demesne`. Claude Code spawns `demesne-mcp` as a child process and talks to it over stdio.
 
-To let your agent read the files a run writes — demesne returns an `output_dir` under `~/.demesne/out` — also grant it read access to that directory. In Claude Code, add `~/.demesne/out` to `permissions.additionalDirectories`, or start the session with `--add-dir ~/.demesne/out`. See [Let your agent read demesne's output](../how-to/wire-into-mcp-client.md#let-your-agent-read-demesnes-output).
+demesne returns each run's `output_dir` under `~/.demesne/out`; so your agent can open those files without a permission prompt on every read, grant it read access — in Claude Code, add `~/.demesne/out` to `permissions.additionalDirectories` or start the session with `--add-dir ~/.demesne/out`. See [Let your agent read demesne's output](../how-to/wire-into-mcp-client.md#let-your-agent-read-demesnes-output).
 
 Using Codex (or another client)? See [Wire demesne into your MCP client](../how-to/wire-into-mcp-client.md) for the Codex `config.toml` block and Claude Desktop / VS Code pointers.
 
