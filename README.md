@@ -7,7 +7,6 @@ An **agent-agnostic, local, sandboxed agent-orchestration MCP server you drive f
 [![License](https://img.shields.io/github/license/jbeshir/demesne)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/jbeshir/demesne)](https://github.com/jbeshir/demesne/releases/latest)
 [![CI](https://github.com/jbeshir/demesne/actions/workflows/ci.yml/badge.svg)](https://github.com/jbeshir/demesne/actions/workflows/ci.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jbeshir/demesne/badge)](https://scorecard.dev/viewer/?uri=github.com/jbeshir/demesne)
 
 > [!WARNING]
 > **Alpha — best-effort.** demesne is early software, and is largely built using itself (its own sandboxed agents do much of the work). Expect rough edges, gaps, and breaking changes between versions. Treat it as alpha and best-effort, and review what it does before relying on it.
