@@ -6,8 +6,6 @@
     "name": "sandbox_agent",
     "arguments": {
       "prompt": "Write a Python script that prints the first 10 Fibonacci numbers to /out/fib.txt, then cat it.",
-      "agent": "claude-code",
-      "model": "sonnet",
       "egress": "package-managers"
     }
   }

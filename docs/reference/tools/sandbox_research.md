@@ -33,9 +33,7 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
   "params": {
     "name": "sandbox_research",
     "arguments": {
-      "prompt": "Search for the latest benchmarks comparing LLM inference frameworks and write a summary to /out/report.md.",
-      "agent": "claude-code",
-      "model": "sonnet"
+      "prompt": "Search for the latest benchmarks comparing LLM inference frameworks and write a summary to /out/report.md."
     }
   }
 }

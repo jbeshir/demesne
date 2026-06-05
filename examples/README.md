@@ -1,6 +1,6 @@
 # demesne examples
 
-These are runnable examples of the kinds of work you can ask your agent to run through demesne. Each example shows the natural-language request a user would make to their Claude Code/agent, what they get back, and (for reference) the raw JSON-RPC payload the agent ends up issuing to the demesne stdio server.
+These are runnable examples of the kinds of work you can ask your agent to run through demesne. Each example shows the natural-language request a user would make to their agent, what they get back, and (for reference) the raw JSON-RPC payload the agent ends up issuing to the demesne stdio server.
 
 - [`hello-script/`](hello-script/) — **one-off script**: run a single shell command in a fresh sandbox.
 - [`persistent-session/`](persistent-session/) — **persistent session**: create → exec → upload → exec → download → destroy lifecycle.

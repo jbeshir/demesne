@@ -15,7 +15,7 @@ The agent's redirected stdout, written as newline-delimited JSON (NDJSON). Every
 
 Each line is a JSON object emitted by the agent CLI with NDJSON / stream-json output enabled.
 
-**claude-code** (default agent): invoked with `--output-format stream-json --verbose`. Event shapes:
+**claude-code**: invoked with `--output-format stream-json --verbose`. Event shapes:
 
 - `{"type":"assistant","message":{...}}` — intermediate assistant turn; `message.content` is an array of content blocks (`text`, `tool_use`, etc.).
 - `{"type":"result","subtype":"success","result":"...","usage":{...}}` — terminal event; `result` holds the final answer, emitted once at exit.
@@ -29,7 +29,7 @@ A typical result-event line:
 
 For the full event schema see the Claude Code CLI reference or the parser source at `internal/agents/anthropic/streamjson.go`.
 
-**codex**: invoked with `--json`. The terminal event is `{"type":"item.completed","item":{"type":"agent_message","text":"..."}}`. Parser source: `internal/agents/codex/streamjson.go`.
+**codex** (the default agent): invoked with `--json`. The terminal event is `{"type":"item.completed","item":{"type":"agent_message","text":"..."}}`. Parser source: `internal/agents/codex/streamjson.go`.
 
 ## How `ResultText` extracts the final answer
 

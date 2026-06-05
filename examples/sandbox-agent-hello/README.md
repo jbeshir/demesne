@@ -6,7 +6,7 @@ This example shows how to hand a one-shot task to a sub-agent: the agent runs in
 
 > "Spin up a sub-agent that writes a Fibonacci script, runs it, and saves the output to /out/fib.txt."
 
-The agent will call `sandbox_agent` with a prompt describing the task. The sub-agent runs the Claude Code CLI (`claude-code` provider, `sonnet` model by default) inside a fresh sandbox with `egress: "package-managers"` so it can reach PyPI if needed. You need `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` set — see ["Getting an OAuth token (claude-code provider)"](../../docs/explanation/trust-boundary.md#getting-an-oauth-token-claude-code-provider) in `docs/explanation/trust-boundary.md`.
+The agent will call `sandbox_agent` with a prompt describing the task. The sub-agent runs your configured coding agent — Codex by default, or Claude Code — inside a fresh sandbox with `egress: "package-managers"` so it can reach PyPI if needed. You need credentials configured for whichever agent it uses; see [Agent providers](../../docs/reference/configuration.md#agent-providers).
 
 ## What you get
 
@@ -29,8 +29,6 @@ The tool returns the sub-agent's summary text. The `output_dir` on the host cont
     "name": "sandbox_agent",
     "arguments": {
       "prompt": "Write a Python script that prints the first 10 Fibonacci numbers to /out/fib.txt, then cat it.",
-      "agent": "claude-code",
-      "model": "sonnet",
       "egress": "package-managers"
     }
   }
@@ -38,9 +36,9 @@ The tool returns the sub-agent's summary text. The `output_dir` on the host cont
 ```
 
 - `prompt` — the task text handed to the agent. The agent runs inside a fresh sandbox and can write artefacts to `/out`.
-- `agent` — `claude-code` (the default). The agent runs the Claude Code CLI inside the sandbox.
-- `model` — `sonnet` (the default). Claude Sonnet is used for cost-efficiency on simple tasks.
-- `egress` — `package-managers` allows the agent to reach npm/PyPI/conda registries in addition to the Anthropic API proxy (which is always reachable). Use `none` to lock down all egress except the API proxy.
+- `agent` — omitted here, so demesne uses its default: Codex when Codex credentials are configured, otherwise Claude Code. Pass `agent` (`codex` or `claude-code`) to force a provider.
+- `model` — omitted, so the provider's default model is used (Codex `gpt-5.5`; Claude Code `sonnet`).
+- `egress` — `package-managers` allows the agent to reach npm/PyPI/conda registries in addition to the vendor API proxy (Anthropic or OpenAI/Codex), which is always reachable. Use `none` to lock down all egress except the API proxy.
 
 **Note:** `egress: "open"` is not permitted for `sandbox_agent`. If you need unrestricted outbound access, use `sandbox_research` instead — but be aware that `sandbox_research` runs in a private workspace with no `/in` mounts. See [`../../docs/reference/nested-sandboxes.md`](../../docs/reference/nested-sandboxes.md) for the layout and conventions children follow.
 

@@ -1,6 +1,6 @@
 # Equip your agent for demesne
 
-When you want a top-level Claude Code (or other) agent to spawn demesne sandboxes, paste this block into that agent's system prompt. It's self-contained and doesn't depend on the auto-generated context demesne writes for the child agents.
+When you want a top-level agent (Codex, Claude Code, or another) to spawn demesne sandboxes, paste this block into that agent's system prompt. It's self-contained and doesn't depend on the auto-generated context demesne writes for the child agents.
 
 ## System prompt block
 

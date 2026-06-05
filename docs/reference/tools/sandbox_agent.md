@@ -37,8 +37,6 @@ Run an AI agent inside a fresh sandbox against the caller's prompt.
     "name": "sandbox_agent",
     "arguments": {
       "prompt": "Write a Python script that reads /in/data.csv and outputs a summary to /out/summary.txt.",
-      "agent": "claude-code",
-      "model": "sonnet",
       "egress": "none",
       "files": ["/home/user/data.csv"]
     }
