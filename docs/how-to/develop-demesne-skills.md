@@ -32,13 +32,15 @@ Decide what each phase produces, where, and in what format — then follow that 
 
 Spell the contract in the skill definition. A phase that writes to an undeclared path is likely to be silently lost.
 
-## Verifier/judge pattern
+## Verifier/judge patterns
 
-After a worker phase, a second `sandbox_agent` reads the worker's output (available at `/in/previous-jobs/<worker-name>/`) and writes `PASS` or `FAIL` to `/out/verdict.txt`. An external judge has a fresh context and no stake in the worker's output — it cannot rationalise away errors it did not produce.
+A separate agent with a fresh context and no stake in the work catches errors the producer would rationalise away. There are two distinct uses — pick deliberately:
 
-Cap retries (e.g. two worker attempts before escalating). Without a cap, a retry loop on a hard task can burn significant tokens before surfacing to the user.
+**Implementer–verifier cycle** — gate one produced artefact on correctness. The implementer writes its output; a verifier reads it (at `/in/previous-jobs/<worker-name>/`) and returns `PASS`/`FAIL` against explicit criteria; on `FAIL` a fix phase runs and the verifier re-checks. Cap the rounds (e.g. two attempts before escalating) — an uncapped loop on a hard task burns tokens. Use when there's a single thing to get right.
 
-See [Spawning a verifier/judge child](../reference/nested-sandboxes.md#spawning-a-verifierjudge-child) for the exact tool-call shape.
+**Verifier as a result filter** — raise the precision of a *set* of results. A producer over-generates candidate findings (a survey's suspected bugs, a review's flagged issues); a verifier examines each — often one verifier per finding, prompted to *refute* it — and you keep only the ones that survive, dropping false positives. There's no fix loop: you're filtering the producer's output, not iterating it. Use when a false positive in the final report costs more than an extra check.
+
+See [Spawning a verifier/judge child](../reference/nested-sandboxes.md#spawning-a-verifierjudge-child) for the tool-call shape.
 
 ## Effort calibration
 

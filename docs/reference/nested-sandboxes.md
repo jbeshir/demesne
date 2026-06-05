@@ -100,6 +100,8 @@ The root run's `results.json` already sums the whole tree in `total_usage_usd`, 
 
 A common orchestration shape is a second `sandbox_agent` that evaluates a worker's output against explicit criteria, rather than the worker self-critiquing in the same context window. An external judge has a fresh context and cannot rationalise away errors it did not produce.
 
+This serves two distinct ends. In an **implementer–verifier cycle** the judge gates one artefact: it returns `PASS`/`FAIL`, and a `FAIL` drives a capped fix-and-recheck loop. As a **result filter** the judge instead runs over a *set* of candidate findings — typically one judge per finding, prompted to refute it — keeping only the survivors and dropping false positives, without iterating the producer. The call shape below is the cycle flavour; the filter flavour fans the same call out across the findings.
+
 The judge runs as a sibling of the worker. Because it spawns after the worker completes, it sees the worker's output at `/in/previous-jobs/<worker-name>/`, with the full reasoning trace at `/in/previous-jobs/<worker-name>/transcript.jsonl` (see [`transcript-jsonl.md`](transcript-jsonl.md)).
 
 ```json

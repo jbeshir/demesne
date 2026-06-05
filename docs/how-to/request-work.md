@@ -36,7 +36,7 @@ See the [persistent-session example](../../examples/persistent-session/) for the
 
 ## Multi-agent orchestration
 
-Fan out work across several child agents, or use a verifier/judge pattern to have one agent check another's output. Reach for this when a task is large enough to benefit from parallel workers, or when you want an independent quality check.
+Fan out work across several child agents, or use a verifier/judge pattern — either to gate one agent's output (check, fix, re-check) or to filter a set of findings down to the confirmed ones. Reach for this when a task benefits from parallel workers, or when you want an independent quality check.
 
 > "Have one agent write the report and a second agent review it for accuracy. Return PASS or FAIL."
 
