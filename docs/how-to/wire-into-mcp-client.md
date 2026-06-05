@@ -110,6 +110,24 @@ codex mcp add \
 
 ---
 
+## Let your agent read demesne's output
+
+demesne writes each run's files to its output directory — default `~/.demesne/out` (set by `DEMESNE_OUTPUT_ROOT`) — and returns that host path as `output_dir`. For your agent to open those result files, grant it read access to that directory during setup:
+
+- **Claude Code** — add it to `permissions.additionalDirectories` in `.claude/settings.json` (project) or `~/.claude/settings.json` (user), or start the session with `--add-dir ~/.demesne/out`:
+  ```json
+  {
+    "permissions": {
+      "additionalDirectories": ["~/.demesne/out"]
+    }
+  }
+  ```
+- **Codex** — if its sandbox is configured to restrict reads outside the workspace, allow `~/.demesne/out` among its readable paths so it can open the results.
+
+Without this, the agent still receives each run's stdout, stderr, and cost summary in the tool result — it just can't open the files a run wrote to `/out`.
+
+---
+
 ## Other MCP clients
 
 demesne wires into any MCP-compatible client over stdio, but its **file features** — mounting

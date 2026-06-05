@@ -36,11 +36,18 @@ $ demesne-mcp --help
 
 ## Step 2: Run a local OpenSandbox
 
-Demesne delegates container lifecycle to [OpenSandbox](https://github.com/alibaba/OpenSandbox). The reference server runs locally against Docker:
+Demesne delegates container lifecycle to [OpenSandbox](https://github.com/alibaba/OpenSandbox). The reference server runs locally against Docker. Install it and generate a config:
 
 ```
 pipx install uv
 uvx opensandbox-server init-config ~/.sandbox.toml --example docker
+```
+
+Before starting the server, complete the host prerequisites — they are required, not optional. Edit `~/.sandbox.toml` so its `[storage] allowed_host_paths` includes both the paths you intend to mount and demesne's output root (`~/.demesne/out`), and on rootless podman set the `fs.pipe-user-pages-soft=0` sysctl. The full checklist is in [docs/reference/requirements.md](../reference/requirements.md); skipping it causes bind-mount failures (`VOLUME::HOST_PATH_NOT_ALLOWED`) and broken sandbox fan-out.
+
+Then start the server:
+
+```
 uvx opensandbox-server --config ~/.sandbox.toml
 ```
 
@@ -59,8 +66,6 @@ OpenSandbox is **long-running** — it must stay up for the entire demesne sessi
    ```bash
    tmux new-session -d -s opensandbox 'uvx opensandbox-server --config ~/.sandbox.toml'
    ```
-
-> **Before starting OpenSandbox**, complete the host-prerequisites checklist in [docs/reference/requirements.md](../reference/requirements.md) — `.sandbox.toml` security settings and the rootless-podman pipe-cap sysctl.
 
 #### Expected output
 
@@ -119,6 +124,8 @@ Create or edit `.mcp.json` in your project root (this is the project-scoped MCP 
 ```
 
 Replace `/usr/local/bin/demesne-mcp` with the actual path from Step 1 (e.g. `~/go/bin/demesne-mcp`). Claude Code will spawn `demesne-mcp` as a child process and communicate over stdio.
+
+To let your agent read the files a run writes — demesne returns an `output_dir` under `~/.demesne/out` — also grant it read access to that directory. In Claude Code, add `~/.demesne/out` to `permissions.additionalDirectories`, or start the session with `--add-dir ~/.demesne/out`. See [Let your agent read demesne's output](../how-to/wire-into-mcp-client.md#let-your-agent-read-demesnes-output).
 
 Using Codex (or another client)? See [Wire demesne into your MCP client](../how-to/wire-into-mcp-client.md) for the Codex `config.toml` block and Claude Desktop / VS Code pointers.
 
