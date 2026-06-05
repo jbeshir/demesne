@@ -11,7 +11,7 @@ uses ChatGPT-OAuth (not an API key): demesne reads the host's OAuth token
 set from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written
 by `codex login`); the proxy holds that token set off-agent, refreshes it
 autonomously, and swaps in a fresh access token when forwarding — the
-sandboxed Codex only ever sees a per-sandbox fake bearer.
+containerised Codex only ever sees a per-sandbox fake bearer.
 
 `sandbox_agent` is the input-bearing variant: caller-supplied host paths are mounted read-only at `/in/<basename>`, and egress is restricted to the agent provider's API proxy (with `package-managers` as an opt-in extra). `sandbox_research` is the open-egress variant: no inputs, but the sandbox can reach anywhere on the open internet. `sandbox_agent` refuses `egress: "open"` and `sandbox_research` accepts no `files` / `directories` — see [Egress modes](key-concepts.md#egress-modes) for the rationale.
 

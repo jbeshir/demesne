@@ -13,16 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-06-05
 
-First public release — an agent-agnostic, local, sandboxed agent-orchestration MCP server you drive from your agent of choice. It runs untrusted shell, scripts, and AI coding agents in disposable OpenSandbox containers, with read-only host mounts and egress allowlists.
+First public release — an agent-agnostic, local, containerised agent-orchestration MCP server you drive from your agent of choice. It runs untrusted shell, scripts, and AI coding agents in disposable OpenSandbox containers, with read-only host mounts and egress allowlists.
 
 ### Tools
 - **Sandboxes** — `sandbox_script` (one-shot) plus `sandbox_create` / `sandbox_exec` / `sandbox_upload` / `sandbox_download` / `sandbox_destroy` (persistent) run shell and scripts in disposable containers.
-- **Agents** — `sandbox_agent` and `sandbox_research` run a coding-agent CLI inside a sandbox (`codex` by default when Codex credentials are configured, otherwise `claude-code`). Sandboxed agents can spawn child sandboxes and, with configuration, reach a read-only subset of the host's MCP server tools.
+- **Agents** — `sandbox_agent` and `sandbox_research` run a coding-agent CLI inside a sandbox (`codex` by default when Codex credentials are configured, otherwise `claude-code`). Containerised agents can spawn child sandboxes and, with configuration, reach a read-only subset of the host's MCP server tools.
 
 ### Security and orchestration
 - Read-only host inputs at `/in`, output-only `/out`, and per-tool egress allowlists; agent outbound HTTPS is confined to a credential-isolating per-sandbox proxy sidecar, so the agent never sees the real token.
 - Separate, tail-bounded stdout/stderr in tool results; indicative per-run cost reporting; a results roll-up across the child-sandbox tree.
-- Host MCP proxy: re-expose a curated, read-only subset of your configured MCP servers to sandboxed agents through a per-sandbox tunnel.
+- Host MCP proxy: re-expose a curated, read-only subset of your configured MCP servers to containerised agents through a per-sandbox tunnel.
 
 The milestone sections below (M1–M6) are the per-feature development log that rolls into this release.
 

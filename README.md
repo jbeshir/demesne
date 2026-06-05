@@ -2,14 +2,14 @@
 
 <!-- mcp-name: io.github.jbeshir/demesne-mcp -->
 
-An **agent-agnostic, local, sandboxed agent-orchestration MCP server you drive from your agent of choice.** It runs untrusted shell, scripts, and AI coding agents in disposable containers, decoupling agent reasoning from execution effects. Host mounts are read-only; outbound network access is governed by egress allowlists.
+An **agent-agnostic, local, containerised agent-orchestration MCP server you drive from your agent of choice.** It runs untrusted shell, scripts, and AI coding agents in disposable containers, decoupling agent reasoning from execution effects. Host mounts are read-only; outbound network access is governed by egress allowlists.
 
 [![License](https://img.shields.io/github/license/jbeshir/demesne)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/jbeshir/demesne)](https://github.com/jbeshir/demesne/releases/latest)
 [![CI](https://github.com/jbeshir/demesne/actions/workflows/ci.yml/badge.svg)](https://github.com/jbeshir/demesne/actions/workflows/ci.yml)
 
 > [!WARNING]
-> **Alpha — best-effort.** demesne is early software, and is largely built using itself (its own sandboxed agents do much of the work). Expect rough edges, gaps, and breaking changes between versions. Treat it as alpha and best-effort, and review what it does before relying on it.
+> **Alpha — best-effort.** demesne is early software, and is largely built using itself (its own containerised agents do much of the work). Expect rough edges, gaps, and breaking changes between versions. Treat it as alpha and best-effort, and review what it does before relying on it.
 
 ## What you can do
 
@@ -19,13 +19,13 @@ Ask your agent to run through demesne:
 - **Long-running research with open internet** — spawn a research agent with unrestricted outbound access. [Reference](docs/reference/tools/sandbox_research.md)
 - **Delegated coding-agent tasks** — hand off a prompt to a sub-agent running inside a sandbox. [Example](examples/sandbox-agent-hello/)
 - **Persistent sessions** — create a sandbox, run multiple commands, upload/download files, then destroy it. [Example](examples/persistent-session/)
-- **Multi-agent orchestration** — the orchestrator agent is itself a sandboxed run that spawns child sandboxes for its workers and verifier, dispatching tasks and judging results across the tree. [Example](examples/sandbox-agent-verifier/)
+- **Multi-agent orchestration** — the orchestrator agent is itself a containerised run that spawns child sandboxes for its workers and verifier, dispatching tasks and judging results across the tree. [Example](examples/sandbox-agent-verifier/)
 
-Together these let your agent take on larger tasks autonomously **and** safely: you can push security-review-awkward script execution, autonomous research, and entire multi-agent pipelines into sandboxes that run with no permission prompts — the autonomy you'd otherwise reach for `--dangerously-skip-permissions` to get, but without the risk, because each run is contained, host mounts are read-only, and egress is allowlisted. And you don't pre-declare the pipeline: your agent composes the orchestration prompt itself for the task at hand, and the sandboxed orchestrator adapts the layout and subagents as it runs.
+Together these let your agent take on larger tasks more autonomously: you can push security-review-awkward script execution, autonomous research, and entire multi-agent pipelines into containers that run with no permission prompts — much of the autonomy you'd otherwise reach for `--dangerously-skip-permissions` to get, but with the host kept at arm's length by a container boundary, read-only mounts, and egress allowlists. (That boundary is container-level isolation, not a hard security guarantee — see [SECURITY.md](SECURITY.md).) And you don't pre-declare the pipeline: your agent composes the orchestration prompt itself for the task at hand, and the containerised orchestrator adapts the layout and subagents as it runs.
 
 ## How it works
 
-Sandboxed agents can themselves spawn sandboxes, and — with appropriate configuration — get a read-only subset of your host's MCP server tools proxied in through a per-sandbox tunnel. See [docs/reference/nested-sandboxes.md](docs/reference/nested-sandboxes.md).
+Containerised agents can themselves spawn sandboxes, and — with appropriate configuration — get a read-only subset of your host's MCP server tools proxied in through a per-sandbox tunnel. See [docs/reference/nested-sandboxes.md](docs/reference/nested-sandboxes.md).
 
 ## Get started
 

@@ -25,7 +25,7 @@ For a glossary of the terms used throughout this document see [key-concepts.md](
 
 Every sandbox (script, persistent, and agent alike) spawns a companion **sidecar container** that joins OpenSandbox's egress-sidecar network namespace. The sidecar is built from the embedded `cmd/demesne-sidecar` binary and runs whichever proxies the sandbox needs, all bound to `127.0.0.1` on well-known ports.
 
-Because the sidecar runs in the egress-sidecar netns, it can reach the open internet via a `SO_MARK`-tagged socket that bypasses OpenSandbox's egress filter (`CAP_NET_ADMIN` is granted only to the sidecar, not the sandbox). The sandbox itself reaches the internet only through the sidecar's loopback proxies — giving demesne precise control over what the sandboxed process can actually reach regardless of the declared egress policy.
+Because the sidecar runs in the egress-sidecar netns, it can reach the open internet via a `SO_MARK`-tagged socket that bypasses OpenSandbox's egress filter (`CAP_NET_ADMIN` is granted only to the sidecar, not the sandbox). The sandbox itself reaches the internet only through the sidecar's loopback proxies — giving demesne precise control over what the containerised process can actually reach regardless of the declared egress policy.
 
 See [trust-boundary.md](trust-boundary.md) for the full trust-edge diagram showing how traffic flows from the agent through the sidecar to upstream vendor APIs.
 
@@ -35,11 +35,11 @@ See [trust-boundary.md](trust-boundary.md) for the full trust-edge diagram showi
 
 **Anthropic API proxy — `127.0.0.1:8088`** (`internal/proxies/anthropic`)
 
-Present in `sandbox_agent` and `sandbox_research` sandboxes using the claude-code provider. The proxy holds the real `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` from the sidecar environment; the sandboxed claude-code sees only a per-sandbox synthetic bearer token (`demesne-agent-…`) that the proxy validates and swaps for the real token before forwarding upstream. The proxy also parses `usage` blocks in every API response (both streaming SSE and JSON bodies), accumulates token counts per model family against the embedded pricing table (`internal/proxies/anthropic/pricing.go`), and writes indicative cost snapshots to `usage.json` after each request.
+Present in `sandbox_agent` and `sandbox_research` sandboxes using the claude-code provider. The proxy holds the real `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` from the sidecar environment; the containerised claude-code sees only a per-sandbox synthetic bearer token (`demesne-agent-…`) that the proxy validates and swaps for the real token before forwarding upstream. The proxy also parses `usage` blocks in every API response (both streaming SSE and JSON bodies), accumulates token counts per model family against the embedded pricing table (`internal/proxies/anthropic/pricing.go`), and writes indicative cost snapshots to `usage.json` after each request.
 
 **OpenAI / Codex proxy — `127.0.0.1:8086`** (`internal/proxies/openai`)
 
-Present in `sandbox_agent` sandboxes using the codex provider. Works the same way as the Anthropic proxy but for the ChatGPT Codex backend: demesne reads the host's OAuth token set from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written by `codex login`), holds it off-agent, refreshes it autonomously, and injects a fresh access token into each forwarded request. The sandboxed Codex sees only the synthetic token and never the real credential.
+Present in `sandbox_agent` sandboxes using the codex provider. Works the same way as the Anthropic proxy but for the ChatGPT Codex backend: demesne reads the host's OAuth token set from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written by `codex login`), holds it off-agent, refreshes it autonomously, and injects a fresh access token into each forwarded request. The containerised Codex sees only the synthetic token and never the real credential.
 
 **Go-module proxy — `127.0.0.1:8087`** (`internal/proxies/goproxy`)
 

@@ -2,6 +2,18 @@
 
 This tutorial takes you from a clean machine to a successful `sandbox_script` call wired through Claude Code in five copy-pasteable steps. By the end you will have demesne running as a stdio MCP server and Claude Code invoking it to run a shell command inside a disposable container.
 
+## Prerequisites
+
+demesne runs your workloads as local containers via OpenSandbox, so two host requirements come first — settle them before installing OpenSandbox:
+
+- **Platform** — your host must be able to run `linux/amd64` containers: native on `linux/amd64`, or via a Docker/Podman Machine VM (Rosetta on Apple Silicon) on macOS and Windows. Only `linux/amd64` is actively tested.
+- **Container runtime** — install **Docker or Podman**. Rootless Podman, serving the Docker-compatible API, is supported and is the tested setup.
+- **Rootless Podman only** — use cgroup v2, and set `fs.pipe-user-pages-soft=0` (a fan-out of concurrent containers exceeds the default pipe-page cap): `sudo sysctl -w fs.pipe-user-pages-soft=0`.
+
+See [docs/reference/requirements.md](../reference/requirements.md) for the full host checklist. Everything below assumes a working container runtime.
+
+---
+
 ## Step 1: Install demesne
 
 ### Option A: Download a release binary (recommended)
@@ -36,14 +48,14 @@ $ demesne-mcp --help
 
 ## Step 2: Run a local OpenSandbox
 
-Demesne delegates container lifecycle to [OpenSandbox](https://github.com/alibaba/OpenSandbox). The reference server runs locally against Docker. Install it and generate a config:
+Demesne delegates container lifecycle to [OpenSandbox](https://github.com/alibaba/OpenSandbox). The reference server runs locally against Docker or Podman. Install it and generate a config:
 
 ```
 pipx install uv
 uvx opensandbox-server init-config ~/.sandbox.toml --example docker
 ```
 
-Before starting the server, complete the host prerequisites — they are required, not optional. Edit `~/.sandbox.toml` so its `[storage] allowed_host_paths` includes both the paths you intend to mount and demesne's output root (`~/.demesne/out`), and on rootless podman set the `fs.pipe-user-pages-soft=0` sysctl. The full checklist is in [docs/reference/requirements.md](../reference/requirements.md); skipping it causes bind-mount failures (`VOLUME::HOST_PATH_NOT_ALLOWED`) and broken sandbox fan-out.
+Before starting the server, edit `~/.sandbox.toml` — these are security settings, not optional: set `[storage] allowed_host_paths` to include both the paths you intend to mount and demesne's output root (`~/.demesne/out`), keep `[egress] mode = "dns+nft"`, and give `[server] api_key` a non-empty value. See [docs/reference/requirements.md](../reference/requirements.md) for details; an unset `allowed_host_paths` causes bind-mount failures (`VOLUME::HOST_PATH_NOT_ALLOWED`).
 
 Then start the server:
 

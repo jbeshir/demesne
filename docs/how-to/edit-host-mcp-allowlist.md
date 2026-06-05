@@ -1,6 +1,6 @@
 # Edit the host MCP allowlist
 
-Demesne re-exposes a curated subset of your host's stdio MCP servers to sandboxed agents. The allowlist file controls which tools from each server are exposed. By default, demesne seeds a conservative read-only allowlist for every known server.
+Demesne re-exposes a curated subset of your host's stdio MCP servers to containerised agents. The allowlist file controls which tools from each server are exposed. By default, demesne seeds a conservative read-only allowlist for every known server.
 
 ## The allowlist file
 

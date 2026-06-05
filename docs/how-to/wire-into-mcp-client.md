@@ -135,7 +135,7 @@ host paths via `files`/`directories` and returning host `output_dir` paths the c
 need a co-located, filesystem-aware client like Claude Code or Codex on the same host.
 
 File-path-blind clients — for example Claude Desktop, or containerized/remote agents reached
-through an MCP proxy — can still run sandboxed work and receive the text result (stdout, stderr,
+through an MCP proxy — can still run containerised work and receive the text result (stdout, stderr,
 cost summary), but can't mount their own files or open the returned `output_dir` unless they're
 paired with a filesystem MCP server on the same host that can do that for them.
 

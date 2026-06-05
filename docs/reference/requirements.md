@@ -4,7 +4,9 @@ Everything that must be true of your host before demesne will run.
 
 ## Container runtime
 
-Demesne embeds a `linux/amd64` helper binary that runs inside every sandbox container, so the host's container runtime must be able to execute `linux/amd64` containers. This is the standard path on:
+demesne and OpenSandbox run every workload as a local container, so you need **Docker or Podman** installed. Rootless Podman, serving the Docker-compatible API, is supported and is the tested setup; OpenSandbox drives it through its Docker-compatible socket, and demesne shells out to the same `docker`/`podman` CLI on the host.
+
+Demesne embeds a `linux/amd64` helper binary that runs inside every container, so the runtime must be able to execute `linux/amd64` containers. This is the standard path on:
 
 - **linux/amd64** — native.
 - **darwin/amd64** and **windows/amd64** — via the Docker/Podman Machine Linux VM.
@@ -16,9 +18,11 @@ Releases are published for `linux/amd64`, `darwin/amd64`, `darwin/arm64`, and `w
 
 The release binaries linked from the quickstart need no Go toolchain. If you want to build from source instead (e.g. as a contributor), see [CONTRIBUTING.md](../../CONTRIBUTING.md). The build requires Go 1.26 or later (see `go.mod`).
 
-## OpenSandbox configuration
+## OpenSandbox
 
-Demesne talks to a long-running [OpenSandbox](https://github.com/alibaba/OpenSandbox) lifecycle server (typically via `uvx opensandbox-server --config ~/.sandbox.toml`). The packaged docker example defaults are too permissive for use as a security boundary. Change three settings in `~/.sandbox.toml` before starting the server:
+OpenSandbox runs as `opensandbox-server`, a Python application that drives the Docker/Podman runtime above — install it with `pipx` / `uv` (the [Quickstart](../tutorial/quickstart.md) uses `pipx install uv` then `uvx opensandbox-server`). demesne supports only OpenSandbox's **`docker` runtime backend** with `network_mode = "bridge"`; the `kubernetes` backend and `host` / user-defined networks are not compatible, because they don't produce the local egress sidecar demesne attaches to.
+
+Demesne talks to this long-running lifecycle server (typically via `uvx opensandbox-server --config ~/.sandbox.toml`). The packaged docker example defaults are too permissive for use as a security boundary. Change three settings in `~/.sandbox.toml` before starting the server:
 
 - **`[egress] mode = "dns+nft"`** (default `"dns"`). The default only filters egress at DNS lookup; raw-IP outbound traffic still succeeds, so `egress: "none"` in `sandbox_script` does not actually deny network. The `dns+nft` mode adds nftables-based IP filtering and makes `none` mean none.
 - **`[server] api_key = "<some-secret>"`** (default is empty). With an empty key, the server requires either an interactive `YES` at startup or `OPENSANDBOX_INSECURE_SERVER=YES` in the environment.

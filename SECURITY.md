@@ -19,9 +19,9 @@ Do not open a public issue. Your issue will be fixed or made public within 90 da
 ### In scope
 
 - Code in this repository
-- The sandbox-edge isolation boundary: a sandboxed agent escaping its container, accessing host paths outside `DEMESNE_ALLOWED_PATHS`, or otherwise reaching the host beyond what the configured egress permits
+- The container-edge isolation boundary: an agent escaping its container, accessing host paths outside `DEMESNE_ALLOWED_PATHS`, or otherwise reaching the host beyond what the configured egress permits
 - Credentials handling in the per-vendor proxy sidecar: the real upstream OAuth token leaking into the agent container or becoming accessible from within the sandbox
-- MCP allowlist enforcement: a sandboxed agent invoking host MCP tools that are not on the read-only allowlist
+- MCP allowlist enforcement: a containerised agent invoking host MCP tools that are not on the read-only allowlist
 - Path containment bypasses: symlink escapes or other mechanisms that allow mounting or accessing host paths outside the allowed set
 - Egress policy enforcement: `egress: "none"` or `egress: "package-managers"` failing to restrict outbound traffic as documented
 
