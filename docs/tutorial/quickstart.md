@@ -55,16 +55,30 @@ pipx install uv
 uvx opensandbox-server init-config ~/.sandbox.toml --example docker
 ```
 
-Before starting the server, edit `~/.sandbox.toml` — these are security settings, not optional: set `[storage] allowed_host_paths` to include both the paths you intend to mount and demesne's output root (`~/.demesne/out`), keep `[egress] mode = "dns+nft"`, and give `[server] api_key` a non-empty value. See [docs/reference/requirements.md](../reference/requirements.md) for details; an unset `allowed_host_paths` causes bind-mount failures (`VOLUME::HOST_PATH_NOT_ALLOWED`).
+The `init-config` defaults are too permissive to use as a security boundary, so edit these three settings in `~/.sandbox.toml` before starting the server:
+
+```toml
+[server]
+# Any non-empty value. Reuse it as OPEN_SANDBOX_API_KEY when you wire demesne in (Steps 3–4).
+api_key = "your-secret-key"
+
+[storage]
+# Host paths demesne may bind-mount: the directories you want to share, plus
+# demesne's output root (default ~/.demesne/out).
+allowed_host_paths = ["/home/username/code", "/home/username/.demesne/out"]
+
+[egress]
+# Adds nftables IP-level filtering, so `egress: "none"` actually denies the network.
+mode = "dns+nft"
+```
+
+`allowed_host_paths` is the setting that bites if you skip it — bind mounts then fail with `VOLUME::HOST_PATH_NOT_ALLOWED`. See [requirements.md](../reference/requirements.md) for the full checklist.
 
 Then start the server:
 
 ```
 uvx opensandbox-server --config ~/.sandbox.toml
 ```
-
-Feed the lifecycle host:port and API key to Demesne via `OPEN_SANDBOX_DOMAIN`
-and `OPEN_SANDBOX_API_KEY`.
 
 OpenSandbox is **long-running** — it must stay up for the entire demesne session. The remaining steps assume it is still listening on `:8080`. Pick whichever approach suits your workflow:
 
@@ -94,7 +108,7 @@ At minimum you need the three required variables from the [Configuration referen
 
 ```bash
 export OPEN_SANDBOX_DOMAIN=localhost:8080
-export OPEN_SANDBOX_API_KEY=your-secret-key
+export OPEN_SANDBOX_API_KEY=your-secret-key   # the [server] api_key you set in Step 2
 export DEMESNE_ALLOWED_PATHS=/home/username/code
 ```
 
@@ -135,7 +149,7 @@ Create or edit `.mcp.json` in your project root (this is the project-scoped MCP 
 }
 ```
 
-Replace `/usr/local/bin/demesne-mcp` with the actual path from Step 1 (e.g. `~/go/bin/demesne-mcp`). Claude Code will spawn `demesne-mcp` as a child process and communicate over stdio.
+Replace `/usr/local/bin/demesne-mcp` with the actual path from Step 1 (e.g. `~/go/bin/demesne-mcp`), and use the same `OPEN_SANDBOX_API_KEY` you set as `[server] api_key` in Step 2. Claude Code will spawn `demesne-mcp` as a child process and communicate over stdio.
 
 To let your agent read the files a run writes — demesne returns an `output_dir` under `~/.demesne/out` — also grant it read access to that directory. In Claude Code, add `~/.demesne/out` to `permissions.additionalDirectories`, or start the session with `--add-dir ~/.demesne/out`. See [Let your agent read demesne's output](../how-to/wire-into-mcp-client.md#let-your-agent-read-demesnes-output).
 
