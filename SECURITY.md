@@ -12,7 +12,7 @@ Please report security vulnerabilities using GitHub's private vulnerability repo
 
 **[https://github.com/jbeshir/demesne/security/advisories/new](https://github.com/jbeshir/demesne/security/advisories/new)**
 
-Do not open a public issue. Your issue will be fixed or made public within 90 days.
+Do not open a public issue. demesne is a single-developer, best-effort project, so there's no guaranteed response time — I'll look into reports and fix what I can as I'm able. If a report is still unaddressed 90 days after you send it, you're free to disclose it publicly.
 
 ## Scope
 
@@ -33,10 +33,10 @@ Do not open a public issue. Your issue will be fixed or made public within 90 da
 - Single-user-by-design assumptions. Multi-tenant deployment of demesne is not supported and is not in scope for this policy.
 - Denial-of-service attacks against a local demesne instance.
 - Issues requiring physical access to the host machine.
-- Social engineering of maintainers.
+- Social engineering of the maintainer.
 
-## Safe Harbor
+## Good-faith research
 
-Security research conducted in good faith is welcomed. We will not pursue legal action against researchers who discover and report vulnerabilities in accordance with this policy, provided they do not access or modify data belonging to others, disrupt production systems, or publicly disclose before the coordinated disclosure window has passed.
+Good-faith security research is welcome. demesne is a personal, single-developer project that runs locally — there's no hosted service or third-party data involved. Please don't use a vulnerability as a pretext to access or disrupt anyone else's machine, and give me a reasonable window to fix an issue before disclosing it publicly.
 
 See [docs/explanation/trust-boundary.md](docs/explanation/trust-boundary.md) for the trust-boundary explanation.
