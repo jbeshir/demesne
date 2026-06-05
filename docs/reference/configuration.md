@@ -13,7 +13,8 @@ All env vars are read by `demesne-mcp` at startup. Source of truth: `internal/sa
 | `DEMESNE_OUTPUT_ROOT` | no | `~/.demesne/out` | Host directory under which per-job `/out` mounts are created. |
 | `DEMESNE_CODEX_AUTH_FILE` | no* | `~/.codex/auth.json` | Path to the Codex ChatGPT-OAuth token file (from `codex login`). Used by `sandbox_agent` and `sandbox_research`; when present, demesne prefers Codex as the default agent. Required when calling either tool with `agent="codex"`. |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` | no* | — | Long-lived Claude Code OAuth token from `claude setup-token`. Used by `sandbox_agent` and `sandbox_research`. Required when calling either tool with `agent="claude-code"` or when no Codex auth file is configured. |
-| `DEMESNE_HOST_MCP_CONFIG` | no | `~/.claude.json` | Claude Code MCP config file demesne reads to discover host stdio MCP servers to re-expose. |
+| `DEMESNE_CLAUDE_CODE_MCP_CONFIG` | no | `~/.claude.json` | Claude Code MCP config file demesne reads to discover host stdio MCP servers to re-expose. |
+| `DEMESNE_CODEX_MCP_CONFIG` | no | `~/.codex/config.toml` | Codex MCP config file demesne reads to discover host stdio MCP servers; merged with the Claude Code config, Codex wins on name conflict. Also honours `env_vars` (parent-process env-var names forwarded into the server's environment). |
 | `DEMESNE_MCP_ALLOWLIST` | no | `~/.config/demesne/mcp-allowlist.json` | Per-server tool allowlist override file (auto-seeded with built-in read-only defaults on first run). |
 | `DEMESNE_MCP_SOCKET` | no | `/tmp/demesne-mcp/<pid>/aggregator.sock` | Host path of the MCP aggregator unix socket. The runner bind-mounts it into each sandbox sidecar; a unix socket (rather than a host TCP port) is what lets the sandbox reach the aggregator under rootless podman — see [architecture.md](../explanation/architecture.md). |
 

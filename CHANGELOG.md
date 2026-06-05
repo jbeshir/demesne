@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `DEMESNE_CODEX_MCP_CONFIG` env var (default `~/.codex/config.toml`): demesne now discovers stdio MCP servers from the Codex config and merges them with the Claude Code set. On a name conflict the Codex entry wins (with a logged warning). Codex's `env_vars` array (parent-process env-var names) is honoured.
+
 ### Changed
+- **Breaking**: renamed env var `DEMESNE_HOST_MCP_CONFIG` → `DEMESNE_CLAUDE_CODE_MCP_CONFIG` (default unchanged: `~/.claude.json`). No back-compat alias.
 - Default `DEMESNE_OUTPUT_ROOT` is now `~/.demesne/out` under the user's home, replacing the previous world-readable `/tmp/demesne/out`. Set `DEMESNE_OUTPUT_ROOT` explicitly to override.
 - The effective output root is always appended to `DEMESNE_ALLOWED_PATHS`, so `/out` and nested `/in/previous-jobs/<name>` mounts work without the user listing the output root.
 

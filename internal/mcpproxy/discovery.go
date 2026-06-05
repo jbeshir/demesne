@@ -1,5 +1,5 @@
 // Package mcpproxy implements the host-side MCP aggregator: it
-// reads the user's Claude Code MCP config, spawns the configured
+// reads the user's Claude Code and Codex MCP configs, spawns the configured
 // stdio MCP server subprocesses lazily on demand, and serves a
 // per-upstream Streamable HTTP MCP endpoint on host loopback. The
 // per-sandbox sidecar's MCP tunnel proxy points at these endpoints.
@@ -22,6 +22,8 @@ import (
 	"os"
 	"regexp"
 	"sort"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // DemesneServerName is the entry in the host MCP config we always
@@ -61,14 +63,28 @@ type claudeMCPServer struct {
 	URL     string            `json:"url,omitempty"`
 }
 
-// DiscoverUpstreams reads the Claude Code MCP config at the given
+// codexConfig is the shape of ~/.codex/config.toml we read.
+type codexConfig struct {
+	MCPServers map[string]codexMCPServer `toml:"mcp_servers"`
+}
+
+// codexMCPServer holds fields from a [mcp_servers.<name>] TOML section.
+type codexMCPServer struct {
+	Command string            `toml:"command"`
+	Args    []string          `toml:"args"`
+	Env     map[string]string `toml:"env"`
+	EnvVars []string          `toml:"env_vars"`
+	URL     string            `toml:"url"`
+}
+
+// DiscoverClaudeUpstreams reads the Claude Code MCP config at the given
 // path and returns the stdio server entries demesne should be
 // willing to spawn — sorted alphabetically by Name for stable
 // downstream ordering. The "demesne" self-entry is dropped to
 // prevent self-loop. HTTP/SSE entries are dropped with a warning (only stdio is supported today).
 // Missing or malformed files return an empty slice with
 // nil error so demesne-mcp can start without host MCP tools.
-func DiscoverUpstreams(path string) ([]UpstreamSpec, error) {
+func DiscoverClaudeUpstreams(path string) ([]UpstreamSpec, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // path comes from operator config
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -130,4 +146,88 @@ func copyEnv(src map[string]string) map[string]string {
 		dst[k] = v
 	}
 	return dst
+}
+
+// DiscoverCodexUpstreams reads the Codex config at the given path and
+// returns the stdio server entries, sorted alphabetically by Name.
+// Missing file → (nil, nil). HTTP entries are dropped with a warning.
+func DiscoverCodexUpstreams(path string, lookupEnv func(string) (string, bool)) ([]UpstreamSpec, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // path comes from operator config
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return parseCodexUpstreams(data, lookupEnv)
+}
+
+func parseCodexUpstreams(data []byte, lookupEnv func(string) (string, bool)) ([]UpstreamSpec, error) {
+	var cfg codexConfig
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse codex config: %w", err)
+	}
+	out := make([]UpstreamSpec, 0, len(cfg.MCPServers))
+	for name, s := range cfg.MCPServers {
+		if name == DemesneServerName {
+			continue
+		}
+		if !validServerName.MatchString(name) {
+			log.Printf("mcpproxy: skipping codex MCP server %q: name is not a valid slug "+
+				"(must match ^[a-z][a-z0-9_-]{0,62}$)", name)
+			continue
+		}
+		if s.URL != "" {
+			log.Printf("mcpproxy: skipping codex MCP server %q: transport %q is not yet supported (only stdio)", name, "http")
+			continue
+		}
+		if s.Command == "" {
+			continue
+		}
+		// Build env: env_vars lookups first, then overlay explicit env (explicit wins on collision).
+		var env map[string]string
+		for _, varName := range s.EnvVars {
+			if val, ok := lookupEnv(varName); ok {
+				if env == nil {
+					env = make(map[string]string)
+				}
+				env[varName] = val
+			}
+		}
+		for k, v := range s.Env {
+			if env == nil {
+				env = make(map[string]string)
+			}
+			env[k] = v
+		}
+		out = append(out, UpstreamSpec{
+			Name:    name,
+			Command: s.Command,
+			Args:    append([]string(nil), s.Args...),
+			Env:     env,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// mergeUpstreams merges Claude and Codex upstream lists. On name conflict,
+// Codex wins and a warning is logged. Result is sorted by name.
+func mergeUpstreams(claude, codex []UpstreamSpec) []UpstreamSpec {
+	merged := make(map[string]UpstreamSpec, len(claude)+len(codex))
+	for _, s := range claude {
+		merged[s.Name] = s
+	}
+	for _, s := range codex {
+		if _, exists := merged[s.Name]; exists {
+			log.Printf("mcpproxy: codex MCP server %q overrides claude entry of the same name", s.Name)
+		}
+		merged[s.Name] = s
+	}
+	out := make([]UpstreamSpec, 0, len(merged))
+	for _, s := range merged {
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }

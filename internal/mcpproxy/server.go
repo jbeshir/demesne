@@ -23,9 +23,16 @@ var ErrAlreadyStarted = errors.New("mcpproxy: Aggregator already started")
 
 // Config configures an Aggregator.
 type Config struct {
-	// HostMCPConfigPath is the file demesne reads to discover the
-	// user's stdio MCP servers. Typically ~/.claude.json.
-	HostMCPConfigPath string
+	// ClaudeMCPConfigPath is the Claude Code config file demesne reads
+	// to discover stdio MCP servers. Typically ~/.claude.json.
+	ClaudeMCPConfigPath string
+	// CodexMCPConfigPath is the Codex config file demesne reads to
+	// discover stdio MCP servers. Typically ~/.codex/config.toml.
+	// Optional — entries merged with Claude, Codex wins on name conflict.
+	CodexMCPConfigPath string
+	// LookupEnv is used to expand env_vars entries from the Codex config.
+	// Pass os.LookupEnv in production; nil or a stub in tests.
+	LookupEnv func(string) (string, bool)
 	// AllowlistFilePath is the optional user override file. Empty
 	// means "use built-in defaults only".
 	AllowlistFilePath string
@@ -76,6 +83,24 @@ type Aggregator struct {
 	extra      []ExtraServer
 }
 
+// discoverAllUpstreams reads the Claude and Codex configs, merges the
+// results (Codex wins on name conflict), and returns the merged set.
+func discoverAllUpstreams(cfg Config) ([]UpstreamSpec, error) {
+	claudeSpecs, err := DiscoverClaudeUpstreams(cfg.ClaudeMCPConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("discover host MCP configs: %w", err)
+	}
+	lookupEnv := cfg.LookupEnv
+	if lookupEnv == nil {
+		lookupEnv = func(string) (string, bool) { return "", false }
+	}
+	codexSpecs, err := DiscoverCodexUpstreams(cfg.CodexMCPConfigPath, lookupEnv)
+	if err != nil {
+		return nil, fmt.Errorf("discover host MCP configs: %w", err)
+	}
+	return mergeUpstreams(claudeSpecs, codexSpecs), nil
+}
+
 // NewAggregator validates cfg, discovers upstreams, and resolves
 // the allowlist. No subprocesses are started and no HTTP listener
 // is opened yet — call Start for that.
@@ -83,9 +108,9 @@ func NewAggregator(cfg Config) (*Aggregator, error) {
 	if cfg.SocketPath == "" {
 		return nil, errors.New("mcpproxy: SocketPath is required")
 	}
-	specs, err := DiscoverUpstreams(cfg.HostMCPConfigPath)
+	specs, err := discoverAllUpstreams(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("discover host MCP config: %w", err)
+		return nil, err
 	}
 	if cfg.SeedAllowlistFile && cfg.AllowlistFilePath != "" {
 		if err := SeedOverrideFile(cfg.AllowlistFilePath); err != nil {

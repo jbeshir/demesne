@@ -176,8 +176,8 @@ func TestAggregator_RoundTrip(t *testing.T) {
 	cfgPath := writeStubConfig(t)
 	socketPath := filepath.Join(t.TempDir(), testAggSock)
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        socketPath,
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          socketPath,
 	})
 	require.NoError(t, err)
 
@@ -230,8 +230,8 @@ func TestAggregator_ExtraServer(t *testing.T) {
 		})
 
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        socketPath,
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          socketPath,
 		ExtraServers: []ExtraServer{{
 			Name:    DemesneServerName,
 			Tools:   []mcp.Tool{{Name: testSandboxScript, Description: "spawn"}},
@@ -255,8 +255,8 @@ func TestAggregator_ExtraServer(t *testing.T) {
 func TestAggregator_DoubleStart(t *testing.T) {
 	cfgPath := writeStubConfig(t)
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        filepath.Join(t.TempDir(), testAggSock),
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          filepath.Join(t.TempDir(), testAggSock),
 	})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -271,8 +271,8 @@ func TestAggregator_NoUpstreams(t *testing.T) {
 	path := filepath.Join(t.TempDir(), testClaudeJSON)
 	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{}}`), 0o600))
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: path,
-		SocketPath:        filepath.Join(t.TempDir(), testAggSock),
+		ClaudeMCPConfigPath: path,
+		SocketPath:          filepath.Join(t.TempDir(), testAggSock),
 	})
 	require.NoError(t, err)
 	err = agg.Start(context.Background())
@@ -280,7 +280,7 @@ func TestAggregator_NoUpstreams(t *testing.T) {
 }
 
 func TestNewAggregator_RequiresSocketPath(t *testing.T) {
-	_, err := NewAggregator(Config{HostMCPConfigPath: writeStubConfig(t)})
+	_, err := NewAggregator(Config{ClaudeMCPConfigPath: writeStubConfig(t)})
 	assert.ErrorContains(t, err, "SocketPath is required")
 }
 
@@ -299,8 +299,8 @@ func TestAggregator_RelaysResources(t *testing.T) {
 	cfgPath := writeStubConfig(t)
 	socketPath := filepath.Join(t.TempDir(), testAggSock)
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        socketPath,
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          socketPath,
 	})
 	require.NoError(t, err)
 
@@ -331,8 +331,8 @@ func TestAggregator_RelaysResourceTemplates(t *testing.T) {
 	cfgPath := writeStubConfig(t)
 	socketPath := filepath.Join(t.TempDir(), testAggSock)
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        socketPath,
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          socketPath,
 	})
 	require.NoError(t, err)
 
@@ -356,8 +356,8 @@ func TestAggregator_RelaysPrompts(t *testing.T) {
 	cfgPath := writeStubConfig(t)
 	socketPath := filepath.Join(t.TempDir(), testAggSock)
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        socketPath,
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          socketPath,
 	})
 	require.NoError(t, err)
 
@@ -390,8 +390,8 @@ func TestAggregator_RelaysCompletion(t *testing.T) {
 	cfgPath := writeStubConfig(t)
 	socketPath := filepath.Join(t.TempDir(), testAggSock)
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        socketPath,
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          socketPath,
 	})
 	require.NoError(t, err)
 
@@ -418,8 +418,8 @@ func TestAggregator_CatalogueRemainsToolsOnly(t *testing.T) {
 	cfgPath := writeStubConfig(t)
 	socketPath := filepath.Join(t.TempDir(), testAggSock)
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        socketPath,
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          socketPath,
 	})
 	require.NoError(t, err)
 
@@ -450,9 +450,9 @@ func TestAggregator_ResourcesOnlyUpstreamMounted(t *testing.T) {
 	require.NoError(t, os.WriteFile(allowPath, []byte(`{"workflowy":["nonexistent_tool"]}`), 0o600))
 
 	agg, err := NewAggregator(Config{
-		HostMCPConfigPath: cfgPath,
-		SocketPath:        socketPath,
-		AllowlistFilePath: allowPath,
+		ClaudeMCPConfigPath: cfgPath,
+		SocketPath:          socketPath,
+		AllowlistFilePath:   allowPath,
 	})
 	require.NoError(t, err)
 

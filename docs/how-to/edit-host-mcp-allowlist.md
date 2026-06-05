@@ -20,7 +20,7 @@ If the file does not exist when demesne starts, demesne creates it automatically
 
 ## File format
 
-The file is a JSON object. Each key is an MCP server name (matching the name in your Claude Code config, e.g. `"workflowy"`, `"alignment"`). The value is one of:
+The file is a JSON object. Each key is an MCP server name (matching the name in your Claude Code or Codex config, e.g. `"workflowy"`, `"alignment"`). The value is one of:
 
 | Value | Meaning |
 |-------|---------|

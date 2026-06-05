@@ -16,7 +16,7 @@ For a glossary of the terms used throughout this document see [key-concepts.md](
 | `internal/sandbox` | Core runner: validates mounts, resolves images, builds network policies, calls the OpenSandbox SDK, and implements each tool's lifecycle (create, exec, agent, research, …). Also owns the child-sandbox registry and results roll-up. |
 | `internal/agents` | Agent provider implementations under `internal/agents/anthropic` (claude-code) and `internal/agents/codex` (codex). Each subpackage owns the provider's Dockerfile, wrapper script, context-file renderer, and MCP config generator. |
 | `internal/proxies` | Proxy implementations used by the sidecar, organised by vendor: `anthropic` (port 8088), `openai` (port 8086), `goproxy` (port 8087), `mcp` (ports 8089+). Shared base logic lives in `proxycommon`. |
-| `internal/mcpproxy` | Host-side MCP aggregator: discovers stdio servers from `~/.claude.json`, enforces the tool allowlist, and serves one HTTP MCP endpoint per server on a unix socket. |
+| `internal/mcpproxy` | Host-side MCP aggregator: discovers stdio servers from the Claude Code config and the Codex config, enforces the tool allowlist, and serves one HTTP MCP endpoint per server on a unix socket. |
 | `internal/sidecar` | Sidecar runtime: builds and starts the sidecar container via the OpenSandbox SDK, waits for it to be ready, and tears it down with the parent sandbox. |
 
 ---
@@ -53,7 +53,7 @@ Present in `sandbox_agent` and `sandbox_research` sandboxes. One loopback listen
 
 ## MCP aggregator and per-sandbox tunnel
 
-At startup, `cmd/demesne-mcp` launches an in-process **MCP aggregator** (`internal/mcpproxy`). The aggregator reads `~/.claude.json` (or `DEMESNE_HOST_MCP_CONFIG`), discovers configured stdio MCP servers, and serves one `/<server>/mcp` HTTP endpoint per server on a **unix socket** (default `/tmp/demesne-mcp/<pid>/aggregator.sock`). Upstream server processes are spawned lazily on first use and kept alive.
+At startup, `cmd/demesne-mcp` launches an in-process **MCP aggregator** (`internal/mcpproxy`). The aggregator reads BOTH the Claude Code config (`DEMESNE_CLAUDE_CODE_MCP_CONFIG`, default `~/.claude.json`) and the Codex config (`DEMESNE_CODEX_MCP_CONFIG`, default `~/.codex/config.toml`), and merges them (Codex wins on name conflict), then discovers configured stdio MCP servers and serves one `/<server>/mcp` HTTP endpoint per server on a **unix socket** (default `/tmp/demesne-mcp/<pid>/aggregator.sock`). Upstream server processes are spawned lazily on first use and kept alive.
 
 Only tools on the read-only allowlist are ever advertised: the aggregator intersects each upstream's `tools/list` with the built-in per-server defaults (overridable via `~/.config/demesne/mcp-allowlist.json`) and filters the result, so a non-allowlisted tool never appears in `tools/list` and cannot be called. Resources, resource templates, prompts, and completion are relayed in full from any exposed upstream and are not subject to the allowlist.
 

@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testEnvTokenName = "TOKEN"
+
 func TestParseUpstreams(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -25,7 +27,7 @@ func TestParseUpstreams(t *testing.T) {
 			}`,
 			want: []UpstreamSpec{
 				{Name: serverAlignment, Command: "/usr/bin/al"},
-				{Name: serverWorkflowy, Command: "/usr/bin/wf", Args: []string{"-v"}, Env: map[string]string{"TOKEN": "x"}},
+				{Name: serverWorkflowy, Command: "/usr/bin/wf", Args: []string{"-v"}, Env: map[string]string{testEnvTokenName: "x"}},
 			},
 		},
 		{
@@ -75,8 +77,8 @@ func TestParseUpstreams_MalformedJSON(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDiscoverUpstreams_MissingFile(t *testing.T) {
-	got, err := DiscoverUpstreams("/nonexistent/path/.claude.json")
+func TestDiscoverClaudeUpstreams_MissingFile(t *testing.T) {
+	got, err := DiscoverClaudeUpstreams("/nonexistent/path/.claude.json")
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }

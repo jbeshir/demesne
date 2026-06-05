@@ -46,8 +46,8 @@ func TestEnvSlice(t *testing.T) {
 		},
 		{
 			name: "value may contain equals",
-			env:  map[string]string{"TOKEN": "a=b=c"},
-			want: []string{"TOKEN=a=b=c"},
+			env:  map[string]string{testEnvTokenName: "a=b=c"},
+			want: []string{testEnvTokenName + "=a=b=c"},
 		},
 	}
 

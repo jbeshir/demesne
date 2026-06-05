@@ -67,7 +67,7 @@ context file, and `usage.json` remain on the host.
 
 When host MCP servers are configured, the agent also reaches them
 through the sidecar. At startup demesne's in-process **aggregator**
-reads `~/.claude.json`, and for each stdio server with allowlisted
+reads the Claude Code and Codex MCP configs, and for each stdio server with allowlisted
 tools it serves an MCP-over-HTTP endpoint at `/<server>/mcp` on a
 **unix socket** (upstream subprocesses spawn lazily on first use).
 The runner bind-mounts that socket into each sandbox sidecar, which

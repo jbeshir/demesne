@@ -345,7 +345,7 @@ func TestRunner_Integration_Research(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	res, err := runner.Research(ctx, ResearchRequest{
-		Agent:  "claude-code",
+		Agent: "claude-code",
 		Prompt: "Use the Bash tool to run `curl -sSf https://example.com/` " +
 			"and reply with just the text inside the page's <title> tag.",
 		Model: "haiku",
@@ -381,8 +381,8 @@ func TestRunner_Integration_AgentWithMCP(t *testing.T) {
 	defer cancel()
 
 	agg, err := mcpproxy.NewAggregator(mcpproxy.Config{
-		HostMCPConfigPath: hostConfig,
-		SocketPath:        filepath.Join(t.TempDir(), "aggregator.sock"),
+		ClaudeMCPConfigPath: hostConfig,
+		SocketPath:          filepath.Join(t.TempDir(), "aggregator.sock"),
 	})
 	require.NoError(t, err)
 	require.NoError(t, agg.Start(ctx))
@@ -400,7 +400,7 @@ func TestRunner_Integration_AgentWithMCP(t *testing.T) {
 	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), cat)
 
 	res, err := runner.Agent(ctx, AgentRequest{
-		Agent:  "claude-code",
+		Agent: "claude-code",
 		Prompt: "Call the workflowy `search_nodes` tool with the query \"demesne\". " +
 			"Then reply with exactly DONE and nothing else.",
 		Model:  "haiku",
@@ -441,9 +441,9 @@ func TestRunner_Integration_ChildSandbox(t *testing.T) {
 	runner := agentIntegrationRunner(t, oauthToken)
 	name, tools, handler := runner.ChildMCPServer()
 	agg, err := mcpproxy.NewAggregator(mcpproxy.Config{
-		HostMCPConfigPath: emptyConfig,
-		SocketPath:        filepath.Join(t.TempDir(), "aggregator.sock"),
-		ExtraServers:      []mcpproxy.ExtraServer{{Name: name, Tools: tools, Handler: handler}},
+		ClaudeMCPConfigPath: emptyConfig,
+		SocketPath:          filepath.Join(t.TempDir(), "aggregator.sock"),
+		ExtraServers:        []mcpproxy.ExtraServer{{Name: name, Tools: tools, Handler: handler}},
 	})
 	require.NoError(t, err)
 	require.NoError(t, agg.Start(ctx))
@@ -456,7 +456,7 @@ func TestRunner_Integration_ChildSandbox(t *testing.T) {
 	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
 
 	res, err := runner.Agent(ctx, AgentRequest{
-		Agent:  "claude-code",
+		Agent: "claude-code",
 		Prompt: "Use the demesne MCP server's `sandbox_script` tool to spawn a child " +
 			"named \"probe\" that runs the command: echo hello-from-child > /out/result.txt. " +
 			"Then reply with exactly DONE and nothing else.",

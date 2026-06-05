@@ -114,13 +114,16 @@ func run() error {
 // aggregator up even when no host stdio servers are configured. All
 // env reads happen here in setup, not inside the mcpproxy package.
 func startAggregator(socketPath string, extra ...mcpproxy.ExtraServer) (*mcpproxy.Aggregator, error) {
-	hostConfig := envOr("DEMESNE_HOST_MCP_CONFIG", defaultHostMCPConfig())
+	claudeConfig := envOr("DEMESNE_CLAUDE_CODE_MCP_CONFIG", defaultClaudeMCPConfig())
+	codexConfig := envOr("DEMESNE_CODEX_MCP_CONFIG", defaultCodexMCPConfig())
 	allowlist := envOr("DEMESNE_MCP_ALLOWLIST", defaultAllowlistPath())
 
 	agg, err := mcpproxy.NewAggregator(mcpproxy.Config{
-		HostMCPConfigPath: hostConfig,
-		AllowlistFilePath: allowlist,
-		SeedAllowlistFile: true,
+		ClaudeMCPConfigPath: claudeConfig,
+		CodexMCPConfigPath:  codexConfig,
+		LookupEnv:           os.LookupEnv,
+		AllowlistFilePath:   allowlist,
+		SeedAllowlistFile:   true,
 		// The aggregator listens on a unix socket; the runner
 		// bind-mounts it into each sidecar. A socket (not a host TCP
 		// port) is what works under rootless podman.
@@ -138,12 +141,20 @@ func startAggregator(socketPath string, extra ...mcpproxy.ExtraServer) (*mcpprox
 	return agg, nil
 }
 
-func defaultHostMCPConfig() string {
+func defaultClaudeMCPConfig() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
 	return filepath.Join(home, ".claude.json")
+}
+
+func defaultCodexMCPConfig() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".codex", "config.toml")
 }
 
 func defaultAllowlistPath() string {
