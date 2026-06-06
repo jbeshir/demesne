@@ -7,27 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- `DEMESNE_CODEX_MCP_CONFIG` env var (default `~/.codex/config.toml`): demesne now discovers stdio MCP servers from the Codex config and merges them with the Claude Code set. On a name conflict the Codex entry wins (with a logged warning). Codex's `env_vars` array (parent-process env-var names) is honoured.
-
-### Changed
-- **Breaking**: renamed env var `DEMESNE_HOST_MCP_CONFIG` → `DEMESNE_CLAUDE_CODE_MCP_CONFIG` (default unchanged: `~/.claude.json`). No back-compat alias.
-- Default `DEMESNE_OUTPUT_ROOT` is now `~/.demesne/out` under the user's home, replacing the previous world-readable `/tmp/demesne/out`. Set `DEMESNE_OUTPUT_ROOT` explicitly to override.
-- The effective output root is always appended to `DEMESNE_ALLOWED_PATHS`, so `/out` and nested `/in/previous-jobs/<name>` mounts work without the user listing the output root.
-- `sandbox_agent` and `sandbox_research` now advertise the `agent` and `model` enums in their MCP input schema filtered at registration time to the providers whose credentials are configured (codex-first; the enum is omitted entirely when neither is configured, and a single-value enum is used when only one is).
-
-## [0.1.0] - 2026-06-05
+## [0.1.0] - 2026-06-06
 
 First public release — an agent-agnostic, local, containerised agent-orchestration MCP server you drive from your agent of choice. It runs untrusted shell, scripts, and AI coding agents in disposable OpenSandbox containers, with read-only host mounts and egress allowlists.
 
 ### Tools
 - **Sandboxes** — `sandbox_script` (one-shot) plus `sandbox_create` / `sandbox_exec` / `sandbox_upload` / `sandbox_download` / `sandbox_destroy` (persistent) run shell and scripts in disposable containers.
-- **Agents** — `sandbox_agent` and `sandbox_research` run a coding-agent CLI inside a sandbox (`codex` by default when Codex credentials are configured, otherwise `claude-code`). Containerised agents can spawn child sandboxes and, with configuration, reach a read-only subset of the host's MCP server tools.
+- **Agents** — `sandbox_agent` and `sandbox_research` run a coding-agent CLI inside a sandbox: `codex` by default when Codex credentials are configured, otherwise `claude-code`. Each tool advertises its `agent` / `model` options filtered to the providers you have credentials for. Containerised agents can spawn child sandboxes and, with configuration, reach a read-only subset of the host's MCP server tools.
 
 ### Security and orchestration
-- Read-only host inputs at `/in`, output-only `/out`, and per-tool egress allowlists; agent outbound HTTPS is confined to a credential-isolating per-sandbox proxy sidecar, so the agent never sees the real token.
+- Read-only host inputs at `/in`; an output-only `/out` whose host directory defaults to `~/.demesne/out` (always included in the mount allowlist); per-tool egress allowlists; agent outbound HTTPS confined to a credential-isolating per-sandbox proxy sidecar, so the agent never sees the real token.
 - Separate, tail-bounded stdout/stderr in tool results; indicative per-run cost reporting; a results roll-up across the child-sandbox tree.
-- Host MCP proxy: re-expose a curated, read-only subset of your configured MCP servers to containerised agents through a per-sandbox tunnel.
+- Host MCP proxy: re-expose a curated, read-only subset of the stdio MCP servers from your Claude Code (`DEMESNE_CLAUDE_CODE_MCP_CONFIG`, default `~/.claude.json`) and Codex (`DEMESNE_CODEX_MCP_CONFIG`, default `~/.codex/config.toml`) configs — merged, with Codex winning on name conflicts — to containerised agents through a per-sandbox tunnel.
 
 The milestone sections below (M1–M6) are the per-feature development log that rolls into this release.
 
