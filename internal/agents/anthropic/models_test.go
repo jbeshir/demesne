@@ -45,3 +45,8 @@ func TestModels_MatchCatalog(t *testing.T) {
 	}
 	assert.Equal(t, string(DefaultModel), aliases[0])
 }
+
+func TestAgent_Models(t *testing.T) {
+	got := claudeCodeAgent{}.Models()
+	assert.Equal(t, Models, got)
+}

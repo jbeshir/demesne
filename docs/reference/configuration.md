@@ -31,6 +31,8 @@ The output root is always appended to the effective mount allowlist, so /out and
 
 When the `agent` parameter is omitted demesne picks Codex if its credentials are configured, otherwise Claude Code; explicit `agent="codex"` or `agent="claude-code"` always wins. Configuring both providers is fine — Codex is still preferred. Set neither and demesne errors with a Codex setup-path message.
 
+`sandbox_agent` and `sandbox_research` advertise the `agent` / `model` enums in their MCP input schema filtered to the providers whose credentials are configured (codex-first; when neither is configured the enum is omitted and the tools error at call time).
+
 ## Container images
 
 `sandbox_script`, `sandbox_create`, and `sandbox_exec` accept an `image` parameter naming one of the four allowlisted images (`internal/sandbox/images.go`):

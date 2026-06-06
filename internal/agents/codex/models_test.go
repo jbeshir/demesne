@@ -60,3 +60,8 @@ func TestModels_MatchCatalog(t *testing.T) {
 	assert.Equal(t, ModelGPT54Mini, Models[1])
 	assert.Equal(t, string(ModelGPT55), proxyopenai.Aliases()[0])
 }
+
+func TestAgent_Models(t *testing.T) {
+	got := codexAgent{}.Models()
+	assert.Equal(t, Models, got)
+}

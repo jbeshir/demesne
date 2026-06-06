@@ -55,6 +55,8 @@ func (claudeCodeAgent) ResolveModel(name string) (ModelName, error) {
 	return ResolveModel(name)
 }
 
+func (claudeCodeAgent) Models() []ModelName { return Models }
+
 func (claudeCodeAgent) Command(prompt string, model ModelName) []string {
 	return []string{
 		// sh retryScriptPath claude: the wrapper relaunches claude on quota

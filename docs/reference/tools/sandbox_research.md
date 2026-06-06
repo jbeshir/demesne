@@ -7,8 +7,8 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `prompt` | string | yes | — | Research task for the agent. Free-form text. |
-| `agent` | string | no | auto | Agent provider. `codex` or `claude-code` — defaults to `codex` when Codex credentials are configured, otherwise `claude-code`. |
-| `model` | string | no | `sonnet` | Model for the agent. Provider-specific: claude-code uses `opus`, `sonnet` (default), or `haiku`; codex uses `gpt-5.5` (default) or `gpt-5.4-mini`. |
+| `agent` | string | no | auto | Agent provider. `codex` or `claude-code` — defaults to `codex` when Codex credentials are configured, otherwise `claude-code`. The MCP input schema's enum is filtered at registration time to the agents whose host credentials are configured (omitted entirely when neither is). |
+| `model` | string | no | `sonnet` | Model for the agent. Provider-specific: claude-code uses `opus`, `sonnet` (default), or `haiku`; codex uses `gpt-5.5` (default) or `gpt-5.4-mini`. The MCP input schema's enum is filtered at registration time to the union of the configured providers' models. |
 | `preamble` | string | no | — | Optional prose prepended verbatim to the generated agent context file (e.g. CLAUDE.md for claude-code) before the auto-generated environment section. |
 | `output_path` | string | no | — | Optional. Where the agent should write its final artefact. Rendered as a Definition of done block. |
 | `output_format` | string | no | — | Optional. Expected shape/format of the output. |

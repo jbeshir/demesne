@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: renamed env var `DEMESNE_HOST_MCP_CONFIG` → `DEMESNE_CLAUDE_CODE_MCP_CONFIG` (default unchanged: `~/.claude.json`). No back-compat alias.
 - Default `DEMESNE_OUTPUT_ROOT` is now `~/.demesne/out` under the user's home, replacing the previous world-readable `/tmp/demesne/out`. Set `DEMESNE_OUTPUT_ROOT` explicitly to override.
 - The effective output root is always appended to `DEMESNE_ALLOWED_PATHS`, so `/out` and nested `/in/previous-jobs/<name>` mounts work without the user listing the output root.
+- `sandbox_agent` and `sandbox_research` now advertise the `agent` and `model` enums in their MCP input schema filtered at registration time to the providers whose credentials are configured (codex-first; the enum is omitted entirely when neither is configured, and a single-value enum is used when only one is).
 
 ## [0.1.0] - 2026-06-05
 

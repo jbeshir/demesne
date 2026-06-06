@@ -7,10 +7,23 @@ import (
 	"testing"
 
 	"github.com/jbeshir/demesne/internal/agents"
+	// Side-effect imports register codex + claude-code so
+	// AvailableAgents()/availableAgentNames tests can resolve real
+	// Models lists via the registry rather than hard-coding them.
+	_ "github.com/jbeshir/demesne/internal/agents/anthropic"
+	_ "github.com/jbeshir/demesne/internal/agents/codex"
 	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
 	"github.com/jbeshir/demesne/internal/sidecar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+// Shared case names for the availability tests — pulled out so both
+// TestAvailableAgentNames and TestAvailableAgents can name the same
+// credential combos without tripping goconst.
+const (
+	caseCodexOnly  = "only codex configured"
+	caseClaudeOnly = "only claude configured"
 )
 
 func TestEgressOrDefault(t *testing.T) {
@@ -63,6 +76,103 @@ func TestEgressOrDefault(t *testing.T) {
 	}
 }
 
+// TestAvailableAgentNames covers all four credential combinations
+// for the codex-first availability helper that both resolveDefaultAgent
+// and AvailableAgents share. The neither-set case returns an empty
+// slice (NOT a fallback to codex — that's resolveDefaultAgent's job).
+func TestAvailableAgentNames(t *testing.T) {
+	dir := t.TempDir()
+	codexAuth := filepath.Join(dir, "auth.json")
+	require.NoError(t, os.WriteFile(codexAuth, []byte("{}"), 0o600))
+	missingAuth := filepath.Join(dir, "does-not-exist.json")
+	const claudeTok = "tok"
+
+	tests := []struct {
+		name        string
+		codexFile   string
+		claudeToken string
+		want        []string
+	}{
+		{"both configured codex-first", codexAuth, claudeTok, []string{agentNameCodex, agentNameClaudeCode}},
+		{caseCodexOnly, codexAuth, "", []string{agentNameCodex}},
+		{caseClaudeOnly, missingAuth, claudeTok, []string{agentNameClaudeCode}},
+		{"neither configured returns empty", missingAuth, "", nil},
+		{"empty paths and no token returns empty", "", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}
+			assert.Equal(t, tt.want, availableAgentNames(cfg))
+		})
+	}
+}
+
+// TestAvailableAgents covers all four credential combinations for the
+// Runner method the server consumes to build the `agent` / `model`
+// enums. Models come from each provider's registered Models() so the
+// test stays in sync with the catalog without hard-coding aliases.
+func TestAvailableAgents(t *testing.T) {
+	dir := t.TempDir()
+	codexAuth := filepath.Join(dir, "auth.json")
+	require.NoError(t, os.WriteFile(codexAuth, []byte("{}"), 0o600))
+	missingAuth := filepath.Join(dir, "does-not-exist.json")
+	const claudeTok = "tok"
+
+	codexAgent, err := agents.Lookup(agentNameCodex)
+	require.NoError(t, err)
+	claudeAgent, err := agents.Lookup(agentNameClaudeCode)
+	require.NoError(t, err)
+	modelStrings := func(a agents.Agent) []string {
+		ms := a.Models()
+		out := make([]string, len(ms))
+		for i, m := range ms {
+			out[i] = string(m)
+		}
+		return out
+	}
+	codexModels := modelStrings(codexAgent)
+	claudeModels := modelStrings(claudeAgent)
+
+	tests := []struct {
+		name        string
+		codexFile   string
+		claudeToken string
+		want        []AgentOption
+	}{
+		{
+			name:        "both configured codex-first",
+			codexFile:   codexAuth,
+			claudeToken: claudeTok,
+			want: []AgentOption{
+				{Name: agentNameCodex, Models: codexModels},
+				{Name: agentNameClaudeCode, Models: claudeModels},
+			},
+		},
+		{
+			name:      caseCodexOnly,
+			codexFile: codexAuth,
+			want:      []AgentOption{{Name: agentNameCodex, Models: codexModels}},
+		},
+		{
+			name:        caseClaudeOnly,
+			codexFile:   missingAuth,
+			claudeToken: claudeTok,
+			want:        []AgentOption{{Name: agentNameClaudeCode, Models: claudeModels}},
+		},
+		{
+			name:      "neither configured returns empty",
+			codexFile: missingAuth,
+			want:      []AgentOption{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &Runner{cfg: Config{CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}}
+			assert.Equal(t, tt.want, r.AvailableAgents())
+		})
+	}
+}
+
 // TestResolveDefaultAgent verifies the credential-aware default-agent
 // resolution: prefer codex when its auth file exists, fall back to
 // claude-code only when claude-code is configured and codex is not,
@@ -108,6 +218,7 @@ func (vendorStubAgent) WriteAgentConfig(string, agents.AgentConfig) error  { ret
 func (vendorStubAgent) ContextFileName() string                            { return "" }
 func (vendorStubAgent) ResultText([]byte) string                           { return "" }
 func (vendorStubAgent) ResolveModel(string) (agents.ModelName, error)      { return "", nil }
+func (vendorStubAgent) Models() []agents.ModelName                         { return nil }
 func (vendorStubAgent) Command(string, agents.ModelName) []string          { return nil }
 func (vendorStubAgent) EnvVars(string, agents.ModelName) map[string]string { return nil }
 func (s vendorStubAgent) ProxyVendor() agents.ProxyVendor                  { return s.vendor }

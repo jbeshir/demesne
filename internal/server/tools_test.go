@@ -25,6 +25,10 @@ const (
 	testDir          = "/some/dir"
 	msgExitCodeZero  = "exit_code: 0"
 	doneStdout       = "DONE\n"
+	// Model alias literals used across multiple test cases; named here
+	// so the goconst linter doesn't repeat-flag them as they spread.
+	testModelHaiku  = "haiku"
+	testModelSonnet = "sonnet"
 )
 
 type fakeRunner struct {
@@ -58,6 +62,7 @@ type fakeRunner struct {
 	gotResearchReq sandbox.ResearchRequest
 	researchRes    sandbox.AgentResult
 	researchErr    error
+	available      []sandbox.AgentOption
 }
 
 func (f *fakeRunner) RunScript(_ context.Context, req sandbox.ScriptRequest) (sandbox.ScriptResult, error) {
@@ -107,6 +112,8 @@ func (f *fakeRunner) Research(_ context.Context, req sandbox.ResearchRequest) (s
 	f.gotResearchReq = req
 	return f.researchRes, f.researchErr
 }
+
+func (f *fakeRunner) AvailableAgents() []sandbox.AgentOption { return f.available }
 
 func newRequest(args map[string]any) mcp.CallToolRequest {
 	var req mcp.CallToolRequest
@@ -408,7 +415,7 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 	s := NewServer(r)
 	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
 		paramPrompt:      "reply PONG",
-		paramModel:       "haiku",
+		paramModel:       testModelHaiku,
 		paramPreamble:    "say only the word",
 		paramFiles:       []any{testFile},
 		paramDirectories: []any{testDir},
@@ -418,7 +425,7 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, sandbox.AgentRequest{
 		Agent:       "",
-		Model:       "haiku",
+		Model:       testModelHaiku,
 		Prompt:      "reply PONG",
 		Preamble:    "say only the word",
 		Files:       []string{testFile},
@@ -557,14 +564,14 @@ func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 	s := NewServer(r)
 	got, err := s.handleSandboxResearch(context.Background(), newRequest(map[string]any{
 		paramPrompt:   "investigate the corpus",
-		paramModel:    "sonnet",
+		paramModel:    testModelSonnet,
 		paramPreamble: "stay focused",
 	}))
 	require.NoError(t, err)
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, sandbox.ResearchRequest{
 		Agent:    "",
-		Model:    "sonnet",
+		Model:    testModelSonnet,
 		Prompt:   "investigate the corpus",
 		Preamble: "stay focused",
 	}, r.gotResearchReq)

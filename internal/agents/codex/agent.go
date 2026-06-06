@@ -52,6 +52,8 @@ func (codexAgent) ResolveModel(name string) (ModelName, error) {
 	return ResolveModel(name)
 }
 
+func (codexAgent) Models() []ModelName { return Models }
+
 func (codexAgent) ProxyVendor() agents.ProxyVendor { return agents.ProxyOpenAI }
 
 func (codexAgent) Command(prompt string, model ModelName) []string {

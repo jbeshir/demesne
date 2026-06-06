@@ -149,6 +149,11 @@ type Agent interface {
 	// sensible default.
 	ResolveModel(name string) (ModelName, error)
 
+	// Models returns the vendor's model allowlist, in the canonical
+	// catalog order. The server uses this to populate the `model`
+	// parameter's enum in sandbox_agent / sandbox_research.
+	Models() []ModelName
+
 	// Command is the argv the runner should execute inside the sandbox.
 	Command(prompt string, model ModelName) []string
 

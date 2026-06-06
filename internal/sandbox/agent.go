@@ -431,28 +431,72 @@ const (
 	agentNameClaudeCode = "claude-code"
 )
 
+// availableAgentNames returns the agent provider names whose host
+// credentials are configured, in codex-first order. Codex availability
+// is determined by the resolved auth file path existing on disk
+// (matching how checkAgentCredentials and resolveCodexTokens use it).
+// claude-code availability is the OAuth token field being non-empty.
+//
+// Order is the canonical codex-first one used everywhere the runner
+// exposes the available providers (default-agent resolution,
+// AvailableAgents). An empty slice means neither is configured.
+func availableAgentNames(cfg Config) []string {
+	var names []string
+	if cfg.CodexAuthFile != "" {
+		if _, err := os.Stat(cfg.CodexAuthFile); err == nil {
+			names = append(names, agentNameCodex)
+		}
+	}
+	if cfg.ClaudeCodeOAuthToken != "" {
+		names = append(names, agentNameClaudeCode)
+	}
+	return names
+}
+
 // resolveDefaultAgent picks the default agent provider when the caller
 // leaves the `agent` MCP parameter empty. It prefers Codex: both or
 // neither set → codex; only claude-code set → claude-code; only codex
 // set → codex. The neither-set branch falls through to codex so the
 // missing-auth error names the Codex setup path consistently.
-//
-// Codex availability is determined by the resolved auth file path
-// existing on disk (matching how checkAgentCredentials and
-// resolveCodexTokens use it). claude-code availability is the OAuth
-// token field being non-empty.
 func resolveDefaultAgent(cfg Config) string {
-	codexAvailable := false
-	if cfg.CodexAuthFile != "" {
-		if _, err := os.Stat(cfg.CodexAuthFile); err == nil {
-			codexAvailable = true
-		}
-	}
-	claudeAvailable := cfg.ClaudeCodeOAuthToken != ""
-	if claudeAvailable && !codexAvailable {
+	names := availableAgentNames(cfg)
+	if len(names) == 1 && names[0] == agentNameClaudeCode {
 		return agentNameClaudeCode
 	}
 	return agentNameCodex
+}
+
+// AgentOption describes one available agent provider and the model
+// allowlist that pairs with it. The server uses []AgentOption to
+// populate the `agent` and `model` enums on sandbox_agent /
+// sandbox_research at registration time, filtered to the configured
+// credentials. Codex-first order is preserved.
+type AgentOption struct {
+	Name   string
+	Models []string
+}
+
+// AvailableAgents returns the configured agent providers and their
+// model allowlists in codex-first order. Empty when no agent
+// credentials are configured. Used by the server to build the
+// runtime-filtered `agent` / `model` enums advertised on
+// sandbox_agent / sandbox_research.
+func (r *Runner) AvailableAgents() []AgentOption {
+	names := availableAgentNames(r.cfg)
+	out := make([]AgentOption, 0, len(names))
+	for _, name := range names {
+		a, err := agents.Lookup(name)
+		if err != nil {
+			continue
+		}
+		modelNames := a.Models()
+		models := make([]string, len(modelNames))
+		for i, m := range modelNames {
+			models[i] = string(m)
+		}
+		out = append(out, AgentOption{Name: name, Models: models})
+	}
+	return out
 }
 
 // buildLayout produces the host paths + mounts for an agent run,
