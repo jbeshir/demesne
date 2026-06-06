@@ -10,11 +10,11 @@
     },
     "agent": {
       "type": "string",
-      "description": "Agent provider. 'codex' or 'claude-code' — defaults to 'codex' when Codex credentials are configured, otherwise 'claude-code'."
+      "description": "Agent provider. 'codex' or 'claude-code' — defaults to 'codex' when Codex credentials are configured, otherwise 'claude-code'. The live MCP input schema constrains this to an enum of the providers whose credentials are configured (omitted when neither is)."
     },
     "model": {
       "type": "string",
-      "description": "Model for the agent. Provider-specific: claude-code uses 'opus', 'sonnet' (default), or 'haiku'; codex uses 'gpt-5.5' (default) or 'gpt-5.4-mini'."
+      "description": "Model for the agent. Provider-specific: claude-code uses 'opus', 'sonnet' (default), or 'haiku'; codex uses 'gpt-5.5' (default) or 'gpt-5.4-mini'. The live MCP input schema constrains this to the union of the configured providers' models."
     },
     "preamble": {
       "type": "string",
