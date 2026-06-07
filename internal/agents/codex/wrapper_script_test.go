@@ -22,9 +22,12 @@ printf '%s\n' "$#" >>"$CODEX_ARGC_FILE"
 call_count=$(wc -l <"$CODEX_ARGC_FILE" 2>/dev/null || echo 0)
 
 scenario="$CODEX_SCENARIO"
-if [ "$scenario" = "quota-then-success" ] || [ "$scenario" = "no-reset-then-success" ]; then
-    scenario="quota"
-    [ "$CODEX_SCENARIO" = "no-reset-then-success" ] && scenario="no-reset"
+if [ "$scenario" = "quota-then-success" ] || [ "$scenario" = "no-reset-then-success" ] || [ "$scenario" = "upsell-reset-then-success" ]; then
+    case "$CODEX_SCENARIO" in
+        no-reset-then-success) scenario="no-reset" ;;
+        upsell-reset-then-success) scenario="upsell-reset" ;;
+        *) scenario="quota" ;;
+    esac
     [ "$call_count" -ge 2 ] && scenario="success"
 fi
 
@@ -56,6 +59,12 @@ case "$scenario" in
         ;;
     billing)
         msg="You've hit your usage limit: out of credits. Please purchase more credits."
+        printf '%s\n' "$thread_line"
+        printf '{"type":"turn.failed","error":{"message":"%s"}}\n' "$msg"
+        exit 1
+        ;;
+    upsell-reset)
+        msg="You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 1:00 AM."
         printf '%s\n' "$thread_line"
         printf '{"type":"turn.failed","error":{"message":"%s"}}\n' "$msg"
         exit 1
@@ -216,14 +225,37 @@ func TestCodexWrapperScript_QuotaThenSuccess(t *testing.T) {
 	assert.Contains(t, res.stderr, "codex-retry:")
 }
 
-func TestCodexWrapperScript_BillingFatal(t *testing.T) {
+func TestCodexWrapperScript_OutOfCreditsNoResetBacksOff(t *testing.T) {
 	requireSh(t)
+	// "out of credits" with no "try again at" reset time: rather than giving
+	// up ("no retry"), the wrapper backs off exponentially and resumes the
+	// thread, until the attempt budget is exhausted.
 	res := runCodexWrapper(t, "billing")
 
 	assert.Equal(t, 1, res.exitCode)
-	require.Len(t, res.callsLines, 1)
-	assert.Contains(t, res.stderr, "billing limit")
-	assert.Empty(t, res.sleeps)
+	require.Len(t, res.callsLines, 3) // exec + 2 resumes (RETRY_MAX_ATTEMPTS=3)
+	assert.Contains(t, res.callsLines[1], "exec resume THREAD-1")
+	assert.Equal(t, []string{"1", "2"}, res.sleeps) // backoff base 1s, doubling
+	assert.Contains(t, res.stderr, "max attempts")
+	assert.NotContains(t, res.stderr, "no retry")
+}
+
+// TestCodexWrapperScript_UpsellWithResetRetries is the regression test for the
+// real ChatGPT usage-limit message, which carries "Upgrade to Pro" /
+// "purchase more credits" upsell text AND a "try again at <time>" reset. The
+// wrapper must honour the reset and resume, not treat the upsell as a fatal
+// billing error.
+func TestCodexWrapperScript_UpsellWithResetRetries(t *testing.T) {
+	requireSh(t)
+	res := runCodexWrapperOpts(t, codexWrapperOpts{scenario: "upsell-reset-then-success"})
+
+	assert.Equal(t, 0, res.exitCode)
+	require.Len(t, res.callsLines, 2)
+	assert.Contains(t, res.callsLines[1], "exec resume THREAD-1")
+	require.Len(t, res.sleeps, 1)
+	assert.Contains(t, res.stderr, "reported reset")
+	assert.Contains(t, res.stdout, `"text":"done"`)
+	assert.NotContains(t, res.stderr, "no retry")
 }
 
 func TestCodexWrapperScript_NoResetTimeFallsBackToBackoff(t *testing.T) {

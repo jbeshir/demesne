@@ -1,11 +1,19 @@
 #!/bin/sh
-# Wraps codex so a ChatGPT usage-limit window waits for the reported reset
-# time and resumes the same thread; stdout must stay the verbatim JSONL stream
-# so the caller's transcript is uninterrupted across retries.
+# Wraps codex so a ChatGPT usage-limit window is survived rather than fatal:
+# the wrapper waits for the reset time reported in the failure message — even
+# when that message also carries "Upgrade to Pro"/"purchase more credits" upsell
+# text — and resumes the same thread. When the message has no parseable reset
+# time it falls back to exponential backoff. stdout must stay the verbatim JSONL
+# stream so the caller's transcript is uninterrupted across retries.
 set -u
 
-RETRY_MAX_ATTEMPTS=${RETRY_MAX_ATTEMPTS:-6}
-RETRY_MAX_TOTAL_WAIT_SECS=${RETRY_MAX_TOTAL_WAIT_SECS:-39600}
+# Retry budget: survive a usage-limit / billing window for up to six hours,
+# with the first backoff retry after five minutes (used when the failure
+# message carries no explicit reset time). RETRY_MAX_TOTAL_WAIT_SECS is the
+# hard ceiling on total time spent waiting across all attempts; RETRY_MAX_ATTEMPTS
+# is high enough that the time budget, not the attempt count, is the binding limit.
+RETRY_MAX_ATTEMPTS=${RETRY_MAX_ATTEMPTS:-12}
+RETRY_MAX_TOTAL_WAIT_SECS=${RETRY_MAX_TOTAL_WAIT_SECS:-21600}
 RETRY_RESET_BUFFER_SECS=${RETRY_RESET_BUFFER_SECS:-30}
 RETRY_BACKOFF_BASE_SECS=${RETRY_BACKOFF_BASE_SECS:-300}
 
@@ -33,17 +41,6 @@ extract_thread_id() {
 
 quota_line() {
     grep -F '"type":"turn.failed"' "$cap" | grep -F "You've hit your usage limit" | head -1
-}
-
-is_billing_fatal() {
-    line=$1
-    printf '%s' "$line" | grep -qiF 'out of credits' && return 0
-    printf '%s' "$line" | grep -qiF 'spend cap' && return 0
-    printf '%s' "$line" | grep -qiF 'purchase more credits' && return 0
-    printf '%s' "$line" | grep -qiF 'upgrade to' && return 0
-    printf '%s' "$line" | grep -qiF 'send a request to your admin' && return 0
-    printf '%s' "$line" | grep -qiF 'ask your workspace owner' && return 0
-    return 1
 }
 
 reset_wait() {
@@ -99,30 +96,36 @@ while [ "$attempt" -le "$RETRY_MAX_ATTEMPTS" ]; do
         break
     fi
 
-    if is_billing_fatal "$line"; then
-        printf 'codex-retry: billing limit, no retry\n' >&2
-        break
-    fi
-
     if [ -z "$thread_id" ]; then
-        printf 'codex-retry: quota exhausted but no thread_id captured; cannot resume\n' >&2
+        printf 'codex-retry: usage limit hit but no thread_id captured; cannot resume\n' >&2
         break
     fi
 
     if [ "$attempt" -ge "$RETRY_MAX_ATTEMPTS" ]; then
-        printf 'codex-retry: quota exhausted and max attempts (%d) reached\n' "$RETRY_MAX_ATTEMPTS" >&2
+        printf 'codex-retry: usage limit hit and max attempts (%d) reached; giving up\n' "$RETRY_MAX_ATTEMPTS" >&2
         break
     fi
 
-    wait=$(reset_wait "$line" || backoff_wait)
+    # Prefer the reset time the failure message reports; ChatGPT usage-limit
+    # messages routinely carry "Upgrade to Pro"/"purchase more credits" upsell
+    # text alongside a real "try again at <time>", so honour the reset rather
+    # than treating the upsell as fatal. With no parseable reset time, fall
+    # back to exponential backoff instead of giving up.
+    if wait=$(reset_wait "$line"); then
+        wait_reason='reported reset'
+    else
+        wait=$(backoff_wait)
+        wait_reason='exponential backoff (no reset time in message)'
+    fi
+
     remaining=$((RETRY_MAX_TOTAL_WAIT_SECS - total_waited))
     if [ "$wait" -gt "$remaining" ]; then
-        printf 'codex-retry: reset is beyond the wait budget; not retrying\n' >&2
+        printf 'codex-retry: next wait of %ds is beyond the wait budget (%ds remaining); giving up\n' "$wait" "$remaining" >&2
         break
     fi
 
-    printf 'codex-retry: quota exhausted, attempt %d/%d, sleeping %ds until reset, resuming thread %s\n' \
-        "$attempt" "$RETRY_MAX_ATTEMPTS" "$wait" "$thread_id" >&2
+    printf 'codex-retry: usage limit hit, attempt %d/%d, sleeping %ds (%s), resuming thread %s\n' \
+        "$attempt" "$RETRY_MAX_ATTEMPTS" "$wait" "$wait_reason" "$thread_id" >&2
     sleep "$wait"
     total_waited=$((total_waited + wait))
     attempt=$((attempt + 1))
