@@ -6,6 +6,8 @@ When you want to render and screenshot a React widget inside a demesne sandbox, 
 
 The `browser` image is built locally by demesne the first time `image=browser` is used. The recipe layers the matching Playwright JS npm package (`playwright@1.60.0`) on top of `mcr.microsoft.com/playwright:v1.60.0-noble` (which ships the browser binaries + Node 22 but not the JS API) and sets `NODE_PATH=/usr/lib/node_modules` so `require('playwright')` resolves from any working directory, including the read-only `/in` mount. The first build pulls the ~1.6 GB base; subsequent runs reuse the cached layer. Building requires network; runtime does not.
 
+`image=browser` is also available from **nested** sandboxes: a child `sandbox_script` (or `sandbox_create`) spawned from inside an agent can request it. Every sandbox is created on the host, so the host builds the image once and serves it to nested callers too — which is what lets an in-sandbox pipeline build a React app in a sibling sandbox and render it in a `browser` child (end-to-end React development).
+
 ## Rootless-podman Chromium flags
 
 Four flags are required whenever Chromium runs under rootless podman:

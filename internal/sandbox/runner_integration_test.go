@@ -531,3 +531,76 @@ func TestRunner_Integration_BrowserImageRendersReactWidget(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, info.Size(), int64(0))
 }
+
+// TestRunner_Integration_ChildBrowserRender proves the browser image is
+// usable from a NESTED sandbox: a parent claude-code agent (with the
+// fixture mounted at /in/browser-fixture) spawns a child sandbox_script on
+// image=browser that renders the React widget. Every sandbox is created
+// host-side — even when requested through the in-sandbox tunnel — so the
+// host builds and serves the browser image for the nested caller. This is
+// the path that enables in-sandbox end-to-end React pipelines.
+func TestRunner_Integration_ChildBrowserRender(t *testing.T) {
+	oauthToken := os.Getenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN")
+	require.NotEmpty(t, oauthToken,
+		"DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for child-sandbox integration tests")
+
+	domain := os.Getenv("OPEN_SANDBOX_DOMAIN")
+	apiKey := os.Getenv("OPEN_SANDBOX_API_KEY")
+	require.NotEmpty(t, domain, "OPEN_SANDBOX_DOMAIN is required for integration tests")
+	require.NotEmpty(t, apiKey, "OPEN_SANDBOX_API_KEY is required for integration tests")
+
+	fixtureDir, err := filepath.Abs("testdata/browser-fixture")
+	require.NoError(t, err)
+
+	emptyConfig := filepath.Join(t.TempDir(), "claude.json")
+	require.NoError(t, os.WriteFile(emptyConfig, []byte(`{"mcpServers":{}}`), 0o600))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	runner := NewRunner(Config{
+		AllowedPaths:         []string{t.TempDir(), fixtureDir},
+		OutputRoot:           t.TempDir(),
+		OpenSandboxDomain:    domain,
+		OpenSandboxProtocol:  envOr("OPEN_SANDBOX_PROTOCOL", "http"),
+		OpenSandboxAPIKey:    apiKey,
+		ClaudeCodeOAuthToken: oauthToken,
+	})
+	name, tools, handler := runner.ChildMCPServer()
+	agg, err := mcpproxy.NewAggregator(mcpproxy.Config{
+		ClaudeMCPConfigPath: emptyConfig,
+		SocketPath:          filepath.Join(t.TempDir(), "aggregator.sock"),
+		ExtraServers:        []mcpproxy.ExtraServer{{Name: name, Tools: tools, Handler: handler}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, agg.Start(ctx))
+	t.Cleanup(func() {
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		_ = agg.Shutdown(shutCtx)
+	})
+	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
+
+	res, err := runner.Agent(ctx, AgentRequest{
+		Agent:       "claude-code",
+		Model:       "sonnet",
+		Egress:      EgressNone,
+		Directories: []string{fixtureDir},
+		Prompt: "Use the demesne MCP server's `sandbox_script` tool to spawn exactly one child " +
+			"named \"render\" with image \"browser\" and egress \"none\", running the command: " +
+			"node /in/browser-fixture/render.cjs . " +
+			"Then reply with exactly DONE and nothing else.",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q stderr=%q", res.Stdout, res.Stderr)
+
+	// The nested browser child's render output is under the parent's /out.
+	childOut := filepath.Join(res.OutputPath, "child", "render")
+	renderOK, err := os.ReadFile(filepath.Join(childOut, "render-ok")) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err, "nested browser child should have written render-ok")
+	assert.Contains(t, string(renderOK), "ok")
+
+	info, err := os.Stat(filepath.Join(childOut, "screenshot.png")) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err)
+	assert.Greater(t, info.Size(), int64(0))
+}

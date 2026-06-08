@@ -417,7 +417,9 @@ const childNameDescription = "Unique name for this child within the current sand
 	"Allowed characters: lowercase letters, digits, and interior hyphens only " +
 	"(no dots, underscores, or uppercase); at most 40 characters."
 
-const childImageDescription = "Container image: 'node', 'python', 'go', or 'anaconda' (default)."
+const childImageDescription = "Container image: 'node', 'python', 'go', 'anaconda' (default), " +
+	"or 'browser' (Playwright + headless Chromium for rendering React/HTML UIs; the host builds it " +
+	"on first use, so the first call is slow). Renders work at egress 'none'."
 
 const childEgressDescription = "Outbound policy: 'package-managers' (default) or 'none'."
 

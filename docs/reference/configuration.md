@@ -47,4 +47,4 @@ When the `agent` parameter is omitted demesne picks Codex if its credentials are
 
 `sandbox_agent` and `sandbox_research` use the agent provider's own image, built locally from an embedded Dockerfile (`demesne-claude-code:<hash>` for the claude-code provider; `demesne-codex:<hash>` for the codex provider).
 
-Building the `browser` image requires network access (the base must be pulled and the playwright npm package installed); nested in-sandbox use of `image=browser` cannot build because the sandbox has no docker daemon — the capability targets the host tool surface.
+Building the `browser` image requires network access (the base must be pulled and the playwright npm package installed). Every sandbox is created on the host — even when `image=browser` is requested from inside a sandbox, the child tool call is tunneled back to the host runner — so the host performs the build on first use and serves the cached image to host and nested callers alike. This is what lets in-sandbox pipelines (for example, end-to-end React development) render UIs.

@@ -278,10 +278,10 @@ func (r *Runner) launchSandbox(
 // builder package; all other (pull-based) names — and the empty name,
 // which resolves to DefaultImage — go through staticImageURI.
 //
-// Builds run on the host docker daemon; nested in-sandbox use of
-// `image=browser` cannot build (no docker), so that path will surface
-// the docker build error. Out of scope — the capability targets the
-// host tool surface.
+// The browser build runs on the host docker daemon. Both host and nested
+// callers reach this same path (nested child tool calls are tunneled back
+// to the host runner), so `image=browser` is available to in-sandbox
+// pipelines too — for example, end-to-end React development.
 func (r *Runner) resolveImage(ctx context.Context, name string) (ImageURI, error) {
 	if name == imageBrowser {
 		ref, err := browserimage.Ensure(ctx)

@@ -24,8 +24,10 @@ var imageBuilder = &agentcommon.ImageBuilder{
 // local Docker daemon and returns its fully-qualified ref. Safe for
 // concurrent first-callers.
 //
-// Builds run on the host docker daemon; nested in-sandbox use of
-// `image=browser` cannot build (no docker in a sandbox), so that path
-// surfaces the docker build error — out of scope, the capability
-// targets the host tool surface.
+// The build always runs on the host docker daemon. Sandboxes are created
+// host-side even when requested from a nested sandbox (the child tool
+// call is tunneled back to the host runner), so `image=browser` works for
+// both host and nested callers — the first use pays the build, every
+// later use hits the cache. This is what enables in-sandbox pipelines
+// such as end-to-end React development.
 func Ensure(ctx context.Context) (string, error) { return imageBuilder.Ensure(ctx) }
