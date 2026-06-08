@@ -6,7 +6,7 @@ Create a persistent sandbox and return its handle.
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `image` | string | no | `anaconda` | Container image. One of: `node` (node:22), `python` (python:3.12), `go` (golang:1), `anaconda` (continuumio/anaconda3:latest, default). |
+| `image` | string | no | `anaconda` | Container image. One of: `node` (node:22), `python` (python:3.12), `go` (golang:1), `anaconda` (continuumio/anaconda3:latest, default), `browser` (mcr.microsoft.com/playwright:v1.60.0-noble, headless Chromium preinstalled). |
 | `egress` | string | no | `package-managers` | Outbound network policy. `package-managers` allows npm, PyPI, and conda registries; `none` denies all egress. |
 | `files` | array of strings | no | — | Host file paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
 | `directories` | array of strings | no | — | Host directory paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
@@ -81,7 +81,7 @@ Pass `sandbox_id` to `sandbox_exec`, `sandbox_upload`, `sandbox_download`, and `
 
 | Error | When it occurs |
 |-------|----------------|
-| `image "<name>" is not in the allowlist (node, python, anaconda, go)` | `image` parameter names an unknown container image. |
+| `image "<name>" is not in the allowlist (node, python, anaconda, go, browser)` | `image` parameter names an unknown container image. |
 | `egress mode "<mode>" is not in the allowlist (none, package-managers, open)` | `egress` parameter is not one of the three valid modes. |
 | `mount path must be absolute: <path>` | A path in `files` or `directories` is relative. |
 | `mount path <path> is not within DEMESNE_ALLOWED_PATHS` | A path in `files` or `directories` is outside every configured `DEMESNE_ALLOWED_PATHS` entry. |

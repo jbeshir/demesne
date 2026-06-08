@@ -456,7 +456,8 @@ func (s *Server) registerTools() {
 
 const imageParamDescription = "Container image. One of: 'node' (node:22), " +
 	"'python' (python:3.12), 'go' (golang:1), 'anaconda' " +
-	"(continuumio/anaconda3:latest, default)."
+	"(continuumio/anaconda3:latest, default), 'browser' " +
+	"(mcr.microsoft.com/playwright:v1.60.0-noble, headless Chromium preinstalled)."
 
 const egressParamDescription = "Outbound network policy. 'package-managers' (default) allows " +
 	"npm, PyPI, and conda registries; 'none' denies all egress."

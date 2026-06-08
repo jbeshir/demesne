@@ -18,6 +18,7 @@ func TestResolveImage(t *testing.T) {
 		{name: "python", want: "python:3.12"},
 		{name: "node", want: "node:22"},
 		{name: "go", want: "golang:1"},
+		{name: "browser", want: "mcr.microsoft.com/playwright:v1.60.0-noble"},
 		{name: "ubuntu", wantErr: true},
 		{name: "Anaconda", wantErr: true},
 	}

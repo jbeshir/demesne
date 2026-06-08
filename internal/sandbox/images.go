@@ -22,6 +22,8 @@ var Images = map[string]string{
 	// golang:1 tracks the latest stable Go 1.x; the default bookworm
 	// variant is batteries-included (Go toolchain + git + gcc + make).
 	"go": "golang:1",
+	// ships Node 22 + Playwright + Chromium + all OS deps so headless rendering works at egress=none
+	"browser": "mcr.microsoft.com/playwright:v1.60.0-noble",
 }
 
 // ResolveImage returns the container image URI for a friendly name.
@@ -32,7 +34,7 @@ func ResolveImage(name string) (ImageURI, error) {
 	}
 	uri, ok := Images[name]
 	if !ok {
-		return "", fmt.Errorf("image %q is not in the allowlist (node, python, anaconda, go)", name)
+		return "", fmt.Errorf("image %q is not in the allowlist (node, python, anaconda, go, browser)", name)
 	}
 	return ImageURI(uri), nil
 }

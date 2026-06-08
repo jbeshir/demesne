@@ -477,3 +477,55 @@ func TestRunner_Integration_ChildSandbox(t *testing.T) {
 	assert.FileExists(t, results)
 	assert.GreaterOrEqual(t, res.TotalUsageUSD, res.CostUSD)
 }
+
+// browserIntegrationRunner builds a Runner like integrationRunner, but also
+// includes the testdata/browser-fixture directory in AllowedPaths so the
+// sandbox can mount it read-only at /in/browser-fixture.
+func browserIntegrationRunner(t *testing.T) *Runner {
+	t.Helper()
+	domain := os.Getenv("OPEN_SANDBOX_DOMAIN")
+	apiKey := os.Getenv("OPEN_SANDBOX_API_KEY")
+	require.NotEmpty(t, domain, "OPEN_SANDBOX_DOMAIN is required for integration tests")
+	require.NotEmpty(t, apiKey, "OPEN_SANDBOX_API_KEY is required for integration tests")
+	fixtureDir, err := filepath.Abs("testdata/browser-fixture")
+	require.NoError(t, err)
+	return NewRunner(Config{
+		AllowedPaths:        []string{t.TempDir(), fixtureDir},
+		OutputRoot:          t.TempDir(),
+		OpenSandboxDomain:   domain,
+		OpenSandboxProtocol: envOr("OPEN_SANDBOX_PROTOCOL", "http"),
+		OpenSandboxAPIKey:   apiKey,
+	})
+}
+
+// TestRunner_Integration_BrowserImageRendersReactWidget proves that the
+// browser image ships Chromium, Playwright, and Node, and that headless
+// rendering of a React UMD widget works at egress=none against a host
+// directory mounted via Directories. The fixture writes /out/render-ok
+// (containing "ok") and /out/screenshot.png when rendering succeeds.
+// Note: the first run on a host pulls a ~1.6 GB image and may be slow.
+func TestRunner_Integration_BrowserImageRendersReactWidget(t *testing.T) {
+	runner := browserIntegrationRunner(t)
+
+	fixtureDir, err := filepath.Abs("testdata/browser-fixture")
+	require.NoError(t, err)
+
+	res, err := runner.RunScript(context.Background(), ScriptRequest{
+		Image:       "browser",
+		Egress:      EgressNone,
+		Directories: []string{fixtureDir},
+		Command:     "node /in/browser-fixture/render.mjs",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q stderr=%q", res.Stdout, res.Stderr)
+
+	renderOK, err := os.ReadFile(filepath.Join(res.OutputPath, "render-ok")) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err)
+	assert.Contains(t, string(renderOK), "ok")
+
+	assert.FileExists(t, filepath.Join(res.OutputPath, "screenshot.png"))
+
+	info, err := os.Stat(filepath.Join(res.OutputPath, "screenshot.png")) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err)
+	assert.Greater(t, info.Size(), int64(0))
+}

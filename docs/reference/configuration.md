@@ -43,5 +43,6 @@ When the `agent` parameter is omitted demesne picks Codex if its credentials are
 | `python` | `python:3.12` |
 | `go` | `golang:1` (batteries-included: Go toolchain + git + gcc + make) |
 | `anaconda` | `continuumio/anaconda3:latest` (default) |
+| `browser` | `mcr.microsoft.com/playwright:v1.60.0-noble` (headless Chromium + Playwright + Node 22 preinstalled; renders at egress=none) |
 
 `sandbox_agent` and `sandbox_research` use the agent provider's own image, built locally from an embedded Dockerfile (`demesne-claude-code:<hash>` for the claude-code provider; `demesne-codex:<hash>` for the codex provider).
