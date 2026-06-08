@@ -46,6 +46,15 @@ func toolPropDescription(t *testing.T, s *Server, toolName, propName string) str
 	return desc
 }
 
+// toolDescription returns the tool-level description for a registered tool.
+func toolDescription(t *testing.T, s *Server, toolName string) string {
+	t.Helper()
+	tools := s.mcpServer.ListTools()
+	st, ok := tools[toolName]
+	require.True(t, ok, "tool %q not registered", toolName)
+	return st.Tool.Description
+}
+
 // TestAgentEnumReflectsAvailability covers the three meaningful
 // credential combos (both / codex-only / neither) for both
 // sandbox_agent and sandbox_research, asserting the registered tool's
@@ -127,6 +136,76 @@ func TestAgentEnumReflectsAvailability(t *testing.T) {
 						assert.NotContains(t, modelDesc, s, "%s: model description should omit %q", toolName, s)
 					}
 				}
+			}
+		})
+	}
+}
+
+// mountToolsWithFilesDirs is the set of tools whose `files`/`directories`
+// param descriptions are populated from AllowedMountPaths.
+var mountToolsWithFilesDirs = []string{
+	sandbox.ToolSandboxScript,
+	sandbox.ToolSandboxCreate,
+	sandbox.ToolSandboxAgent,
+}
+
+// TestMountPathDescriptionsReflectAllowlist asserts that the
+// `files`/`directories` param descriptions on the three mount-accepting
+// tools, plus `sandbox_upload`'s `src` and tool-level description, are
+// populated from the Runner's AllowedMountPaths: configured roots are
+// listed verbatim, and an empty allowlist names DEMESNE_ALLOWED_PATHS
+// in its no-host-inputs wording. Mirrors TestAgentEnumReflectsAvailability.
+func TestMountPathDescriptionsReflectAllowlist(t *testing.T) {
+	const pathFoo = "/srv/foo"
+	const pathBar = "/srv/bar"
+	const emptyMarker = "No host inputs can be mounted"
+	const envVarMarker = "DEMESNE_ALLOWED_PATHS"
+
+	tests := []struct {
+		name         string
+		allowedPaths []string
+		descContains []string
+		descOmits    []string
+	}{
+		{
+			name:         "paths configured listed verbatim",
+			allowedPaths: []string{pathFoo, pathBar},
+			descContains: []string{"`" + pathFoo + "`", "`" + pathBar + "`", "configured mount roots"},
+			descOmits:    []string{emptyMarker},
+		},
+		{
+			name:         "no paths configured names env var",
+			allowedPaths: nil,
+			descContains: []string{emptyMarker, envVarMarker},
+			descOmits:    []string{"configured mount roots"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewServer(&fakeRunner{allowedPaths: tt.allowedPaths})
+			for _, toolName := range mountToolsWithFilesDirs {
+				for _, prop := range []string{paramFiles, paramDirectories} {
+					desc := toolPropDescription(t, s, toolName, prop)
+					for _, want := range tt.descContains {
+						assert.Contains(t, desc, want,
+							"%s.%s: description missing %q", toolName, prop, want)
+					}
+					for _, omit := range tt.descOmits {
+						assert.NotContains(t, desc, omit,
+							"%s.%s: description should omit %q", toolName, prop, omit)
+					}
+				}
+			}
+			srcDesc := toolPropDescription(t, s, sandbox.ToolSandboxUpload, paramSrc)
+			toolDesc := toolDescription(t, s, sandbox.ToolSandboxUpload)
+			for _, want := range tt.descContains {
+				assert.Contains(t, srcDesc, want, "upload src description missing %q", want)
+				assert.Contains(t, toolDesc, want, "upload tool description missing %q", want)
+			}
+			for _, omit := range tt.descOmits {
+				assert.NotContains(t, srcDesc, omit, "upload src description should omit %q", omit)
+				assert.NotContains(t, toolDesc, omit, "upload tool description should omit %q", omit)
 			}
 		})
 	}

@@ -17,14 +17,14 @@
     },
     "files": {
       "type": "array",
-      "description": "Host file paths to mount read-only into /in/<basename>. Each path must be absolute and inside DEMESNE_ALLOWED_PATHS.",
+      "description": "Host file paths to mount read-only into /in/<basename>. Each path must be absolute and inside DEMESNE_ALLOWED_PATHS. The live MCP input schema populates this description with the configured DEMESNE_ALLOWED_PATHS roots (or a no-host-inputs warning when none are configured).",
       "items": {
         "type": "string"
       }
     },
     "directories": {
       "type": "array",
-      "description": "Host directory paths to mount read-only into /in/<basename>. Each path must be absolute and inside DEMESNE_ALLOWED_PATHS.",
+      "description": "Host directory paths to mount read-only into /in/<basename>. Each path must be absolute and inside DEMESNE_ALLOWED_PATHS. The live MCP input schema populates this description with the configured DEMESNE_ALLOWED_PATHS roots (or a no-host-inputs warning when none are configured).",
       "items": {
         "type": "string"
       }

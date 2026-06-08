@@ -63,6 +63,7 @@ type fakeRunner struct {
 	researchRes    sandbox.AgentResult
 	researchErr    error
 	available      []sandbox.AgentOption
+	allowedPaths   []string
 }
 
 func (f *fakeRunner) RunScript(_ context.Context, req sandbox.ScriptRequest) (sandbox.ScriptResult, error) {
@@ -114,6 +115,8 @@ func (f *fakeRunner) Research(_ context.Context, req sandbox.ResearchRequest) (s
 }
 
 func (f *fakeRunner) AvailableAgents() []sandbox.AgentOption { return f.available }
+
+func (f *fakeRunner) AllowedMountPaths() []string { return f.allowedPaths }
 
 func newRequest(args map[string]any) mcp.CallToolRequest {
 	var req mcp.CallToolRequest

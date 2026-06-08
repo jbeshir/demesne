@@ -52,6 +52,12 @@ type Runner interface {
 	// server uses it to filter the `agent` / `model` enums advertised on
 	// sandbox_agent / sandbox_research at registration time.
 	AvailableAgents() []sandbox.AgentOption
+	// AllowedMountPaths reports the host paths under which callers may
+	// mount inputs (`files`/`directories`) or upload (`src`). The server
+	// uses it to populate the matching MCP param descriptions at
+	// registration time, so the agent calling the tool knows which roots
+	// are reachable.
+	AllowedMountPaths() []string
 }
 
 // Server is the MCP server for Demesne.
@@ -159,6 +165,54 @@ func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 	return mcp.WithString(paramModel, mcp.Description(desc), mcp.Enum(models...))
 }
 
+// allowedPathsClause renders the configured host mount-path allowlist
+// as a trailing clause for the `files` / `directories` / `src`
+// param descriptions. When at least one path is configured it returns
+// a single sentence listing the roots; when empty it returns the
+// no-host-inputs warning that names the env var to set. Shared by the
+// files/directories builders and the upload-src builder so the wording
+// stays consistent.
+func allowedPathsClause(allowed []string) string {
+	if len(allowed) == 0 {
+		return "No host inputs can be mounted: DEMESNE_ALLOWED_PATHS is not configured."
+	}
+	quoted := make([]string, len(allowed))
+	for i, p := range allowed {
+		quoted[i] = "`" + p + "`"
+	}
+	return "Must be absolute and inside one of the configured mount roots: " + strings.Join(quoted, ", ") + "."
+}
+
+// filesParamDescriptionFor builds the description of the `files`
+// array param, listing the configured DEMESNE_ALLOWED_PATHS roots.
+func filesParamDescriptionFor(allowed []string) string {
+	return "Host file paths to mount read-only into /in/<basename>. " + allowedPathsClause(allowed)
+}
+
+// directoriesParamDescriptionFor builds the description of the
+// `directories` array param, listing the configured
+// DEMESNE_ALLOWED_PATHS roots.
+func directoriesParamDescriptionFor(allowed []string) string {
+	return "Host directory paths to mount read-only into /in/<basename>. " + allowedPathsClause(allowed)
+}
+
+// uploadSrcDescriptionFor builds the description of sandbox_upload's
+// `src` param, listing the configured DEMESNE_ALLOWED_PATHS roots.
+func uploadSrcDescriptionFor(allowed []string) string {
+	return "Host file path to upload. " + allowedPathsClause(allowed) +
+		" Symlinks are resolved before the check."
+}
+
+// uploadToolDescriptionFor builds sandbox_upload's tool-level
+// description, listing the configured DEMESNE_ALLOWED_PATHS roots in
+// the same clause used by the param descriptions.
+func uploadToolDescriptionFor(allowed []string) string {
+	return "Copy a host file into an existing sandbox.\n\n" +
+		"The host source must be a regular file (not a directory). " +
+		allowedPathsClause(allowed) +
+		" The sandbox destination is an absolute path; its parent directory must already exist."
+}
+
 // joinOr renders a slice as an English "a, b, or c" list. With one
 // element it returns that element; with two it returns "a or b".
 func joinOr(parts []string) string {
@@ -181,6 +235,11 @@ func (s *Server) registerTools() {
 	available := s.runner.AvailableAgents()
 	agentOpt := agentParamOptions(available)
 	modelOpt := modelParamOptions(available)
+	allowed := s.runner.AllowedMountPaths()
+	filesDesc := filesParamDescriptionFor(allowed)
+	directoriesDesc := directoriesParamDescriptionFor(allowed)
+	uploadSrcDesc := uploadSrcDescriptionFor(allowed)
+	uploadDesc := uploadToolDescriptionFor(allowed)
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxScript,
 		mcp.WithDescription(scriptToolDescription),
 		mcp.WithOutputSchema[scriptOutput](),
@@ -194,11 +253,11 @@ func (s *Server) registerTools() {
 		mcp.WithString(paramImage, mcp.Description(imageParamDescription)),
 		mcp.WithString(paramEgress, mcp.Description(egressParamDescription)),
 		mcp.WithArray(paramFiles,
-			mcp.Description(filesParamDescription),
+			mcp.Description(filesDesc),
 			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithArray(paramDirectories,
-			mcp.Description(directoriesParamDescription),
+			mcp.Description(directoriesDesc),
 			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -213,11 +272,11 @@ func (s *Server) registerTools() {
 		mcp.WithString(paramImage, mcp.Description(imageParamDescription)),
 		mcp.WithString(paramEgress, mcp.Description(egressParamDescription)),
 		mcp.WithArray(paramFiles,
-			mcp.Description(filesParamDescription),
+			mcp.Description(filesDesc),
 			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithArray(paramDirectories,
-			mcp.Description(directoriesParamDescription),
+			mcp.Description(directoriesDesc),
 			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -247,17 +306,14 @@ func (s *Server) registerTools() {
 	), s.handleSandboxExec)
 
 	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxUpload,
-		mcp.WithDescription(uploadToolDescription),
+		mcp.WithDescription(uploadDesc),
 		mcp.WithString(paramSandboxID,
 			mcp.Required(),
 			mcp.Description(sandboxHandleDesc),
 		),
 		mcp.WithString(paramSrc,
 			mcp.Required(),
-			mcp.Description(
-				"Host file path to upload. Must be absolute and inside "+
-					"DEMESNE_ALLOWED_PATHS. Symlinks are resolved before the check.",
-			),
+			mcp.Description(uploadSrcDesc),
 		),
 		mcp.WithString(paramDst,
 			mcp.Required(),
@@ -332,11 +388,11 @@ func (s *Server) registerTools() {
 			),
 		),
 		mcp.WithArray(paramFiles,
-			mcp.Description(filesParamDescription),
+			mcp.Description(filesDesc),
 			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithArray(paramDirectories,
-			mcp.Description(directoriesParamDescription),
+			mcp.Description(directoriesDesc),
 			mcp.Items(stringArrayItems()),
 		),
 		mcp.WithString(paramOutputPath,
@@ -405,12 +461,6 @@ const imageParamDescription = "Container image. One of: 'node' (node:22), " +
 const egressParamDescription = "Outbound network policy. 'package-managers' (default) allows " +
 	"npm, PyPI, and conda registries; 'none' denies all egress."
 
-const filesParamDescription = "Host file paths to mount read-only into /in/<basename>. " +
-	"Each path must be absolute and inside DEMESNE_ALLOWED_PATHS."
-
-const directoriesParamDescription = "Host directory paths to mount read-only into /in/<basename>. " +
-	"Each path must be absolute and inside DEMESNE_ALLOWED_PATHS."
-
 const scriptToolDescription = `Run a single shell command in a fresh sandbox and return its stdout.
 
 The sandbox is created from an allowlisted image (anaconda by default), the
@@ -447,12 +497,6 @@ Executed with /bin/sh -c. Working directory is /out. The sandbox's TTL is
 refreshed by 24h before the command runs.
 
 The result text contains the exit code and the captured stdout.`
-
-const uploadToolDescription = `Copy a host file into an existing sandbox.
-
-The host source must be a regular file (not a directory), absolute, and
-inside DEMESNE_ALLOWED_PATHS. The sandbox destination is an absolute path;
-its parent directory must already exist.`
 
 const downloadToolDescription = `Copy a file out of an existing sandbox to the host.
 

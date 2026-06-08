@@ -10,7 +10,7 @@
     },
     "src": {
       "type": "string",
-      "description": "Host file path to upload. Must be absolute and inside DEMESNE_ALLOWED_PATHS. Symlinks are resolved before the check."
+      "description": "Host file path to upload. Must be absolute and inside DEMESNE_ALLOWED_PATHS. Symlinks are resolved before the check. The live MCP input schema populates this description with the configured DEMESNE_ALLOWED_PATHS roots (or a no-host-inputs warning when none are configured); the tool-level description carries the same clause."
     },
     "dst": {
       "type": "string",

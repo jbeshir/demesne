@@ -7,7 +7,7 @@ Copy a host file into an existing sandbox.
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `sandbox_id` | string | yes | — | Sandbox handle returned by `sandbox_create`. |
-| `src` | string | yes | — | Host file path to upload. Must be absolute and inside `DEMESNE_ALLOWED_PATHS`. Symlinks are resolved before the check. |
+| `src` | string | yes | — | Host file path to upload. Must be absolute and inside `DEMESNE_ALLOWED_PATHS`. Symlinks are resolved before the check. The live MCP input schema's description for this parameter (and the tool-level description) is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
 | `dst` | string | yes | — | Destination path inside the sandbox. Must be absolute. Parent directory must already exist. |
 
 ## Annotations

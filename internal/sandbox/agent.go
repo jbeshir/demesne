@@ -476,6 +476,14 @@ type AgentOption struct {
 	Models []string
 }
 
+// AllowedMountPaths returns the host paths under which callers may
+// mount files or directories (or upload from), in the same order
+// LoadConfigFromEnv produced — configured paths first, then the
+// implicitly-appended output root. Used by the server to populate the
+// `files` / `directories` / `src` param descriptions advertised on
+// sandbox_script / sandbox_create / sandbox_agent / sandbox_upload.
+func (r *Runner) AllowedMountPaths() []string { return r.cfg.AllowedPaths }
+
 // AvailableAgents returns the configured agent providers and their
 // model allowlists in codex-first order. Empty when no agent
 // credentials are configured. Used by the server to build the

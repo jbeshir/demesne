@@ -8,8 +8,8 @@ Create a persistent sandbox and return its handle.
 |------|------|----------|---------|-------------|
 | `image` | string | no | `anaconda` | Container image. One of: `node` (node:22), `python` (python:3.12), `go` (golang:1), `anaconda` (continuumio/anaconda3:latest, default). |
 | `egress` | string | no | `package-managers` | Outbound network policy. `package-managers` allows npm, PyPI, and conda registries; `none` denies all egress. |
-| `files` | array of strings | no | — | Host file paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. |
-| `directories` | array of strings | no | — | Host directory paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. |
+| `files` | array of strings | no | — | Host file paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
+| `directories` | array of strings | no | — | Host directory paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
 
 ## Annotations
 
