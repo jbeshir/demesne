@@ -17,6 +17,8 @@ Inside a `sandbox_agent` or `sandbox_research` sandbox, the following demesne to
 
 `sandbox_upload` and `sandbox_download` are not available to children.
 
+All of these except `sandbox_research` inherit the calling sandbox's read-only `/in` (including completed siblings at `/in/previous-jobs/`) and the shared `/workspace`, and write to `/out/child/<name>`. In particular an in-sandbox `sandbox_script` shares `/workspace` — it is not a fresh, isolated shell. None of these child tools take `files`/`directories` host-mount parameters; those exist only on the host-invoked tools, because only the host may mount host paths. `sandbox_research` is the exception: it runs isolated, with no `/in` mounts and a fresh private `/workspace`.
+
 ## The `name` parameter
 
 Every child-spawning call requires a `name` parameter. Rules:

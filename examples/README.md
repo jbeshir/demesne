@@ -6,6 +6,7 @@ These are runnable examples of the kinds of work you can ask your agent to run t
 - [`persistent-session/`](persistent-session/) — **persistent session**: create → exec → upload → exec → download → destroy lifecycle.
 - [`sandbox-agent-hello/`](sandbox-agent-hello/) — **delegated agent task**: hand a one-shot prompt to a sub-agent.
 - [`sandbox-agent-verifier/`](sandbox-agent-verifier/) — **multi-agent orchestration**: worker + verifier pattern.
+- [`skills/`](skills/) — **ready-to-use agent skills**: a library of `SKILL.md` pipeline definitions (feature work, migration sweeps, corpus map-reduce, document ETL, and more) you can drop into a Claude Code plugin to drive demesne orchestrations from natural language.
 
 ## Running an example
 

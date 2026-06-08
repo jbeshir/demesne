@@ -20,6 +20,7 @@ Ask your agent to run through demesne:
 - **Delegated coding-agent tasks** — hand off a prompt to a sub-agent running inside a sandbox. [Example](examples/sandbox-agent-hello/)
 - **Persistent sessions** — create a sandbox, run multiple commands, upload/download files, then destroy it. [Example](examples/persistent-session/)
 - **Multi-agent orchestration** — the orchestrator agent is itself a containerised run that spawns child sandboxes for its workers and verifier, dispatching tasks and judging results across the tree. [Example](examples/sandbox-agent-verifier/)
+- **Ready-made orchestration skills** — a library of `SKILL.md` pipeline definitions (migration sweeps, corpus map-reduce, document ETL, and more) to drop into your agent and adapt. Pre-alpha: in principle ready to use but largely untested — regard them as examples of what could be tried. [Example skills](examples/skills/)
 
 Together these let your agent take on larger tasks more autonomously: you can push security-review-awkward script execution, autonomous research, and entire multi-agent pipelines into containers that run with no permission prompts — much of the autonomy you'd otherwise reach for `--dangerously-skip-permissions` to get, but with the host kept at arm's length by a container boundary, read-only mounts, and egress allowlists. (That boundary is container-level isolation, not a hard security guarantee — see [SECURITY.md](SECURITY.md).) And you don't pre-declare the pipeline: your agent composes the orchestration prompt itself for the task at hand, and the containerised orchestrator adapts the layout and subagents as it runs.
 
@@ -67,6 +68,7 @@ For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Qui
 | [Quickstart](docs/tutorial/quickstart.md) | Five steps to your first `sandbox_script` call |
 | [Docs](docs/) | Tutorials, how-to recipes, reference, explanation |
 | [Examples](examples/) | Runnable example calls |
+| [Example skills](examples/skills/) | Ready-to-use orchestration pipelines you can adapt (pre-alpha) |
 
 ## Contributing
 
