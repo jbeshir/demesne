@@ -1,5 +1,5 @@
-import { chromium } from 'playwright';
-import { statSync, writeFileSync } from 'node:fs';
+const { chromium } = require('playwright');
+const { statSync, writeFileSync } = require('node:fs');
 
 async function main() {
   const fixtureDir = process.env.FIXTURE_DIR ?? '/in/browser-fixture';

@@ -1,40 +1,59 @@
 package sandbox
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ImageURI is a fully-resolved container image reference (e.g.
-// "python:3.12") returned by ResolveImage. Distinct from the user-facing
-// friendly name ("python") so callers that already have a built tag
-// can use it directly without passing through ResolveImage.
+// "python:3.12" or a locally-built "demesne-browser:<hash>" tag),
+// distinct from the user-facing friendly name ("python"). Produced by
+// (*Runner).resolveImage.
 type ImageURI string
+
+// Friendly image names accepted by the sandbox tools. Extracted as
+// constants so the same string literal isn't repeated across the map,
+// the allowlist, the runner, and tests.
+const (
+	imageNode    = "node"
+	imagePython  = "python"
+	imageGo      = "go"
+	imageBrowser = "browser"
+)
 
 // DefaultImage is the image used when the caller does not specify one.
 const DefaultImage = "anaconda"
 
 const imageAnaconda = "continuumio/anaconda3:latest"
 
-// Images maps the names accepted by the sandbox_script tool to concrete
-// container image references.
+// Images maps the pull-based friendly names to concrete container image
+// references. Locally-built images (browser) are not here — the runner
+// routes them to their builder package so they build lazily.
 var Images = map[string]string{
-	"node":     "node:22",
-	"python":   "python:3.12",
-	"anaconda": imageAnaconda,
+	imageNode:    "node:22",
+	imagePython:  "python:3.12",
+	DefaultImage: imageAnaconda,
 	// golang:1 tracks the latest stable Go 1.x; the default bookworm
 	// variant is batteries-included (Go toolchain + git + gcc + make).
-	"go": "golang:1",
-	// ships Node 22 + Playwright + Chromium + all OS deps so headless rendering works at egress=none
-	"browser": "mcr.microsoft.com/playwright:v1.60.0-noble",
+	imageGo: "golang:1",
 }
 
-// ResolveImage returns the container image URI for a friendly name.
-// An empty name resolves to DefaultImage. Unknown names are rejected.
-func ResolveImage(name string) (ImageURI, error) {
+// allowedImageNames lists every friendly name accepted by the sandbox
+// tools, including locally-built ones. Used in the not-in-allowlist
+// error so callers see the full allowlist, not just the static names.
+var allowedImageNames = []string{imageNode, imagePython, DefaultImage, imageGo, imageBrowser}
+
+// staticImageURI resolves a pull-based friendly name to its image URI.
+// An empty name resolves to DefaultImage. The locally-built "browser"
+// name is not handled here; (*Runner).resolveImage routes it to its
+// builder before reaching this function.
+func staticImageURI(name string) (ImageURI, error) {
 	if name == "" {
 		name = DefaultImage
 	}
 	uri, ok := Images[name]
 	if !ok {
-		return "", fmt.Errorf("image %q is not in the allowlist (node, python, anaconda, go, browser)", name)
+		return "", fmt.Errorf("image %q is not in the allowlist (%s)", name, strings.Join(allowedImageNames, ", "))
 	}
 	return ImageURI(uri), nil
 }

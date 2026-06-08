@@ -43,6 +43,8 @@ When the `agent` parameter is omitted demesne picks Codex if its credentials are
 | `python` | `python:3.12` |
 | `go` | `golang:1` (batteries-included: Go toolchain + git + gcc + make) |
 | `anaconda` | `continuumio/anaconda3:latest` (default) |
-| `browser` | `mcr.microsoft.com/playwright:v1.60.0-noble` (headless Chromium + Playwright + Node 22 preinstalled; renders at egress=none) |
+| `browser` | demesne-built (Playwright JS + Chromium/Firefox/WebKit + Node; lazily built on first use; first build pulls a ~1.6 GB base; runtime works at egress=none) |
 
 `sandbox_agent` and `sandbox_research` use the agent provider's own image, built locally from an embedded Dockerfile (`demesne-claude-code:<hash>` for the claude-code provider; `demesne-codex:<hash>` for the codex provider).
+
+Building the `browser` image requires network access (the base must be pulled and the playwright npm package installed); nested in-sandbox use of `image=browser` cannot build because the sandbox has no docker daemon — the capability targets the host tool surface.

@@ -1,14 +1,10 @@
 # Render a React widget headlessly in a sandbox
 
-When you want to render and screenshot a React widget inside a demesne sandbox, use the `browser` image — it ships Node 22 + Playwright + headless Chromium + every required OS dependency so rendering works at `egress=none`. Useful for visual regression, widget snapshots, and agent-evaluated UI output.
+When you want to render and screenshot a React widget inside a demesne sandbox, use the `browser` image — a demesne-built image that ships Node 22 + the Playwright JS API + headless Chromium/Firefox/WebKit + every required OS dependency so rendering works at `egress=none`. Useful for visual regression, widget snapshots, and agent-evaluated UI output.
 
 ## The image
 
-```
-mcr.microsoft.com/playwright:v1.60.0-noble
-```
-
-Roughly 1.6 GB compressed. The first pull on a fresh host is slow; subsequent runs use the cached layer. The image includes Node 22, the full Playwright library, a pre-installed Chromium build, and the system libraries (fonts, shared objects) that Chromium requires.
+The `browser` image is built locally by demesne the first time `image=browser` is used. The recipe layers the matching Playwright JS npm package (`playwright@1.60.0`) on top of `mcr.microsoft.com/playwright:v1.60.0-noble` (which ships the browser binaries + Node 22 but not the JS API) and sets `NODE_PATH=/usr/lib/node_modules` so `require('playwright')` resolves from any working directory, including the read-only `/in` mount. The first build pulls the ~1.6 GB base; subsequent runs reuse the cached layer. Building requires network; runtime does not.
 
 ## Rootless-podman Chromium flags
 
@@ -28,7 +24,7 @@ demesne ships a working fixture at `internal/sandbox/testdata/browser-fixture/`.
 - `index.html` — self-contained React 18.3.1 widget; loads local UMD bundles, mounts `<h1 id="widget">Hello from React</h1>` into `#root`
 - `react.production.min.js` — React 18.3.1 UMD bundle
 - `react-dom.production.min.js` — React-DOM 18.3.1 UMD bundle
-- `render.mjs` — Playwright harness; asserts DOM text, writes `/out/screenshot.png` and `/out/render-ok`
+- `render.cjs` — CommonJS Playwright harness using `require('playwright')`; asserts DOM text, writes `/out/screenshot.png` and `/out/render-ok`. CommonJS (not ESM) because `NODE_PATH=/usr/lib/node_modules` only redirects CommonJS resolution — ESM bare imports would fail to resolve `playwright` from the read-only `/in` mount.
 
 To run it, call `sandbox_script` with the fixture directory mounted:
 
@@ -37,7 +33,7 @@ Use sandbox_script with:
   image:       browser
   egress:      none
   directories: ["<your absolute path to internal/sandbox/testdata/browser-fixture>"]
-  command:     node /in/browser-fixture/render.mjs
+  command:     node /in/browser-fixture/render.cjs
 ```
 
 demesne mounts each directory listed in `directories` read-only at `/in/<basename>` inside the sandbox. The harness writes `/out/screenshot.png` and `/out/render-ok` to the per-run output directory, whose host path is returned in the tool result as `output_dir`.
@@ -60,7 +56,7 @@ const text = await page.textContent('#root');
 if (!text.includes('expected text')) { process.exit(1); }
 ```
 
-The fixture's `render.mjs` does both — read it as a starting template.
+The fixture's `render.cjs` does both — read it as a starting template.
 
 ## See also
 

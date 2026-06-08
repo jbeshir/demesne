@@ -503,7 +503,9 @@ func browserIntegrationRunner(t *testing.T) *Runner {
 // rendering of a React UMD widget works at egress=none against a host
 // directory mounted via Directories. The fixture writes /out/render-ok
 // (containing "ok") and /out/screenshot.png when rendering succeeds.
-// Note: the first run on a host pulls a ~1.6 GB image and may be slow.
+// Lazily builds the demesne-browser image on first run (which pulls the
+// ~1.6 GB Playwright base and layers the playwright npm package);
+// subsequent runs reuse the cached layer.
 func TestRunner_Integration_BrowserImageRendersReactWidget(t *testing.T) {
 	runner := browserIntegrationRunner(t)
 
@@ -514,7 +516,7 @@ func TestRunner_Integration_BrowserImageRendersReactWidget(t *testing.T) {
 		Image:       "browser",
 		Egress:      EgressNone,
 		Directories: []string{fixtureDir},
-		Command:     "node /in/browser-fixture/render.mjs",
+		Command:     "node /in/browser-fixture/render.cjs",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode, "stdout=%q stderr=%q", res.Stdout, res.Stderr)

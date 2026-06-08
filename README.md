@@ -16,7 +16,7 @@ An **agent-agnostic, local, containerised agent-orchestration MCP server you dri
 Ask your agent to run through demesne:
 
 - **One-off scripts** — execute a shell command in a fresh sandbox and collect output. [Example](examples/hello-script/)
-- **Headless React-widget rendering** — render and screenshot a React widget inside a sandbox via the baked-in `browser` image (Playwright + Chromium + Node 22, works at `egress=none`). [How-to](docs/how-to/render-react-ui.md)
+- **Headless React-widget rendering** — render and screenshot a React widget inside a sandbox via the demesne-built `browser` image (Playwright + Chromium + Node 22, works at `egress=none`). [How-to](docs/how-to/render-react-ui.md)
 - **Long-running research with open internet** — spawn a research agent with unrestricted outbound access. [Reference](docs/reference/tools/sandbox_research.md)
 - **Delegated coding-agent tasks** — hand off a prompt to a sub-agent running inside a sandbox. [Example](examples/sandbox-agent-hello/)
 - **Persistent sessions** — create a sandbox, run multiple commands, upload/download files, then destroy it. [Example](examples/persistent-session/)

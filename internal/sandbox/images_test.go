@@ -7,24 +7,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestResolveImage(t *testing.T) {
+func TestStaticImageURI(t *testing.T) {
 	tests := []struct {
 		name    string
 		want    ImageURI
 		wantErr bool
 	}{
 		{name: "", want: imageAnaconda},
-		{name: "anaconda", want: imageAnaconda},
-		{name: "python", want: "python:3.12"},
-		{name: "node", want: "node:22"},
-		{name: "go", want: "golang:1"},
-		{name: "browser", want: "mcr.microsoft.com/playwright:v1.60.0-noble"},
+		{name: DefaultImage, want: imageAnaconda},
+		{name: imagePython, want: "python:3.12"},
+		{name: imageNode, want: "node:22"},
+		{name: imageGo, want: "golang:1"},
+		// browser is a locally-built image, not a static one; the runner
+		// routes it to its builder before staticImageURI is reached.
+		{name: imageBrowser, wantErr: true},
 		{name: "ubuntu", wantErr: true},
 		{name: "Anaconda", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveImage(tt.name)
+			got, err := staticImageURI(tt.name)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

@@ -17,6 +17,7 @@ import (
 
 	"github.com/jbeshir/demesne/internal/mcpproxy"
 	"github.com/jbeshir/demesne/internal/proxies"
+	"github.com/jbeshir/demesne/internal/sandbox/browserimage"
 	"github.com/jbeshir/demesne/internal/sidecar"
 )
 
@@ -272,10 +273,30 @@ func (r *Runner) launchSandbox(
 	return nil, fmt.Errorf("create sandbox: unexpected loop exit")
 }
 
+// resolveImage turns a friendly image name into a concrete container ref.
+// The locally-built "browser" image is built lazily on first use via its
+// builder package; all other (pull-based) names — and the empty name,
+// which resolves to DefaultImage — go through staticImageURI.
+//
+// Builds run on the host docker daemon; nested in-sandbox use of
+// `image=browser` cannot build (no docker), so that path will surface
+// the docker build error. Out of scope — the capability targets the
+// host tool surface.
+func (r *Runner) resolveImage(ctx context.Context, name string) (ImageURI, error) {
+	if name == imageBrowser {
+		ref, err := browserimage.Ensure(ctx)
+		if err != nil {
+			return "", fmt.Errorf("ensure browser image: %w", err)
+		}
+		return ImageURI(ref), nil
+	}
+	return staticImageURI(name)
+}
+
 // sandboxPrepOptions captures everything prepareSandbox needs. Used by
 // the script and create paths; the agent path calls createSandbox directly.
 type sandboxPrepOptions struct {
-	Image       string     // resolved via ResolveImage
+	Image       string     // resolved via (*Runner).resolveImage
 	Egress      EgressMode // resolved via BuildNetworkPolicy
 	Files       []string
 	Directories []string
@@ -303,7 +324,7 @@ func (r *Runner) prepareSandbox(
 	ctx context.Context,
 	opts sandboxPrepOptions,
 ) (*opensandbox.Sandbox, string, JobID, error) {
-	imageURI, err := ResolveImage(opts.Image)
+	imageURI, err := r.resolveImage(ctx, opts.Image)
 	if err != nil {
 		return nil, "", "", err
 	}
