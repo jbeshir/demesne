@@ -43,8 +43,8 @@ When the `agent` parameter is omitted demesne picks Codex if its credentials are
 | `python` | `python:3.12` |
 | `go` | `golang:1` (batteries-included: Go toolchain + git + gcc + make) |
 | `anaconda` | `continuumio/anaconda3:latest` (default) |
-| `browser` | demesne-built (Playwright JS + Chromium/Firefox/WebKit + Node; lazily built on first use; first build pulls a ~1.6 GB base; runtime works at egress=none) |
+| `browser` | demesne-built from an embedded Dockerfile, like the agent images (Playwright + Chromium/Firefox/WebKit + Node); rendering works at `egress=none` |
 
 `sandbox_agent` and `sandbox_research` use the agent provider's own image, built locally from an embedded Dockerfile (`demesne-claude-code:<hash>` for the claude-code provider; `demesne-codex:<hash>` for the codex provider).
 
-Building the `browser` image requires network access (the base must be pulled and the playwright npm package installed). Every sandbox is created on the host — even when `image=browser` is requested from inside a sandbox, the child tool call is tunneled back to the host runner — so the host performs the build on first use and serves the cached image to host and nested callers alike. This is what lets in-sandbox pipelines (for example, end-to-end React development) render UIs.
+Like the agent images, `browser` is built once on the host from a fixed embedded Dockerfile and cached (`demesne-browser:<hash>`) — agents select the image but don't configure or trigger its build. Because sandboxes are always created host-side, the cached image is equally available to nested in-sandbox callers, which is what lets in-sandbox pipelines (for example, end-to-end React development) render their own React content in a `browser` sandbox.
