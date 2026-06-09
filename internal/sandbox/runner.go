@@ -18,6 +18,7 @@ import (
 	"github.com/jbeshir/demesne/internal/mcpproxy"
 	"github.com/jbeshir/demesne/internal/proxies"
 	"github.com/jbeshir/demesne/internal/sandbox/browserimage"
+	"github.com/jbeshir/demesne/internal/sandbox/mediaimage"
 	"github.com/jbeshir/demesne/internal/sidecar"
 )
 
@@ -274,19 +275,26 @@ func (r *Runner) launchSandbox(
 }
 
 // resolveImage turns a friendly image name into a concrete container ref.
-// The locally-built "browser" image is built lazily on first use via its
-// builder package; all other (pull-based) names — and the empty name,
-// which resolves to DefaultImage — go through staticImageURI.
+// The locally-built "browser" and "media" images are built lazily on first
+// use via their builder packages; all other (pull-based) names — and the
+// empty name, which resolves to DefaultImage — go through staticImageURI.
 //
-// The browser build runs on the host docker daemon. Both host and nested
-// callers reach this same path (nested child tool calls are tunneled back
-// to the host runner), so `image=browser` is available to in-sandbox
-// pipelines too — for example, end-to-end React development.
+// Both builds run on the host docker daemon. Both host and nested callers
+// reach this same path (nested child tool calls are tunneled back to the
+// host runner), so `image=browser` and `image=media` are available to
+// in-sandbox pipelines too.
 func (r *Runner) resolveImage(ctx context.Context, name string) (ImageURI, error) {
 	if name == imageBrowser {
 		ref, err := browserimage.Ensure(ctx)
 		if err != nil {
 			return "", fmt.Errorf("ensure browser image: %w", err)
+		}
+		return ImageURI(ref), nil
+	}
+	if name == imageMedia {
+		ref, err := mediaimage.Ensure(ctx)
+		if err != nil {
+			return "", fmt.Errorf("ensure media image: %w", err)
 		}
 		return ImageURI(ref), nil
 	}

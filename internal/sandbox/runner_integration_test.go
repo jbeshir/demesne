@@ -604,3 +604,25 @@ func TestRunner_Integration_ChildBrowserRender(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, info.Size(), int64(0))
 }
+
+// TestRunner_Integration_MediaImageConvertsFrame proves the media image
+// ships ffmpeg + ImageMagick by generating a 1-frame test source, decoding
+// it to PNG, and inspecting it with `identify`, all at egress=none with
+// no input mounts. Lazily builds the demesne-media image on first run
+// (which apt-installs the ffmpeg/ImageMagick/libvips/audio toolbox);
+// subsequent runs reuse the cached layer.
+func TestRunner_Integration_MediaImageConvertsFrame(t *testing.T) {
+	runner := integrationRunner(t)
+
+	res, err := runner.RunScript(context.Background(), ScriptRequest{
+		Image:   "media",
+		Egress:  EgressNone,
+		Command: "ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=1 -frames:v 1 /out/frame.png && identify /out/frame.png && ffmpeg -version",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q stderr=%q", res.Stdout, res.Stderr)
+
+	info, err := os.Stat(filepath.Join(res.OutputPath, "frame.png")) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err)
+	assert.Greater(t, info.Size(), int64(0))
+}

@@ -21,6 +21,9 @@ func TestStaticImageURI(t *testing.T) {
 		// browser is a locally-built image, not a static one; the runner
 		// routes it to its builder before staticImageURI is reached.
 		{name: imageBrowser, wantErr: true},
+		// media is a locally-built image, not a static one; the runner
+		// routes it to its builder before staticImageURI is reached.
+		{name: imageMedia, wantErr: true},
 		{name: "ubuntu", wantErr: true},
 		{name: "Anaconda", wantErr: true},
 	}
