@@ -18,6 +18,7 @@ func generateContext(p agents.ContextParams) string {
 	agentcommon.WritePreamble(&b, p.Preamble)
 	agentcommon.WriteEnvironment(&b, p, agentcommon.EgressSentence(p.Egress, "the Anthropic API"))
 	agentcommon.WriteHostTools(&b, p.MCPServers)
+	agentcommon.WriteFileGenNote(&b, p.MCPServers)
 	agentcommon.WriteOrchestration(&b)
 	agentcommon.WriteDefinitionOfDone(&b, p.OutputContract)
 	agentcommon.WriteTask(&b, p.Prompt)

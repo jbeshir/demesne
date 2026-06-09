@@ -29,6 +29,44 @@ func TestDefaultAllowlist_WorkflowyPins(t *testing.T) {
 	assert.False(t, ok, "workflowy: delete_node must not be in default allowlist")
 }
 
+// TestDefaultAllowlist_ImageGenMcpPins is a regression ratchet: it pins
+// the read-only image-gen-mcp tools as present and mutating/privileged
+// names as absent.
+func TestDefaultAllowlist_ImageGenMcpPins(t *testing.T) {
+	ig := defaultAllowlist["image-gen-mcp"]
+
+	// Must be present (confirmed read/generate-only).
+	_, ok := ig["generate_image"]
+	assert.True(t, ok, "image-gen-mcp: generate_image should be in default allowlist")
+	_, ok = ig["edit_image"]
+	assert.True(t, ok, "image-gen-mcp: edit_image should be in default allowlist")
+	_, ok = ig["list_available_models"]
+	assert.True(t, ok, "image-gen-mcp: list_available_models should be in default allowlist")
+
+	// Must be absent (write/privileged operations).
+	_, ok = ig["delete_image"]
+	assert.False(t, ok, "image-gen-mcp: delete_image must not be in default allowlist")
+	_, ok = ig["set_api_key"]
+	assert.False(t, ok, "image-gen-mcp: set_api_key must not be in default allowlist")
+}
+
+// TestDefaultAllowlist_MermaidPins is a regression ratchet: it pins
+// the read-only mermaid tool as present and hypothetical mutating names
+// as absent.
+func TestDefaultAllowlist_MermaidPins(t *testing.T) {
+	mm := defaultAllowlist["mermaid"]
+
+	// Must be present (confirmed read/generate-only).
+	_, ok := mm["generate"]
+	assert.True(t, ok, "mermaid: generate should be in default allowlist")
+
+	// Must be absent (mutating/hypothetical operations).
+	_, ok = mm["delete"]
+	assert.False(t, ok, "mermaid: delete must not be in default allowlist")
+	_, ok = mm["render_inline"]
+	assert.False(t, ok, "mermaid: render_inline must not be in default allowlist")
+}
+
 // TestDefaultAllowlist_AnkiPins pins read-only anki query tools as present
 // and write operations as absent.
 func TestDefaultAllowlist_AnkiPins(t *testing.T) {

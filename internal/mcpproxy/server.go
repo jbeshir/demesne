@@ -52,6 +52,13 @@ type Config struct {
 	// into every sandbox through the same sidecar tunnel. Unlike the
 	// stdio upstreams, an extra server's handler is supplied directly.
 	ExtraServers []ExtraServer
+	// FileDeliverer is optional. Injected by main when file-generating
+	// MCP upstreams should be intercepted; nil disables file-gen
+	// post-processing (handlers pass results through unchanged). The
+	// sandbox.Runner implements this interface — mcpproxy can't depend
+	// on sandbox, so the wiring crosses the boundary at construction
+	// time.
+	FileDeliverer FileDeliverer
 }
 
 // ExtraServer is an in-process MCP server mounted on the aggregator
@@ -81,6 +88,7 @@ type Aggregator struct {
 	catalogue  ToolCatalogue
 	socketPath string
 	extra      []ExtraServer
+	deliverer  FileDeliverer
 }
 
 // discoverAllUpstreams reads the Claude and Codex configs, merges the
@@ -138,6 +146,7 @@ func NewAggregator(cfg Config) (*Aggregator, error) {
 		catalogue:  ToolCatalogue{},
 		socketPath: cfg.SocketPath,
 		extra:      cfg.ExtraServers,
+		deliverer:  cfg.FileDeliverer,
 	}, nil
 }
 
@@ -233,11 +242,19 @@ func (a *Aggregator) registerUpstream(ctx context.Context, mux *http.ServeMux, s
 		return false
 	}
 
-	srv := newServerForUpstream(spec.Name, exposed, resources, templates, prompts, a.pool)
+	srv := newServerForUpstream(spec.Name, exposed, resources, templates, prompts, a.pool, a.deliverer)
 	path := "/" + spec.Name + "/mcp"
-	mux.Handle(path, server.NewStreamableHTTPServer(srv))
+	a.mountUpstreamHTTP(mux, path, srv, spec.Name)
 	a.catalogue[spec.Name] = exposed
 	return true
+}
+
+func (a *Aggregator) mountUpstreamHTTP(mux *http.ServeMux, path string, srv *server.MCPServer, name string) {
+	var opts []server.StreamableHTTPOption
+	if IsFileGenServer(name) && a.deliverer != nil {
+		opts = append(opts, server.WithHTTPContextFunc(parentFromHTTP))
+	}
+	mux.Handle(path, server.NewStreamableHTTPServer(srv, opts...))
 }
 
 // listenSocket creates the parent dir, removes any stale socket from
@@ -303,6 +320,52 @@ func (a *Aggregator) Shutdown(ctx context.Context) error {
 	return firstErr
 }
 
+// plainToolHandler returns a handler that forwards a tool call to the
+// named upstream via the pool, with no file-gen post-processing.
+func plainToolHandler(pool *Pool, upstream, tool string) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		req.Params.Name = tool
+		return pool.CallTool(ctx, upstream, req)
+	}
+}
+
+// fileGenHandler returns a handler that intercepts a file-generating tool
+// call: when a parent job ID is present in ctx it delivers produced files
+// into the sandbox workspace and rewrites paths in the result.
+func fileGenHandler(
+	adapter FileGenAdapter,
+	deliverer FileDeliverer,
+	pool *Pool,
+	upstream, tool string,
+) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		req.Params.Name = tool
+		parentID := ParentJobIDFromContext(ctx)
+		if parentID == "" {
+			return pool.CallTool(ctx, upstream, req)
+		}
+		hostDir, _, err := deliverer.DeliveryDir(parentID)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("file-gen %s: %v", tool, err)), nil
+		}
+		req.Params.Arguments = adapter.PrepareArgs(req.GetArguments(), hostDir)
+		result, err := pool.CallTool(ctx, upstream, req)
+		if err != nil {
+			return nil, err
+		}
+		paths := adapter.ExtractHostPaths(result)
+		if len(paths) == 0 {
+			return result, nil
+		}
+		mapping, err := deliverer.Deliver(parentID, paths)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("file-gen %s deliver: %v", tool, err)), nil
+		}
+		adapter.RewriteResult(result, mapping)
+		return result, nil
+	}
+}
+
 // newServerForUpstream builds an mcp-go MCPServer registered with
 // the given (already-allowlisted) tools, resources, resource
 // templates, and prompts, each routed via the pool to the named
@@ -315,6 +378,7 @@ func newServerForUpstream(
 	templates []mcp.ResourceTemplate,
 	prompts []mcp.Prompt,
 	pool *Pool,
+	deliverer FileDeliverer,
 ) *server.MCPServer {
 	opts := []server.ServerOption{
 		server.WithToolCapabilities(false),
@@ -332,10 +396,12 @@ func newServerForUpstream(
 
 	for _, t := range tools {
 		tool := t
-		srv.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			req.Params.Name = tool.Name
-			return pool.CallTool(ctx, name, req)
-		})
+		adapter := FileGenAdapterFor(name, tool.Name)
+		if adapter != nil && deliverer != nil {
+			srv.AddTool(tool, fileGenHandler(adapter, deliverer, pool, name, tool.Name))
+		} else {
+			srv.AddTool(tool, plainToolHandler(pool, name, tool.Name))
+		}
 	}
 	for _, r := range resources {
 		res := r

@@ -3,10 +3,12 @@ package mcpproxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	uritemplate "github.com/yosida95/uritemplate/v3"
+
+	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
 
 const (
@@ -31,8 +35,12 @@ const (
 // when DEMESNE_TEST_STUB_MCP=1, so aggregator tests can spawn a
 // real upstream subprocess without a separate binary.
 func TestMain(m *testing.M) {
-	if os.Getenv("DEMESNE_TEST_STUB_MCP") == "1" {
+	switch {
+	case os.Getenv("DEMESNE_TEST_STUB_MCP") == "1":
 		runStubServer()
+		return
+	case os.Getenv("DEMESNE_TEST_STUB_IMAGEGEN") == "1":
+		runImagegenStub()
 		return
 	}
 	os.Exit(m.Run())
@@ -49,6 +57,23 @@ func (s *stubCompleter) CompletePromptArgument(_ context.Context, _ string, _ mc
 
 func (s *stubCompleter) CompleteResourceArgument(_ context.Context, _ string, _ mcp.CompleteArgument, _ mcp.CompleteContext) (*mcp.Completion, error) {
 	return &mcp.Completion{Values: []string{stubAlpha, stubBeta}}, nil
+}
+
+// runImagegenStub serves a generate_image tool that returns a
+// structured result with a file:// image URL. Used as a real upstream
+// subprocess in file-gen handler tests.
+func runImagegenStub() {
+	srv := server.NewMCPServer("stub-imagegen", "0")
+	srv.AddTool(mcp.Tool{
+		Name:        toolGenerateImg,
+		Description: "generate image stub",
+	}, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return &mcp.CallToolResult{
+			Content:           []mcp.Content{mcp.TextContent{Type: "text", Text: `{"image_url":"file:///tmp/fake/img.png"}`}},
+			StructuredContent: map[string]any{imageURLKey: imageGenStubURL},
+		}, nil
+	})
+	_ = server.ServeStdio(srv)
 }
 
 // runStubServer serves tools, a resource, a resource template, and
@@ -119,6 +144,9 @@ const (
 	testSandboxScript = "sandbox_script"
 	testAggSock       = "agg.sock"
 	testClaudeJSON    = "claude.json"
+	imageGenStubURL   = "file:///tmp/fake/img.png"
+	fakeHostDir       = "/host/delivery"
+	fakeSandboxDir    = "/workspace/generated"
 )
 
 // writeStubConfig writes a Claude-Code-shaped MCP config that points
@@ -472,4 +500,274 @@ func TestAggregator_ResourcesOnlyUpstreamMounted(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed.Resources, 1)
 	assert.Equal(t, "greet", listed.Resources[0].Name)
+}
+
+// writeImagegenStubConfig writes a Claude-Code-shaped MCP config pointing
+// "image-gen-mcp" at the test binary running as the imagegen stub, and
+// an allowlist file granting generate_image. Returns (cfgPath, allowPath).
+func writeImagegenStubConfig(t *testing.T) (string, string) {
+	t.Helper()
+	self, err := os.Executable()
+	require.NoError(t, err)
+	cfg := map[string]any{
+		"mcpServers": map[string]any{
+			serverImageGen: map[string]any{
+				"type":    "stdio",
+				"command": self,
+				"env":     map[string]string{"DEMESNE_TEST_STUB_IMAGEGEN": "1"},
+			},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	cfgPath := filepath.Join(t.TempDir(), testClaudeJSON)
+	require.NoError(t, os.WriteFile(cfgPath, data, 0o600))
+
+	allowPath := filepath.Join(t.TempDir(), "allowlist.json")
+	require.NoError(t, os.WriteFile(allowPath, []byte(`{"image-gen-mcp":["generate_image"]}`), 0o600))
+
+	return cfgPath, allowPath
+}
+
+// connectToImagegenUpstream creates, starts, and initializes an MCP HTTP
+// client connected to /image-gen-mcp/mcp via the aggregator socket using
+// the provided http.Client.
+func connectToImagegenUpstream(t *testing.T, ctx context.Context, httpClient *http.Client) *client.Client {
+	t.Helper()
+	mcpClient, err := client.NewStreamableHttpClient(
+		"http://demesne-mcp/image-gen-mcp/mcp",
+		transport.WithHTTPBasicClient(httpClient),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mcpClient.Close() })
+	require.NoError(t, mcpClient.Start(ctx))
+	initReq := mcp.InitializeRequest{}
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "0"}
+	_, err = mcpClient.Initialize(ctx, initReq)
+	require.NoError(t, err)
+	return mcpClient
+}
+
+// headerSettingTransport wraps an http.RoundTripper and injects fixed
+// headers on every request, used to supply the parent-job header in
+// file-gen tests without per-request client API.
+type headerSettingTransport struct {
+	base    http.RoundTripper
+	headers map[string]string
+}
+
+func (t *headerSettingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	for k, v := range t.headers {
+		req.Header.Set(k, v)
+	}
+	return t.base.RoundTrip(req)
+}
+
+type fakeDeliverer struct {
+	hostDir          string
+	sbDir            string
+	err              error
+	deliverErr       error
+	mapping          map[string]string
+	deliveryDirCalls atomic.Int32
+	deliverCalls     atomic.Int32
+	lastJobID        string
+}
+
+func (f *fakeDeliverer) DeliveryDir(parent string) (string, string, error) {
+	f.deliveryDirCalls.Add(1)
+	f.lastJobID = parent
+	return f.hostDir, f.sbDir, f.err
+}
+
+func (f *fakeDeliverer) Deliver(_ string, _ []string) (map[string]string, error) {
+	f.deliverCalls.Add(1)
+	return f.mapping, f.deliverErr
+}
+
+func TestAggregator_FileGenPassthrough_NoParent(t *testing.T) {
+	cfgPath, allowPath := writeImagegenStubConfig(t)
+	socketPath := filepath.Join(t.TempDir(), testAggSock)
+
+	fd := &fakeDeliverer{
+		hostDir: fakeHostDir,
+		sbDir:   fakeSandboxDir,
+		mapping: map[string]string{"/tmp/fake/img.png": "/workspace/generated/img.png"},
+	}
+
+	agg, err := NewAggregator(Config{
+		ClaudeMCPConfigPath: cfgPath,
+		AllowlistFilePath:   allowPath,
+		SocketPath:          socketPath,
+		FileDeliverer:       fd,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, agg.Start(ctx))
+	defer func() { _ = agg.Shutdown(context.Background()) }()
+
+	mcpClient := connectToImagegenUpstream(t, ctx, dialUnix(socketPath))
+
+	callReq := mcp.CallToolRequest{}
+	callReq.Params.Name = toolGenerateImg
+	callReq.Params.Arguments = map[string]any{}
+	res, err := mcpClient.CallTool(ctx, callReq)
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+
+	sc, ok := res.StructuredContent.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, imageGenStubURL, sc[imageURLKey])
+
+	assert.Equal(t, int32(0), fd.deliveryDirCalls.Load())
+	assert.Equal(t, int32(0), fd.deliverCalls.Load())
+}
+
+func TestAggregator_FileGenRewrites_WithParent(t *testing.T) {
+	cfgPath, allowPath := writeImagegenStubConfig(t)
+	socketPath := filepath.Join(t.TempDir(), testAggSock)
+
+	fd := &fakeDeliverer{
+		hostDir: fakeHostDir,
+		sbDir:   fakeSandboxDir,
+		mapping: map[string]string{"/tmp/fake/img.png": "/workspace/generated/img.png"},
+	}
+
+	agg, err := NewAggregator(Config{
+		ClaudeMCPConfigPath: cfgPath,
+		AllowlistFilePath:   allowPath,
+		SocketPath:          socketPath,
+		FileDeliverer:       fd,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, agg.Start(ctx))
+	defer func() { _ = agg.Shutdown(context.Background()) }()
+
+	httpClient := &http.Client{
+		Transport: &headerSettingTransport{
+			base: dialUnix(socketPath).Transport,
+			headers: map[string]string{
+				proxymcp.ParentHeader: "test-parent-job-123",
+			},
+		},
+	}
+	mcpClient := connectToImagegenUpstream(t, ctx, httpClient)
+
+	callReq := mcp.CallToolRequest{}
+	callReq.Params.Name = toolGenerateImg
+	callReq.Params.Arguments = map[string]any{}
+	res, err := mcpClient.CallTool(ctx, callReq)
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+
+	sc, ok := res.StructuredContent.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "/workspace/generated/img.png", sc[imageURLKey])
+
+	require.NotEmpty(t, res.Content)
+	textContent, ok := res.Content[0].(mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "/workspace/generated/img.png")
+	assert.NotContains(t, textContent.Text, "file://")
+
+	assert.Equal(t, int32(1), fd.deliveryDirCalls.Load())
+	assert.Equal(t, int32(1), fd.deliverCalls.Load())
+}
+
+func TestAggregator_FileGenDeliveryDirError_ReturnsToolError(t *testing.T) {
+	cfgPath, allowPath := writeImagegenStubConfig(t)
+	socketPath := filepath.Join(t.TempDir(), testAggSock)
+
+	fd := &fakeDeliverer{
+		err: errors.New("delivery dir failed"),
+	}
+
+	agg, err := NewAggregator(Config{
+		ClaudeMCPConfigPath: cfgPath,
+		AllowlistFilePath:   allowPath,
+		SocketPath:          socketPath,
+		FileDeliverer:       fd,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, agg.Start(ctx))
+	defer func() { _ = agg.Shutdown(context.Background()) }()
+
+	httpClient := &http.Client{
+		Transport: &headerSettingTransport{
+			base: dialUnix(socketPath).Transport,
+			headers: map[string]string{
+				proxymcp.ParentHeader: "test-parent-job-456",
+			},
+		},
+	}
+	mcpClient := connectToImagegenUpstream(t, ctx, httpClient)
+
+	callReq := mcp.CallToolRequest{}
+	callReq.Params.Name = toolGenerateImg
+	callReq.Params.Arguments = map[string]any{}
+	res, err := mcpClient.CallTool(ctx, callReq)
+	require.NoError(t, err)
+	require.True(t, res.IsError)
+
+	require.NotEmpty(t, res.Content)
+	textContent, ok := res.Content[0].(mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "file-gen")
+}
+
+func TestAggregator_FileGenDeliverError_ReturnsToolError(t *testing.T) {
+	cfgPath, allowPath := writeImagegenStubConfig(t)
+	socketPath := filepath.Join(t.TempDir(), testAggSock)
+
+	fd := &fakeDeliverer{
+		hostDir:    fakeHostDir,
+		sbDir:      fakeSandboxDir,
+		deliverErr: errors.New("copy failed"),
+	}
+
+	agg, err := NewAggregator(Config{
+		ClaudeMCPConfigPath: cfgPath,
+		AllowlistFilePath:   allowPath,
+		SocketPath:          socketPath,
+		FileDeliverer:       fd,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, agg.Start(ctx))
+	defer func() { _ = agg.Shutdown(context.Background()) }()
+
+	httpClient := &http.Client{
+		Transport: &headerSettingTransport{
+			base: dialUnix(socketPath).Transport,
+			headers: map[string]string{
+				proxymcp.ParentHeader: "test-parent-job-789",
+			},
+		},
+	}
+	mcpClient := connectToImagegenUpstream(t, ctx, httpClient)
+
+	callReq := mcp.CallToolRequest{}
+	callReq.Params.Name = toolGenerateImg
+	callReq.Params.Arguments = map[string]any{}
+	res, err := mcpClient.CallTool(ctx, callReq)
+	require.NoError(t, err)
+	require.True(t, res.IsError)
+
+	require.NotEmpty(t, res.Content)
+	textContent, ok := res.Content[0].(mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "deliver")
+	assert.Equal(t, int32(1), fd.deliveryDirCalls.Load())
+	assert.Equal(t, int32(1), fd.deliverCalls.Load())
 }

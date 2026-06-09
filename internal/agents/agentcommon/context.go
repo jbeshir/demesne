@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/jbeshir/demesne/internal/agents"
+	"github.com/jbeshir/demesne/internal/mcpproxy"
 )
 
 // WritePreamble appends the caller-supplied preamble section; no-op when empty.
@@ -80,6 +81,19 @@ func WriteHostTools(b *strings.Builder, mcpServers []agents.MCPServerInfo) {
 			} else {
 				fmt.Fprintf(b, "    - `%s`\n", t.Name)
 			}
+		}
+	}
+}
+
+// WriteFileGenNote appends a short note about file-generating MCP tools.
+// Skipped when no wired server is a file-gen server.
+func WriteFileGenNote(b *strings.Builder, mcpServers []agents.MCPServerInfo) {
+	for _, s := range mcpServers {
+		if mcpproxy.IsFileGenServer(s.Name) {
+			b.WriteString("\nFile-generating MCP tools (image generation, mermaid diagrams) " +
+				"deliver their output into `/workspace/generated/` inside this sandbox. " +
+				"Copy any file you want returned to the caller into `/out/` (which is output-only).\n")
+			return
 		}
 	}
 }

@@ -76,7 +76,7 @@ func run() error {
 	// agents just get no host MCP tools. Its bindings/catalogue feed
 	// back into the runner via SetMCPWiring; these are not env-derived,
 	// so they're populated here in setup rather than in LoadConfigFromEnv.
-	agg, err := startAggregator(socketPath, mcpproxy.ExtraServer{
+	agg, err := startAggregator(runner, socketPath, mcpproxy.ExtraServer{
 		Name:    demesneName,
 		Tools:   demesneTools,
 		Handler: demesneHandler,
@@ -113,7 +113,11 @@ func run() error {
 // upstreams. The demesne server alone is enough to bring the
 // aggregator up even when no host stdio servers are configured. All
 // env reads happen here in setup, not inside the mcpproxy package.
-func startAggregator(socketPath string, extra ...mcpproxy.ExtraServer) (*mcpproxy.Aggregator, error) {
+func startAggregator(
+	deliverer mcpproxy.FileDeliverer,
+	socketPath string,
+	extra ...mcpproxy.ExtraServer,
+) (*mcpproxy.Aggregator, error) {
 	claudeConfig := envOr("DEMESNE_CLAUDE_CODE_MCP_CONFIG", defaultClaudeMCPConfig())
 	codexConfig := envOr("DEMESNE_CODEX_MCP_CONFIG", defaultCodexMCPConfig())
 	allowlist := envOr("DEMESNE_MCP_ALLOWLIST", defaultAllowlistPath())
@@ -124,6 +128,7 @@ func startAggregator(socketPath string, extra ...mcpproxy.ExtraServer) (*mcpprox
 		LookupEnv:           os.LookupEnv,
 		AllowlistFilePath:   allowlist,
 		SeedAllowlistFile:   true,
+		FileDeliverer:       deliverer,
 		// The aggregator listens on a unix socket; the runner
 		// bind-mounts it into each sidecar. A socket (not a host TCP
 		// port) is what works under rootless podman.

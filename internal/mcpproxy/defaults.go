@@ -1,10 +1,15 @@
 package mcpproxy
 
 const (
-	serverWorkflowy = "workflowy"
 	serverAlignment = "alignment"
-	toolSearchNodes = "search_nodes"
+	serverImageGen  = "image-gen-mcp"
+	serverMermaid   = "mermaid"
+	serverWorkflowy = "workflowy"
+	toolEditImage   = "edit_image"
+	toolGenerate    = "generate"
+	toolGenerateImg = "generate_image"
 	toolGetUser     = "get_user"
+	toolSearchNodes = "search_nodes"
 )
 
 // defaultAllowlist maps server name → set of tool names that are
@@ -61,6 +66,11 @@ var defaultAllowlist = map[ServerName]map[ToolName]struct{}{
 		"get_vocab",
 		"get_vocab_srs_details",
 	),
+	serverImageGen: setOf(
+		toolEditImage,
+		toolGenerateImg,
+		"list_available_models",
+	),
 	"manifold": setOf(
 		"get_baseline",
 		"get_comments",
@@ -71,6 +81,9 @@ var defaultAllowlist = map[ServerName]map[ToolName]struct{}{
 		toolGetUser,
 		"list_bets",
 		"search_markets",
+	),
+	serverMermaid: setOf(
+		toolGenerate,
 	),
 	"supermarkets-uk": setOf(
 		"browse_categories",

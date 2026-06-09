@@ -760,9 +760,9 @@ type mcpWiring struct {
 // (FirstListenPort + index, matching the aggregator's stable
 // alphabetical ordering) and produces both the sidecar upstream
 // list and the agent-facing server list. Agent-facing URLs are
-// sandbox-local loopback. The demesne self-server's binding carries
-// this run's jobID as its ParentJobID so the tunnel injects the
-// trusted parent-identity header on calls to it.
+// sandbox-local loopback. The demesne self-server's binding and any
+// file-gen server bindings carry this run's jobID as ParentJobID so
+// the tunnel injects the trusted parent-identity header on calls to them.
 func (r *Runner) buildMCPWiring(jobID JobID) mcpWiring {
 	w := mcpWiring{
 		sidecarUpstreams: make([]proxymcp.Binding, 0, len(r.cfg.MCPServers)),
@@ -775,7 +775,7 @@ func (r *Runner) buildMCPWiring(jobID JobID) mcpWiring {
 			ListenPort: port,
 			Path:       "/" + name + "/mcp",
 		}
-		if name == mcpproxy.DemesneServerName {
+		if name == mcpproxy.DemesneServerName || mcpproxy.IsFileGenServer(name) {
 			up.ParentJobID = string(jobID) // cast at proxies/mcp boundary (Binding.ParentJobID stays string)
 		}
 		w.sidecarUpstreams = append(w.sidecarUpstreams, up)
