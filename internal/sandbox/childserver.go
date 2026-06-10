@@ -418,8 +418,10 @@ const childNameDescription = "Unique name for this child within the current sand
 	"(no dots, underscores, or uppercase); at most 40 characters."
 
 const childImageDescription = "Container image: 'node', 'python', 'go', 'anaconda' (default), " +
-	"or 'browser' (Playwright + headless Chromium for rendering React/HTML UIs; the host builds it " +
-	"on first use, so the first call is slow). Renders work at egress 'none'."
+	"'browser' (Playwright + headless Chromium for rendering React/HTML UIs; the host builds it " +
+	"on first use, so the first call is slow; renders work at egress 'none'), or 'media' " +
+	"(ffmpeg + ImageMagick + libvips + audio tooling for video/audio/image conversion; the host " +
+	"builds it on first use, so the first call is slow)."
 
 const childEgressDescription = "Outbound policy: 'package-managers' (default) or 'none'."
 

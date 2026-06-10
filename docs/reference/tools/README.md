@@ -23,4 +23,3 @@ Every tool returns its result as both a human-readable text payload and a `struc
 - [Configuration](../configuration.md) — environment variables and container image allowlist.
 - [Nested sandboxes](../nested-sandboxes.md) — child output layout, `name` rules, `/in/previous-jobs/<name>`, task-prompt structure, copy-to-`/out` gotcha.
 - [transcript.jsonl](../transcript-jsonl.md) — NDJSON written to `<output_dir>/transcript.jsonl` by every agent run; event format, `ResultText` extraction, and relationship to the MCP `stdout` field (32 KiB cap).
-- [Render a React widget headlessly in a sandbox](../../how-to/render-react-ui.md) — how-to guide for the `browser` image.

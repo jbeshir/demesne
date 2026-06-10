@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`media` sandbox image**: a new demesne-built image (FROM ubuntu:24.04) carrying ffmpeg, ImageMagick, libvips, and a broad audio toolbox (sox, lame, flac, opus-tools) for video/audio/image conversion. Wired through `sandbox_script` / `sandbox_create` / in-sandbox child variants exactly like the existing `browser` image; built lazily on the host on first use and content-hash cached via `agentcommon.ImageBuilder`.
+
 ## [0.1.0] - 2026-06-06
 
 First public release — an agent-agnostic, local, containerised agent-orchestration MCP server you drive from your agent of choice. It runs untrusted shell, scripts, and AI coding agents in disposable OpenSandbox containers, with read-only host mounts and egress allowlists.
