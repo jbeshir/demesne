@@ -19,8 +19,8 @@ import (
 	"github.com/jbeshir/demesne/internal/egress"
 )
 
-// ModelName is the validated caller-facing model alias ("opus", "sonnet",
-// "haiku"). Provider packages define the concrete constants; the sandbox
+// ModelName is the validated caller-facing model alias ("fable", "opus",
+// "sonnet", "haiku"). Provider packages define the concrete constants; the sandbox
 // resolves raw MCP input strings to ModelName before passing to
 // Command/EnvVars so those methods never see an unvalidated string.
 type ModelName string

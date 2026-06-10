@@ -155,8 +155,9 @@ func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 	for _, a := range available {
 		switch a.Name {
 		case agentNameClaudeCode:
-			clauses = append(clauses, "claude-code uses 'opus' (complex synthesis), "+
-				"'sonnet' (default; general agentic work), or 'haiku' (lookup / cheap)")
+			clauses = append(clauses, "claude-code uses 'fable' (most capable; hardest synthesis), "+
+				"'opus' (complex synthesis), 'sonnet' (default; general agentic work), "+
+				"or 'haiku' (lookup / cheap)")
 		case agentNameCodex:
 			clauses = append(clauses, "codex uses the gpt-5.x family")
 		}

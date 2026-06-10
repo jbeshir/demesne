@@ -455,9 +455,9 @@ Not for: deterministic verification or shell scripting — use sandbox_script
 (or sandbox_create+sandbox_exec for repeated runs).
 
 Model: 'haiku' for lookup, 'sonnet' (default) for general agentic work,
-'opus' for complex synthesis. Hand off via /workspace files referenced
-from the child's prompt; copy artefacts you want returned into your own
-/out.`
+'opus' for complex synthesis, 'fable' for the hardest synthesis (most
+capable, above opus). Hand off via /workspace files referenced from the
+child's prompt; copy artefacts you want returned into your own /out.`
 
 const childResearchDescription = `Spawn a long-running child research agent with open internet egress.
 
@@ -481,8 +481,9 @@ const childPreambleDescription = "Prose prepended to the child's context file. "
 	"The right place for role framing and 'must not' constraints (e.g. " +
 	"'you are a code reviewer; do not modify files')."
 
-const childModelDescription = "Model: 'opus' (complex synthesis), " +
-	"'sonnet' (default; general agentic work), 'haiku' (lookup / cheap)."
+const childModelDescription = "Model: 'fable' (most capable; hardest synthesis), " +
+	"'opus' (complex synthesis), 'sonnet' (default; general agentic work), " +
+	"'haiku' (lookup / cheap)."
 
 const childAgentDescriptionParam = "Agent provider. `codex` or `claude-code` — " +
 	"defaults to `codex` when Codex credentials are configured, otherwise `claude-code`."

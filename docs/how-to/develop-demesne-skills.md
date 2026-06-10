@@ -50,6 +50,7 @@ Match the tool to the task:
 - **Classification or routing** → `sandbox_agent` with `model: "haiku"`. Lightweight reasoning.
 - **General agentic work** → `sandbox_agent` with `model: "sonnet"` (default). Most tasks.
 - **Hard synthesis or extended reasoning** → `sandbox_agent` with `model: "opus"`. Use sparingly.
+- **The hardest synthesis** → `sandbox_agent` with `model: "fable"`. The most capable tier, above opus; reserve for tasks where opus is not enough.
 
 Try a single well-prompted agent before fanning out. Three parallel workers each burning a sonnet context is only worthwhile if the tasks are genuinely independent and the quality gain justifies the cost.
 

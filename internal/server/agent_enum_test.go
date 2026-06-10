@@ -76,10 +76,10 @@ func TestAgentEnumReflectsAvailability(t *testing.T) {
 			name: "both configured codex-first",
 			available: []sandbox.AgentOption{
 				{Name: agentNameCodex, Models: []string{modelGPT55, modelGPT54Mini}},
-				{Name: agentNameClaudeCode, Models: []string{"opus", "sonnet", "haiku"}},
+				{Name: agentNameClaudeCode, Models: []string{"sonnet", "opus", "fable", "haiku"}},
 			},
 			wantAgentEnum:  []string{agentNameCodex, agentNameClaudeCode},
-			wantModelEnum:  []string{modelGPT55, modelGPT54Mini, "opus", "sonnet", "haiku"},
+			wantModelEnum:  []string{modelGPT55, modelGPT54Mini, "sonnet", "opus", "fable", "haiku"},
 			descContains:   []string{"`codex`", "`claude-code`", "defaults to `codex`"},
 			modelDescCheck: []string{"claude-code uses", "codex uses the gpt-5.x family"},
 		},

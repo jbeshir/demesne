@@ -36,8 +36,8 @@ func (e catalogEntry) Price() Pricing { return e.Pricing }
 // 0 cost so they will not break a run.
 //
 // modelCatalog is the single source of truth for per-family pricing.
-// sonnet sits at index 0 to match DefaultModel. The three IDPrefixes have
-// no overlap so longest-prefix ordering is moot, but the contract is
+// sonnet sits at index 0 to match DefaultModel. The IDPrefixes have no
+// overlap so longest-prefix ordering is moot, but the contract is
 // maintained. Add new families here when they ship.
 //
 // Source: https://docs.anthropic.com/en/docs/about-claude/pricing
@@ -62,6 +62,17 @@ var modelCatalog = []catalogEntry{
 			OutputPerMTok:     25.00,
 			CacheWritePerMTok: 6.25,
 			CacheReadPerMTok:  0.50,
+		},
+	},
+	// fable — most capable tier, above opus; verified rates per MTok (in/out/write/read).
+	{
+		Alias:    "fable",
+		IDPrefix: "claude-fable-5",
+		Pricing: Pricing{
+			InputPerMTok:      10.00,
+			OutputPerMTok:     50.00,
+			CacheWritePerMTok: 12.50,
+			CacheReadPerMTok:  1.00,
 		},
 	},
 	// haiku — verified rates per MTok (in/out/write/read).

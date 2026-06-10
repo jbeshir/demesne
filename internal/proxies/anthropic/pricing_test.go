@@ -25,6 +25,15 @@ func TestLookupPricing_Opus_ExactPrices(t *testing.T) {
 	assert.InDelta(t, 0.50, float64(p.CacheReadPerMTok), 1e-9)
 }
 
+func TestLookupPricing_Fable_ExactPrices(t *testing.T) {
+	p, ok := LookupPricing("claude-fable-5")
+	require.True(t, ok)
+	assert.InDelta(t, 10.0, float64(p.InputPerMTok), 1e-9)
+	assert.InDelta(t, 50.0, float64(p.OutputPerMTok), 1e-9)
+	assert.InDelta(t, 12.50, float64(p.CacheWritePerMTok), 1e-9)
+	assert.InDelta(t, 1.00, float64(p.CacheReadPerMTok), 1e-9)
+}
+
 func TestLookupPricing_Haiku_ExactPrices(t *testing.T) {
 	p, ok := LookupPricing("claude-haiku-4-5")
 	require.True(t, ok)
@@ -44,6 +53,10 @@ func TestLookupPricing_PrefixMatchDatedID(t *testing.T) {
 	p2, ok2 := LookupPricing("claude-sonnet-4-6-20260101")
 	require.True(t, ok2)
 	assert.InDelta(t, 3.0, float64(p2.InputPerMTok), 1e-9)
+
+	p3, ok3 := LookupPricing("claude-fable-5-20260609")
+	require.True(t, ok3)
+	assert.InDelta(t, 10.0, float64(p3.InputPerMTok), 1e-9)
 }
 
 func TestLookupPricing_RemovedFallbacks(t *testing.T) {
@@ -83,6 +96,15 @@ func TestCostUSD_OpusMath(t *testing.T) {
 		OutputTokens: 1_000_000,
 	})
 	assert.InDelta(t, 30.0, float64(c), 1e-9)
+}
+
+func TestCostUSD_FableMath(t *testing.T) {
+	// 1M input + 1M output on fable @ $10 / $50 per MTok = $60.
+	c := CostUSD("claude-fable-5", TokenCounts{
+		InputTokens:  1_000_000,
+		OutputTokens: 1_000_000,
+	})
+	assert.InDelta(t, 60.0, float64(c), 1e-9)
 }
 
 func TestCostUSD_HaikuMath(t *testing.T) {
