@@ -9,12 +9,13 @@ import (
 )
 
 // ModelName is an alias for agents.ModelName so callers in this package
-// can write ModelOpus/ModelSonnet/ModelHaiku without an extra import.
+// can write ModelFable/ModelOpus/ModelSonnet/ModelHaiku without an extra import.
 type ModelName = agents.ModelName
 
-// Model alias constants for the three Claude tiers. Claude Code resolves
-// these short aliases to the latest concrete Anthropic model ID on its side.
+// Model alias constants for the Claude tiers. Claude Code resolves these
+// short aliases to the latest concrete Anthropic model ID on its side.
 const (
+	ModelFable  ModelName = "fable"
 	ModelOpus   ModelName = "opus"
 	ModelSonnet ModelName = "sonnet"
 	ModelHaiku  ModelName = "haiku"

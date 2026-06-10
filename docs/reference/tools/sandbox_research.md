@@ -8,7 +8,7 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 |------|------|----------|---------|-------------|
 | `prompt` | string | yes | — | Research task for the agent. Free-form text. |
 | `agent` | string | no | auto | Agent provider. `codex` or `claude-code` — defaults to `codex` when Codex credentials are configured, otherwise `claude-code`. The MCP input schema's enum is filtered at registration time to the agents whose host credentials are configured (omitted entirely when neither is). |
-| `model` | string | no | `sonnet` | Model for the agent. Provider-specific: claude-code uses `opus`, `sonnet` (default), or `haiku`; codex uses `gpt-5.5` (default) or `gpt-5.4-mini`. The MCP input schema's enum is filtered at registration time to the union of the configured providers' models. |
+| `model` | string | no | `sonnet` | Model for the agent. Provider-specific: claude-code uses `fable` (most capable), `opus`, `sonnet` (default), or `haiku`; codex uses `gpt-5.5` (default) or `gpt-5.4-mini`. The MCP input schema's enum is filtered at registration time to the union of the configured providers' models. |
 | `preamble` | string | no | — | Optional prose prepended verbatim to the generated agent context file (e.g. CLAUDE.md for claude-code) before the auto-generated environment section. |
 | `output_path` | string | no | — | Optional. Where the agent should write its final artefact. Rendered as a Definition of done block. |
 | `output_format` | string | no | — | Optional. Expected shape/format of the output. |
@@ -76,7 +76,7 @@ Output format, cost reporting, the `output_dir` contents, and the host MCP proxy
 | `agent "<name>" is not registered (available: [...])` | The `agent` parameter names an unknown provider. |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for sandbox_research (run 'claude setup-token' to obtain one)` | The Claude Code OAuth token env var is not set on the demesne process. Required for `agent=claude-code`. |
 | `DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) is required for sandbox_research when agent="codex"` | The Codex auth file is not set. Required for `agent=codex`. |
-| `model "<name>" is not in the Anthropic allowlist ([sonnet opus haiku])` | `model` parameter is not one of the three valid Claude tiers. |
+| `model "<name>" is not in the Anthropic allowlist ([sonnet opus fable haiku])` | `model` parameter is not one of the valid Claude tiers. |
 | `model "<name>" is not in the Codex allowlist ([gpt-5.5 gpt-5.4-mini])` | `model` parameter is not one of the two valid Codex models (`agent="codex"`). |
 | `build sidecar image: <error>` | The demesne sidecar Docker image could not be built. |
 | `build agent image: <error>` | The agent provider's container image could not be built or pulled. |

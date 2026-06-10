@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`fable` model tier**: the Claude `fable` alias (most capable tier, above `opus`) is now selectable as the `model` for `sandbox_agent` / `sandbox_research` and the in-sandbox child variants when claude-code credentials are configured. Added to the pricing catalog so its usage counts toward cost reporting and the cap.
 - **`media` sandbox image**: a new demesne-built image (FROM ubuntu:24.04) carrying ffmpeg, ImageMagick, libvips, and a broad audio toolbox (sox, lame, flac, opus-tools) for video/audio/image conversion. Wired through `sandbox_script` / `sandbox_create` / in-sandbox child variants exactly like the existing `browser` image; built lazily on the host on first use and content-hash cached via `agentcommon.ImageBuilder`.
 
 ## [0.1.0] - 2026-06-06

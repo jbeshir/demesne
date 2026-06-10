@@ -8,7 +8,7 @@ Run an AI agent inside a fresh sandbox against the caller's prompt.
 |------|------|----------|---------|-------------|
 | `prompt` | string | yes | — | Task for the agent. Free-form text. |
 | `agent` | string | no | auto | Agent provider. `codex` or `claude-code` — defaults to `codex` when Codex credentials are configured, otherwise `claude-code`. The MCP input schema's enum is filtered at registration time to the agents whose host credentials are configured (omitted entirely when neither is). |
-| `model` | string | no | `sonnet` | Model for the agent. Provider-specific: claude-code uses `opus`, `sonnet` (default), or `haiku`; codex uses `gpt-5.5` (default) or `gpt-5.4-mini`. The MCP input schema's enum is filtered at registration time to the union of the configured providers' models. |
+| `model` | string | no | `sonnet` | Model for the agent. Provider-specific: claude-code uses `fable` (most capable), `opus`, `sonnet` (default), or `haiku`; codex uses `gpt-5.5` (default) or `gpt-5.4-mini`. The MCP input schema's enum is filtered at registration time to the union of the configured providers' models. |
 | `preamble` | string | no | — | Optional prose prepended verbatim to the generated agent context file (e.g. CLAUDE.md for claude-code) before the auto-generated environment section. |
 | `egress` | string | no | `none` | Additional outbound network policy on top of the agent's backend proxy (which is always reachable). `none` (default) means only the proxy; `package-managers` also allows npm/PyPI/conda registries. `open` is rejected — use `sandbox_research` for unrestricted egress (which has no input mounts). |
 | `files` | array of strings | no | — | Host file paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
@@ -123,7 +123,7 @@ When demesne is configured with host MCP servers, the agent sees those servers t
 | `agent "<name>" is not registered (available: [...])` | The `agent` parameter names an unknown provider. |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for sandbox_agent (run 'claude setup-token' to obtain one)` | The Claude Code OAuth token env var is not set on the demesne process. Required for `agent=claude-code`. |
 | `DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) is required for sandbox_agent when agent="codex"` | The Codex auth file is not set. Required for `agent=codex`. |
-| `model "<name>" is not in the Anthropic allowlist ([sonnet opus haiku])` | `model` parameter is not one of the three valid Claude tiers. |
+| `model "<name>" is not in the Anthropic allowlist ([sonnet opus fable haiku])` | `model` parameter is not one of the valid Claude tiers. |
 | `model "<name>" is not in the Codex allowlist ([gpt-5.5 gpt-5.4-mini])` | `model` parameter is not one of the two valid Codex models (`agent="codex"`). |
 | `mount path must be absolute: <path>` | A path in `files` or `directories` is relative. |
 | `mount path <path> is not within DEMESNE_ALLOWED_PATHS` | A path in `files` or `directories` is outside every `DEMESNE_ALLOWED_PATHS` entry. |
