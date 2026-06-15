@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **In-memory job registry** (`internal/sandbox/jobs.go`): job state lives in memory for the process lifetime with no on-disk persistence; jobs do NOT survive an MCP-server restart (a stale job_id then returns `ErrJobNotFound`); a TTL reaper retains terminal jobs ~1h to bound memory; orphaned containers from a crashed/restarted process are reaped independently by `ReapOrphans` via the `demesne.owner` label.
 
 ### Changed
-- **Hook rename** (`JobHooks`, `internalAgentSpec`, `sandboxPrepOptions`): internal mid-run job-persistence hooks `OnStart`/`OnSandbox` renamed to `OnOutputReady`/`OnSandboxCreated` (and the matching struct fields) for clarity. Internal only — no behaviour change; the MCP tool surface (`sandbox_status`/`sandbox_wait`/`sandbox_cancel`) is unchanged.
+- **Internal job hooks** (`JobHooks`, `internalAgentSpec`, `sandboxPrepOptions`): the mid-run job-tracking plumbing was reduced to a single `OnOutputReady(outHost, resultsHost)` callback that records the live output/results paths for `sandbox_status`; the write-only `OnSandboxCreated` hook and run-UUID parameter (and their now-dead job fields) were dropped. Internal only — no behaviour change; the MCP tool surface (`sandbox_status`/`sandbox_wait`/`sandbox_cancel`) is unchanged.
 
 ### Fixed
 

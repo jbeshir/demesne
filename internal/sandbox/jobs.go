@@ -60,23 +60,20 @@ const (
 // ErrJobNotFound is returned when an operation references an unknown JobID.
 var ErrJobNotFound = errors.New("job not found")
 
-// JobHooks are mid-run callbacks the JobManager sets on each run so it can
-// record outHost/sandboxID as in-memory fields for live Status reads. There
-// is deliberately NO end hook: the goroutine in JobManager.Start owns
-// completion — it sets outcome/finishedAt/state after run() returns. Both
-// callbacks may be nil. Self is populated by JobManager.Start before invoking
-// run so the closure can stamp its own handle onto spawned children.
+// JobHooks carries the mid-run callback and the job's own handle. There is
+// deliberately NO end hook: the goroutine in JobManager.Start owns completion
+// — it sets outcome/finishedAt/state after run() returns. OnOutputReady is
+// the single hook: it records outHost/resultsHost as in-memory fields for live
+// Status reads. Self is populated before run so the closure can stamp its own
+// handle onto spawned children.
 type JobHooks struct {
 	// Self is the public JobID handle for the job executing with these hooks.
 	Self JobID
-	// OnOutputReady is called once the run has minted its run-job UUID and
-	// output directory; runJobID is the internal uuid, outHost is the host
-	// path of the job's /out directory, and resultsHost is the sidecar-results
-	// dir where the proxy writes usage.json during the run (empty for scripts).
-	OnOutputReady func(runJobID JobID, outHost, resultsHost string)
-	// OnSandboxCreated is called once the underlying sandbox container has been
-	// created; id is its runtime ID.
-	OnSandboxCreated func(SandboxID)
+	// OnOutputReady is called once the run has minted its output directory;
+	// outHost is the host path of the job's /out directory and resultsHost is
+	// the sidecar-results dir where the proxy writes usage.json during the run
+	// (empty for scripts).
+	OnOutputReady func(outHost, resultsHost string)
 }
 
 // JobOutcome carries the result of a completed (succeeded or failed) job.
@@ -152,10 +149,8 @@ type job struct {
 
 	// mu protects all mutable fields below.
 	mu          sync.Mutex
-	runJobID    JobID
 	outHost     string
 	resultsHost string // sidecar-results dir; proxy writes usage.json here during run
-	sandboxID   SandboxID
 	finishedAt  time.Time
 	outcome     JobOutcome
 }
@@ -271,16 +266,10 @@ func (m *JobManager) Start(
 
 	hooks := JobHooks{
 		Self: id,
-		OnOutputReady: func(runJobID JobID, outHost, resultsHost string) {
+		OnOutputReady: func(outHost, resultsHost string) {
 			j.mu.Lock()
-			j.runJobID = runJobID
 			j.outHost = outHost
 			j.resultsHost = resultsHost
-			j.mu.Unlock()
-		},
-		OnSandboxCreated: func(id SandboxID) {
-			j.mu.Lock()
-			j.sandboxID = id
 			j.mu.Unlock()
 		},
 	}

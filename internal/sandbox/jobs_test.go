@@ -276,11 +276,10 @@ func TestJobTTLNotReapedEarly(t *testing.T) {
 }
 
 // TestJobHooksOnOutputReady verifies that the OnOutputReady hook is called with
-// the runJobID and outHost the run function provides.
+// the outHost the run function provides.
 func TestJobHooksOnOutputReady(t *testing.T) {
 	m, _ := makeTestManager(t)
 
-	var gotRunJobID JobID
 	var gotOutHost string
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -288,8 +287,7 @@ func TestJobHooksOnOutputReady(t *testing.T) {
 	id := m.Start("", ToolSandboxScript,
 		func(_ context.Context, h JobHooks) (JobOutcome, error) {
 			if h.OnOutputReady != nil {
-				h.OnOutputReady("run-123", "/tmp/out", "")
-				gotRunJobID = "run-123"
+				h.OnOutputReady("/tmp/out", "")
 				gotOutHost = "/tmp/out"
 			}
 			wg.Done()
@@ -303,18 +301,16 @@ func TestJobHooksOnOutputReady(t *testing.T) {
 	m.mu.RUnlock()
 	<-j.done
 
-	assert.Equal(t, JobID("run-123"), gotRunJobID)
 	assert.Equal(t, "/tmp/out", gotOutHost)
 }
 
 // TestJobHooksOnOutputReadyRecordsFields verifies that invoking the
-// OnOutputReady hook stores runJobID and outHost into the job's internal
-// fields, and that a subsequent Status call succeeds (outHost is non-empty so
-// Status attempts file reads; missing files are silently tolerated).
+// OnOutputReady hook stores outHost into the job's internal fields, and that a
+// subsequent Status call succeeds (outHost is non-empty so Status attempts file
+// reads; missing files are silently tolerated).
 func TestJobHooksOnOutputReadyRecordsFields(t *testing.T) {
 	m, _ := makeTestManager(t)
 
-	const wantRunJobID = "run-xyz"
 	const wantOutHost = "/tmp/demesne-test/out"
 
 	var wg sync.WaitGroup
@@ -323,7 +319,7 @@ func TestJobHooksOnOutputReadyRecordsFields(t *testing.T) {
 	id := m.Start("", ToolSandboxScript,
 		func(_ context.Context, h JobHooks) (JobOutcome, error) {
 			if h.OnOutputReady != nil {
-				h.OnOutputReady(wantRunJobID, wantOutHost, "")
+				h.OnOutputReady(wantOutHost, "")
 			}
 			wg.Done()
 			return JobOutcome{}, nil
@@ -338,52 +334,15 @@ func TestJobHooksOnOutputReadyRecordsFields(t *testing.T) {
 	<-j.done
 
 	j.mu.Lock()
-	runJobID := j.runJobID
 	outHost := j.outHost
 	j.mu.Unlock()
 
-	assert.Equal(t, JobID(wantRunJobID), runJobID)
 	assert.Equal(t, wantOutHost, outHost)
 
 	// Status must succeed even when outHost points to a non-existent path
 	// (files are read best-effort; missing files produce zero values, not errors).
 	_, err := m.Status(id)
 	require.NoError(t, err)
-}
-
-// TestJobHooksOnSandboxCreatedRecordsSandboxID verifies that invoking the
-// OnSandboxCreated hook stores the SandboxID into the job's internal sandboxID
-// field.
-func TestJobHooksOnSandboxCreatedRecordsSandboxID(t *testing.T) {
-	m, _ := makeTestManager(t)
-
-	const wantSandboxID = SandboxID("sb-test-abc123")
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	id := m.Start("", ToolSandboxAgent,
-		func(_ context.Context, h JobHooks) (JobOutcome, error) {
-			if h.OnSandboxCreated != nil {
-				h.OnSandboxCreated(wantSandboxID)
-			}
-			wg.Done()
-			return JobOutcome{}, nil
-		},
-	)
-
-	wg.Wait()
-	m.mu.RLock()
-	j := m.jobs[id]
-	m.mu.RUnlock()
-	require.NotNil(t, j)
-	<-j.done
-
-	j.mu.Lock()
-	sandboxID := j.sandboxID
-	j.mu.Unlock()
-
-	assert.Equal(t, wantSandboxID, sandboxID)
 }
 
 // TestJobPanicRecoveredAsFailed verifies that a panicking run func transitions
@@ -435,7 +394,7 @@ func TestStatusIncrementalCostFromResultsHost(t *testing.T) {
 	id := m.Start("", ToolSandboxAgent,
 		func(_ context.Context, h JobHooks) (JobOutcome, error) {
 			if h.OnOutputReady != nil {
-				h.OnOutputReady(JobID("run-incremental"), outHost, resultsHost)
+				h.OnOutputReady(outHost, resultsHost)
 			}
 			<-block
 			return JobOutcome{}, nil

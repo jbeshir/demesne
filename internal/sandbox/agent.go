@@ -78,10 +78,10 @@ type internalAgentSpec struct {
 	outputPath      string
 	outputFormat    string
 	successCriteria []string
-	// onOutputReady and onSandboxCreated are the JobManager mid-run persistence
-	// hooks for background runs; nil for blocking callers.
-	onOutputReady    func(JobID, string, string)
-	onSandboxCreated func(SandboxID)
+	// onOutputReady is the live-Status hook for background runs; nil for
+	// blocking callers. It records outHost/resultsHost into the job's in-memory
+	// fields so Status can read them while the run is still in progress.
+	onOutputReady func(string, string)
 	// bgSelf is the public JobID handle for the background job running
 	// this agent. It is stamped onto the spawnContext so nested child
 	// background jobs can register under this parent.
@@ -153,7 +153,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	}
 
 	if spec.onOutputReady != nil {
-		spec.onOutputReady(layout.jobID, layout.outHost, layout.resultsHost)
+		spec.onOutputReady(layout.outHost, layout.resultsHost)
 	}
 
 	// Register this run so its own in-sandbox demesne tools can spawn
@@ -177,7 +177,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	if err != nil {
 		return AgentResult{}, err
 	}
-	fireAgentHooks(spec, layout, sb)
+	recordChildSibling(spec, layout)
 	defer killSandbox(ctx, sb)
 
 	proxyCfg := r.buildProxyConfig(prep.agent, agentToken, layout.resultsHost, prep.codexTokens)
@@ -235,13 +235,9 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	return finishAgentRun(exec.ExitCode, prep, layout, spec.tool), nil
 }
 
-// fireAgentHooks fires the onSandboxCreated callback and records the child
-// sibling after a successful sandbox create. Extracted from runAgent to reduce
-// its cyclomatic complexity.
-func fireAgentHooks(spec internalAgentSpec, layout sandboxLayout, sb *opensandbox.Sandbox) {
-	if spec.onSandboxCreated != nil {
-		spec.onSandboxCreated(SandboxID(sb.ID()))
-	}
+// recordChildSibling records the child sibling after a successful sandbox
+// create. Extracted from runAgent to reduce its cyclomatic complexity.
+func recordChildSibling(spec internalAgentSpec, layout sandboxLayout) {
 	// Record this child as a sibling only after a successful create, so a
 	// failed spawn never poisons later siblings' /in/previous-jobs mounts.
 	if spec.child != nil {
