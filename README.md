@@ -71,7 +71,7 @@ All three spawn tools (`sandbox_script`, `sandbox_agent`, `sandbox_research`) ac
 | `sandbox_wait` | Block up to `timeout_seconds` (default 30, max 120) for a terminal state; returns the final result or a `"still running"` sentinel if the timeout elapses. Call in a loop to poll. |
 | `sandbox_cancel` | Cancel the job and its entire descendant subtree; idempotent on already-terminal jobs. |
 
-Use `background: true` when a run might exceed the ~240s client tool-call timeout — for example, a multi-hour research agent or a long compilation. The job registry is backed by disk and survives MCP-server restarts; completed jobs are retained for 1 hour.
+Use `background: true` when a run might exceed the ~240s client tool-call timeout — for example, a multi-hour research agent or a long compilation. The job registry is in-memory; jobs do NOT survive MCP-server restarts (a stale job_id returns an error after restart); completed jobs are retained ~1h via a TTL reaper.
 
 For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Quickstart](docs/tutorial/quickstart.md) and the [`sandbox_create`](docs/reference/tools/sandbox_create.md) / [`sandbox_exec`](docs/reference/tools/sandbox_exec.md) reference pages.
 

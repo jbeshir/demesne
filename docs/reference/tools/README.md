@@ -29,7 +29,7 @@ Pass `background: true` on `sandbox_script`, `sandbox_agent`, or `sandbox_resear
 2. Call `sandbox_wait` with `timeout_seconds: 120` in a loop until `status` is not `"running"`.
 3. Inspect `result_text`, `output_path`, and `cost_usd` from the final `sandbox_wait` response.
 
-Use background mode when a run might exceed the ~240s client tool-call timeout. The job registry persists to disk, so jobs survive MCP-server restarts; completed jobs are retained for 1 hour.
+Use background mode when a run might exceed the ~240s client tool-call timeout. The job registry is in-memory; jobs do NOT survive MCP-server restarts (a stale job_id returns an error after restart); completed jobs are retained ~1h via a TTL reaper.
 
 All three async/job-control tools are dual-registered on the in-sandbox child surface (the `demesne` MCP server available to containerised agents), so child agents can launch and manage their own background sub-jobs.
 

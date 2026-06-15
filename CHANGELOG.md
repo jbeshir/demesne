@@ -12,13 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`sandbox_status`** tool (host and child): non-blocking status snapshot for a background job — returns status, elapsed time, a stdout tail, and cost/exit-code once terminal.
 - **`sandbox_wait`** tool (host and child): blocks up to `timeout_seconds` (default 30, hard-capped at 120) for a background job to reach a terminal state; returns the final result or `{status:"running", message:"still running; call sandbox_wait again"}` on timeout.
 - **`sandbox_cancel`** tool (host and child): cancels a background job and its entire descendant subtree depth-first, tearing down each sandbox via the existing sidecar/egress deferred path.
-- **Disk-backed job registry** (`internal/sandbox/jobs_persist.go`): job state is written atomically to `<output_root>/.jobs/<instance_id>/` so the registry survives MCP-server restarts; running jobs at startup are reconciled to `failed`.
+- **In-memory job registry** (`internal/sandbox/jobs.go`): job state lives in memory for the process lifetime with no on-disk persistence; jobs do NOT survive an MCP-server restart (a stale job_id then returns `ErrJobNotFound`); a TTL reaper retains terminal jobs ~1h to bound memory; orphaned containers from a crashed/restarted process are reaped independently by `ReapOrphans` via the `demesne.owner` label.
 
 ### Changed
 - **Hook rename** (`JobHooks`, `internalAgentSpec`, `sandboxPrepOptions`): internal mid-run job-persistence hooks `OnStart`/`OnSandbox` renamed to `OnOutputReady`/`OnSandboxCreated` (and the matching struct fields) for clarity. Internal only — no behaviour change; the MCP tool surface (`sandbox_status`/`sandbox_wait`/`sandbox_cancel`) is unchanged.
 
 ### Fixed
-- **Per-instance job registry**: the on-disk job registry is now scoped to `<output_root>/.jobs/<instance_id>/`, so concurrent demesne instances (one per Claude Code / Codex session) no longer overwrite each other's `running` records with `failed` or adopt each other's jobs on startup. A startup sweep reclaims stale subdirs whose owning PID is confirmed dead via `syscall.Kill(pid, 0)` — live instances and their records are never touched; orphaned containers remain covered by `ReapOrphans`. The TTL reaper now deletes the on-disk record file (previously an in-memory-only deletion that let `.jobs` grow unbounded). Graceful `Shutdown` removes the instance's own subdir. Intentional consequence: a new process no longer recovers a previous instance's job status — callers holding a stale job_id receive `ErrJobNotFound`, which is the honest answer.
 
 ## [0.1.1] - 2026-06-10
 

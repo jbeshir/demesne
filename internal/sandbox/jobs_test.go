@@ -15,18 +15,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// makeTestManager returns a JobManager wired with a test clock and a no-op
-// destroyer. stateDir is set to a temp dir so persistence does not interfere
-// with other tests; the state directory is cleaned up by t.Cleanup.
+// makeTestManager returns a JobManager wired with a test clock.
 func makeTestManager(t *testing.T) (*JobManager, *atomic.Int64) {
 	t.Helper()
-	stateDir := t.TempDir()
 	var tick atomic.Int64
 	now := func() time.Time {
 		return time.Unix(tick.Load(), 0)
 	}
-	destroyer := func(_ context.Context, _ SandboxID) error { return nil }
-	m := newJobManager(stateDir, destroyer, now)
+	m := newJobManager(now)
 	t.Cleanup(m.Shutdown)
 	return m, &tick
 }
@@ -421,51 +417,6 @@ func TestJobWaitClampsTimeout(t *testing.T) {
 	res, err := m.Wait(context.Background(), id, 0)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusSucceeded, res.Status)
-}
-
-// TestJobDestroyerCalledForDiskLoadedJobOnCancel verifies that the
-// injected destroyer is called when cancelling a disk-loaded job (no
-// in-memory goroutine, cancel == nil).
-func TestJobDestroyerCalledForDiskLoadedJobOnCancel(t *testing.T) {
-	stateDir := t.TempDir()
-	var tick atomic.Int64
-	now := func() time.Time { return time.Unix(tick.Load(), 0) }
-
-	destroyed := make(chan SandboxID, 1)
-	destroyer := func(_ context.Context, id SandboxID) error {
-		destroyed <- id
-		return nil
-	}
-
-	m := newJobManager(stateDir, destroyer, now)
-	defer m.Shutdown()
-
-	// Inject a fake disk-loaded job (no cancel, done already closed, terminal=running so cancel can win).
-	done := make(chan struct{})
-	j := &job{
-		id:        "job-disk-loaded",
-		tool:      ToolSandboxScript,
-		state:     stateRunning,
-		cancel:    nil, // no in-memory goroutine
-		done:      done,
-		startedAt: now(),
-	}
-	j.sandboxID = SandboxID("sb-abc123")
-	close(done)
-
-	m.mu.Lock()
-	m.jobs[j.id] = j
-	m.mu.Unlock()
-
-	_, err := m.Cancel(context.Background(), j.id)
-	require.NoError(t, err)
-
-	select {
-	case sid := <-destroyed:
-		assert.Equal(t, SandboxID("sb-abc123"), sid)
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for destroyer to be called")
-	}
 }
 
 // TestStatusIncrementalCostFromResultsHost verifies that Status surfaces a

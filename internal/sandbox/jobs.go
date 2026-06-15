@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -61,14 +60,12 @@ const (
 // ErrJobNotFound is returned when an operation references an unknown JobID.
 var ErrJobNotFound = errors.New("job not found")
 
-// JobHooks are mid-run persistence checkpoints the JobManager sets on each
-// run so it can write outHost/sandboxID to disk WHILE the job runs. This lets
-// live Status calls read cost/stdout from disk and lets a restart identify the
-// container via its sandboxID. There is deliberately NO end hook: the
-// goroutine in JobManager.Start owns completion — it sets outcome/finishedAt/
-// state after run() returns. Both callbacks may be nil. Self is populated by
-// JobManager.Start before invoking run so the closure can stamp its own handle
-// onto spawned children.
+// JobHooks are mid-run callbacks the JobManager sets on each run so it can
+// record outHost/sandboxID as in-memory fields for live Status reads. There
+// is deliberately NO end hook: the goroutine in JobManager.Start owns
+// completion — it sets outcome/finishedAt/state after run() returns. Both
+// callbacks may be nil. Self is populated by JobManager.Start before invoking
+// run so the closure can stamp its own handle onto spawned children.
 type JobHooks struct {
 	// Self is the public JobID handle for the job executing with these hooks.
 	Self JobID
@@ -148,8 +145,8 @@ type job struct {
 	stdoutBasename string
 	// state is the atomic lifecycle state; use stateXxx constants.
 	state     int32
-	cancel    context.CancelFunc // nil for disk-loaded jobs
-	done      chan struct{}      // closed exactly once when the goroutine exits
+	cancel    context.CancelFunc
+	done      chan struct{} // closed exactly once when the goroutine exits
 	startedAt time.Time
 	parent    JobID
 
@@ -167,6 +164,7 @@ type job struct {
 // own goroutine whose context derives from the manager's root context, never
 // from any request context, so jobs outlive the RPC that created them.
 //
+// Jobs are held in memory only; they do not survive a process restart.
 // MCP Tasks (SEP-1686) adapter is a future layer over Start/Status/Wait/Cancel.
 type JobManager struct {
 	mu         sync.RWMutex
@@ -175,10 +173,6 @@ type JobManager struct {
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
 	wg         sync.WaitGroup
-	instanceID string // unique identity for this process: "<pid>-<startnanos>"
-	jobsRoot   string // the shared .jobs root dir passed as the stateDir param
-	stateDir   string // this instance's own subdir: <jobsRoot>/<instanceID>
-	destroyer  func(context.Context, SandboxID) error
 	now        func() time.Time
 }
 
@@ -214,64 +208,31 @@ func stdoutBasenameForTool(tool string) string {
 
 // newJobManager is the internal constructor that accepts a clock seam for
 // testing. Production code uses NewJobManager.
-func newJobManager(
-	stateDir string,
-	destroyer func(context.Context, SandboxID) error,
-	now func() time.Time,
-) *JobManager {
+func newJobManager(now func() time.Time) *JobManager {
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// Capture process identity using the real OS PID and wall time, NOT the
-	// injected clock. This is identity, not logical time: the actual PID and
-	// nanosecond start time distinguish this instance from siblings and restarts.
-	pid := os.Getpid()
-	startNanos := time.Now().UnixNano()
 
 	m := &JobManager{
 		jobs:       make(map[JobID]*job),
 		children:   make(map[JobID][]JobID),
 		rootCtx:    ctx,
 		rootCancel: cancel,
-		destroyer:  destroyer,
 		now:        now,
 	}
-	m.instanceID = fmt.Sprintf("%d-%d", pid, startNanos)
-	m.jobsRoot = stateDir
-	if stateDir != "" {
-		m.stateDir = filepath.Join(stateDir, m.instanceID)
-	}
 
-	// Sweep stale instance dirs from previously crashed demesne processes.
-	// Cross-restart recovery of job status by a NEW process is intentionally
-	// dropped: a restarted demesne is a new instance; old job_ids →
-	// ErrJobNotFound, which is honest. Orphaned CONTAINERS are still reaped by
-	// ReapOrphans (separate path that does not touch this registry).
-	if m.jobsRoot != "" {
-		sweepStaleInstanceDirs(m.jobsRoot, m.instanceID, processAlive)
-	}
-	m.loadAndReconcile()
 	go m.reapLoop()
 	return m
 }
 
-// NewJobManager creates a new JobManager that persists state under stateDir.
-// destroyer is called best-effort when cancelling a disk-loaded job that has
-// no in-memory goroutine; pass r.Destroy wrapped in a closure.
-func NewJobManager(stateDir string, destroyer func(context.Context, SandboxID) error) *JobManager {
-	return newJobManager(stateDir, destroyer, time.Now)
+// NewJobManager creates a new in-memory-only JobManager. Jobs do not survive
+// a process restart; orphaned containers are reaped by ReapOrphans.
+func NewJobManager() *JobManager {
+	return newJobManager(time.Now)
 }
 
 // Shutdown cancels all running jobs and waits for their goroutines to exit.
 func (m *JobManager) Shutdown() {
 	m.rootCancel()
 	m.wg.Wait()
-	// Terminal state is already in memory; nothing cross-process needs the
-	// instance subdir after all goroutines have exited.
-	if m.stateDir != "" {
-		if err := os.RemoveAll(m.stateDir); err != nil {
-			log.Printf("sandbox: remove instance job dir %s: %v", m.stateDir, err)
-		}
-	}
 }
 
 // Start registers a new background job and launches it in a goroutine.
@@ -308,11 +269,6 @@ func (m *JobManager) Start(
 	}
 	m.mu.Unlock()
 
-	// Persist the initial running record outside the lock.
-	if err := m.persistJobRecord(j); err != nil {
-		log.Printf("sandbox: persist new job %s: %v", id, err)
-	}
-
 	hooks := JobHooks{
 		Self: id,
 		OnOutputReady: func(runJobID JobID, outHost, resultsHost string) {
@@ -321,17 +277,11 @@ func (m *JobManager) Start(
 			j.outHost = outHost
 			j.resultsHost = resultsHost
 			j.mu.Unlock()
-			if err := m.persistJobRecord(j); err != nil {
-				log.Printf("sandbox: persist job %s on output ready: %v", j.id, err)
-			}
 		},
 		OnSandboxCreated: func(id SandboxID) {
 			j.mu.Lock()
 			j.sandboxID = id
 			j.mu.Unlock()
-			if err := m.persistJobRecord(j); err != nil {
-				log.Printf("sandbox: persist job %s on sandbox created: %v", j.id, err)
-			}
 		},
 	}
 
@@ -346,9 +296,6 @@ func (m *JobManager) Start(
 					j.mu.Lock()
 					j.finishedAt = m.now()
 					j.mu.Unlock()
-					if err := m.persistJobRecord(j); err != nil {
-						log.Printf("sandbox: persist job %s after panic: %v", j.id, err)
-					}
 				}
 			}
 		}()
@@ -364,9 +311,6 @@ func (m *JobManager) Start(
 			j.outcome = outcome
 			j.finishedAt = m.now()
 			j.mu.Unlock()
-			if err := m.persistJobRecord(j); err != nil {
-				log.Printf("sandbox: persist job %s on complete: %v", j.id, err)
-			}
 		}
 	}()
 
@@ -474,17 +418,15 @@ func (m *JobManager) Wait(ctx context.Context, id JobID, timeout time.Duration) 
 }
 
 // buildWaitResult reads the terminal outcome from j and returns a WaitResult.
-// Called after j.done is closed (state + outcome are already set). For
-// disk-loaded jobs (cancel == nil), outcome is zero-valued; recoverable
-// fields are filled from the job's outHost.
+// Called after j.done is closed (state + outcome are already set). Terminal
+// jobs carry their full outcome in memory.
 func (m *JobManager) buildWaitResult(j *job) WaitResult {
 	state := atomic.LoadInt32(&j.state)
 	j.mu.Lock()
 	outcome := j.outcome
-	outHost := j.outHost
 	j.mu.Unlock()
 
-	wr := WaitResult{
+	return WaitResult{
 		JobID:         j.id,
 		Status:        jobStateToStatus(state),
 		ResultText:    outcome.ResultText,
@@ -493,24 +435,6 @@ func (m *JobManager) buildWaitResult(j *job) WaitResult {
 		CostUSD:       outcome.CostUSD,
 		TotalUsageUSD: outcome.TotalUsageUSD,
 	}
-
-	// Disk-loaded jobs have no in-memory goroutine so outcome is zero-valued;
-	// recover what we can from the job's outHost.
-	if j.cancel == nil && outHost != "" {
-		if wr.OutputPath == "" {
-			wr.OutputPath = outHost
-		}
-		if r, ok := readResultsFile(outHost); ok {
-			if wr.CostUSD == 0 {
-				wr.CostUSD = r.OwnUsageUSD
-			}
-			if wr.TotalUsageUSD == 0 {
-				wr.TotalUsageUSD = r.TotalUsageUSD
-			}
-		}
-	}
-
-	return wr
 }
 
 // Cancel requests cancellation of job id and all of its descendants
@@ -525,7 +449,7 @@ func (m *JobManager) Cancel(ctx context.Context, id JobID) (CancelResult, error)
 		return CancelResult{}, fmt.Errorf("%w: %s", ErrJobNotFound, id)
 	}
 
-	m.cancelSubtree(ctx, id)
+	m.cancelSubtree(id)
 
 	m.mu.RLock()
 	j := m.jobs[id]
@@ -538,7 +462,7 @@ func (m *JobManager) Cancel(ctx context.Context, id JobID) (CancelResult, error)
 
 // cancelSubtree recursively cancels id and all of its registered children,
 // depth-first (children are cancelled before their parent). Idempotent.
-func (m *JobManager) cancelSubtree(ctx context.Context, id JobID) {
+func (m *JobManager) cancelSubtree(id JobID) {
 	// Snapshot children and the job pointer under read lock.
 	m.mu.RLock()
 	children := append([]JobID(nil), m.children[id]...)
@@ -551,7 +475,7 @@ func (m *JobManager) cancelSubtree(ctx context.Context, id JobID) {
 
 	// Recurse into children first (depth-first).
 	for _, childID := range children {
-		m.cancelSubtree(ctx, childID)
+		m.cancelSubtree(childID)
 	}
 
 	// Cancel this node: try to win the terminal-state race.
@@ -560,135 +484,9 @@ func (m *JobManager) cancelSubtree(ctx context.Context, id JobID) {
 	}
 	j.mu.Lock()
 	j.finishedAt = m.now()
-	sandboxID := j.sandboxID
 	j.mu.Unlock()
 
-	if err := m.persistJobRecord(j); err != nil {
-		log.Printf("sandbox: persist job %s on cancel: %v", id, err)
-	}
-
-	if j.cancel != nil {
-		// Live job: cancel its context so the goroutine's existing deferred
-		// sidecar.Remove + killSandbox teardown path runs. Do NOT duplicate
-		// teardown here.
-		j.cancel()
-	} else if sandboxID != "" && m.destroyer != nil {
-		// Fallback for a disk-loaded job that has a recorded sandbox ID but no
-		// in-memory goroutine. Container teardown for running orphans after a
-		// restart is normally handled by ReapOrphans in main; this path fires
-		// if a Cancel is called for such a job before the reaper runs.
-		if err := m.destroyer(ctx, sandboxID); err != nil {
-			log.Printf("sandbox: destroy sandbox %s for cancelled job %s: %v",
-				sandboxID, id, err)
-		}
-	}
-}
-
-// persistJobRecord snapshots the job's current state and writes it to disk.
-// Must be called outside any mutex (snapshotting uses the job's own mu, not
-// the registry mu).
-func (m *JobManager) persistJobRecord(j *job) error {
-	// Snapshot children while holding the registry read lock.
-	m.mu.RLock()
-	rawChildren := m.children[j.id]
-	childIDs := make([]string, len(rawChildren))
-	for i, c := range rawChildren {
-		childIDs[i] = string(c)
-	}
-	m.mu.RUnlock()
-
-	// Snapshot mutable job fields under the job's own lock.
-	j.mu.Lock()
-	runJobID := string(j.runJobID)
-	outHost := j.outHost
-	resultsHost := j.resultsHost
-	sandboxID := string(j.sandboxID)
-	parent := string(j.parent)
-	exitCode := j.outcome.ExitCode
-	updatedAt := m.now()
-	j.mu.Unlock()
-
-	state := atomic.LoadInt32(&j.state)
-
-	rec := JobRecord{
-		ID:          string(j.id),
-		Tool:        j.tool,
-		Status:      string(jobStateToStatus(state)),
-		StartedAt:   j.startedAt,
-		UpdatedAt:   updatedAt,
-		RunJobID:    runJobID,
-		OutHost:     outHost,
-		ResultsHost: resultsHost,
-		SandboxID:   sandboxID,
-		Parent:      parent,
-		ChildIDs:    childIDs,
-		ExitCode:    exitCode,
-	}
-
-	return writeJobRecord(m.stateDir, rec)
-}
-
-// loadAndReconcile loads persisted job records from THIS instance's own subdir
-// (m.stateDir). On a fresh PID the subdir does not exist yet, so this is
-// defensive — normally a no-op. Any records whose status is "running" are
-// marked "failed" (the goroutines that owned them are gone).
-func (m *JobManager) loadAndReconcile() {
-	if m.stateDir == "" {
-		return
-	}
-	recs, err := loadJobs(m.stateDir)
-	if err != nil {
-		log.Printf("sandbox: load jobs: %v", err)
-		return
-	}
-
-	recs = reconcileRunning(recs, m.stateDir, m.now())
-
-	// Populate the in-memory registry. Disk-loaded jobs have no goroutine
-	// (cancel == nil) and their done channel is pre-closed.
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, rec := range recs {
-		done := make(chan struct{})
-		close(done)
-
-		state := stateRunning
-		switch JobStatus(rec.Status) {
-		case JobStatusRunning:
-			state = stateRunning
-		case JobStatusSucceeded:
-			state = stateSucceeded
-		case JobStatusFailed:
-			state = stateFailed
-		case JobStatusCancelled:
-			state = stateCancelled
-		}
-
-		j := &job{
-			id:             JobID(rec.ID),
-			tool:           rec.Tool,
-			stdoutBasename: stdoutBasenameForTool(rec.Tool),
-			state:          state,
-			done:           done,
-			startedAt:      rec.StartedAt,
-			parent:         JobID(rec.Parent),
-		}
-		j.mu.Lock()
-		j.runJobID = JobID(rec.RunJobID)
-		j.outHost = rec.OutHost
-		j.resultsHost = rec.ResultsHost
-		j.sandboxID = SandboxID(rec.SandboxID)
-		j.finishedAt = rec.UpdatedAt
-		j.outcome.ExitCode = rec.ExitCode
-		j.mu.Unlock()
-
-		m.jobs[JobID(rec.ID)] = j
-		if rec.Parent != "" {
-			m.children[JobID(rec.Parent)] = append(
-				m.children[JobID(rec.Parent)], JobID(rec.ID),
-			)
-		}
-	}
+	j.cancel()
 }
 
 // reapLoop is the background TTL reaper goroutine. It ticks every
@@ -711,8 +509,6 @@ func (m *JobManager) reapLoop() {
 func (m *JobManager) reapExpired() {
 	cutoff := m.now().Add(-jobTTL)
 
-	// Collect expired IDs under write lock; do NOT do file IO while holding mu.
-	var expired []JobID
 	m.mu.Lock()
 	for id, j := range m.jobs {
 		if !isTerminal(atomic.LoadInt32(&j.state)) {
@@ -726,18 +522,7 @@ func (m *JobManager) reapExpired() {
 		if !finished.IsZero() && finished.Before(cutoff) {
 			delete(m.jobs, id)
 			delete(m.children, id)
-			expired = append(expired, id)
 		}
 	}
 	m.mu.Unlock()
-
-	// Delete disk records after releasing the lock.
-	if m.stateDir == "" {
-		return
-	}
-	for _, id := range expired {
-		if err := removeJobRecord(m.stateDir, string(id)); err != nil {
-			log.Printf("sandbox: remove reaped job record %s: %v", id, err)
-		}
-	}
 }

@@ -96,19 +96,14 @@ type Runner struct {
 	jobs     *JobManager
 }
 
-// NewRunner builds a Runner from cfg with an empty child registry and a
-// JobManager persisting state under a per-instance subdir
-// <OutputRoot>/.jobs/<instanceID>/. The shared <OutputRoot>/.jobs root is
-// passed to newJobManager, which appends its own instanceID subdir. The
-// MCP-aggregator wiring (MCPServers, MCPSocketPath, MCPToolCatalogue) is
-// populated after construction via SetMCPWiring, once the aggregator has
-// started.
+// NewRunner builds a Runner from cfg with an empty child registry and an
+// in-memory JobManager. Jobs are not persisted to disk and do not survive
+// a process restart. The MCP-aggregator wiring (MCPServers, MCPSocketPath,
+// MCPToolCatalogue) is populated after construction via SetMCPWiring, once
+// the aggregator has started.
 func NewRunner(cfg Config) *Runner {
 	r := &Runner{cfg: cfg, registry: newChildRegistry()}
-	stateDir := filepath.Join(cfg.OutputRoot, ".jobs")
-	r.jobs = NewJobManager(stateDir, func(ctx context.Context, id SandboxID) error {
-		return r.Destroy(ctx, DestroyRequest{SandboxID: id})
-	})
+	r.jobs = NewJobManager()
 	return r
 }
 
