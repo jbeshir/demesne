@@ -279,9 +279,9 @@ func TestJobTTLNotReapedEarly(t *testing.T) {
 	assert.True(t, found, "expected job to still be present before TTL")
 }
 
-// TestJobHooksOnStart verifies that the OnStart hook is called with the
-// runJobID and outHost the run function provides.
-func TestJobHooksOnStart(t *testing.T) {
+// TestJobHooksOnOutputReady verifies that the OnOutputReady hook is called with
+// the runJobID and outHost the run function provides.
+func TestJobHooksOnOutputReady(t *testing.T) {
 	m, _ := makeTestManager(t)
 
 	var gotRunJobID JobID
@@ -291,8 +291,8 @@ func TestJobHooksOnStart(t *testing.T) {
 
 	id := m.Start("", ToolSandboxScript,
 		func(_ context.Context, h JobHooks) (JobOutcome, error) {
-			if h.OnStart != nil {
-				h.OnStart("run-123", "/tmp/out", "")
+			if h.OnOutputReady != nil {
+				h.OnOutputReady("run-123", "/tmp/out", "")
 				gotRunJobID = "run-123"
 				gotOutHost = "/tmp/out"
 			}
@@ -311,11 +311,11 @@ func TestJobHooksOnStart(t *testing.T) {
 	assert.Equal(t, "/tmp/out", gotOutHost)
 }
 
-// TestJobHooksOnStartRecordsFields verifies that invoking the OnStart hook
-// stores runJobID and outHost into the job's internal fields, and that a
-// subsequent Status call succeeds (outHost is non-empty so Status attempts
-// file reads; missing files are silently tolerated).
-func TestJobHooksOnStartRecordsFields(t *testing.T) {
+// TestJobHooksOnOutputReadyRecordsFields verifies that invoking the
+// OnOutputReady hook stores runJobID and outHost into the job's internal
+// fields, and that a subsequent Status call succeeds (outHost is non-empty so
+// Status attempts file reads; missing files are silently tolerated).
+func TestJobHooksOnOutputReadyRecordsFields(t *testing.T) {
 	m, _ := makeTestManager(t)
 
 	const wantRunJobID = "run-xyz"
@@ -326,8 +326,8 @@ func TestJobHooksOnStartRecordsFields(t *testing.T) {
 
 	id := m.Start("", ToolSandboxScript,
 		func(_ context.Context, h JobHooks) (JobOutcome, error) {
-			if h.OnStart != nil {
-				h.OnStart(wantRunJobID, wantOutHost, "")
+			if h.OnOutputReady != nil {
+				h.OnOutputReady(wantRunJobID, wantOutHost, "")
 			}
 			wg.Done()
 			return JobOutcome{}, nil
@@ -355,9 +355,10 @@ func TestJobHooksOnStartRecordsFields(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestJobHooksOnSandboxRecordsSandboxID verifies that invoking the OnSandbox
-// hook stores the SandboxID into the job's internal sandboxID field.
-func TestJobHooksOnSandboxRecordsSandboxID(t *testing.T) {
+// TestJobHooksOnSandboxCreatedRecordsSandboxID verifies that invoking the
+// OnSandboxCreated hook stores the SandboxID into the job's internal sandboxID
+// field.
+func TestJobHooksOnSandboxCreatedRecordsSandboxID(t *testing.T) {
 	m, _ := makeTestManager(t)
 
 	const wantSandboxID = SandboxID("sb-test-abc123")
@@ -367,8 +368,8 @@ func TestJobHooksOnSandboxRecordsSandboxID(t *testing.T) {
 
 	id := m.Start("", ToolSandboxAgent,
 		func(_ context.Context, h JobHooks) (JobOutcome, error) {
-			if h.OnSandbox != nil {
-				h.OnSandbox(wantSandboxID)
+			if h.OnSandboxCreated != nil {
+				h.OnSandboxCreated(wantSandboxID)
 			}
 			wg.Done()
 			return JobOutcome{}, nil
@@ -482,8 +483,8 @@ func TestStatusIncrementalCostFromResultsHost(t *testing.T) {
 	block := make(chan struct{})
 	id := m.Start("", ToolSandboxAgent,
 		func(_ context.Context, h JobHooks) (JobOutcome, error) {
-			if h.OnStart != nil {
-				h.OnStart(JobID("run-incremental"), outHost, resultsHost)
+			if h.OnOutputReady != nil {
+				h.OnOutputReady(JobID("run-incremental"), outHost, resultsHost)
 			}
 			<-block
 			return JobOutcome{}, nil

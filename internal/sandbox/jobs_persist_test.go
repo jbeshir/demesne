@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -177,11 +178,19 @@ func TestReconcileRunningToFailed(t *testing.T) {
 }
 
 // TestPersistAndReconcileViaManager verifies the loadAndReconcile path end-to-
-// end: write a "running" record to disk, create a fresh manager (which loads
-// and reconciles), and confirm the in-memory job shows as failed.
+// end: construct a manager, write a "running" orphan record directly into the
+// instance subdir (m.stateDir), call loadAndReconcile again, and confirm the
+// in-memory job shows as failed. Writing to the bare root (jobsRoot) is no
+// longer adopted because records now live per-instance.
 func TestPersistAndReconcileViaManager(t *testing.T) {
-	dir := t.TempDir()
+	root := t.TempDir()
 	now := time.Unix(1000, 0)
+
+	m := newJobManager(root, func(_ context.Context, _ SandboxID) error { return nil },
+		func() time.Time { return now })
+	defer m.Shutdown()
+
+	// Write the orphan record into THIS instance's own subdir.
 	rec := JobRecord{
 		ID:        "job-orphan",
 		Tool:      ToolSandboxScript,
@@ -189,11 +198,10 @@ func TestPersistAndReconcileViaManager(t *testing.T) {
 		StartedAt: now,
 		UpdatedAt: now,
 	}
-	require.NoError(t, writeJobRecord(dir, rec))
+	require.NoError(t, writeJobRecord(m.stateDir, rec))
 
-	m := newJobManager(dir, func(_ context.Context, _ SandboxID) error { return nil },
-		func() time.Time { return now })
-	defer m.Shutdown()
+	// Reconcile again — should pick up the record and mark it failed.
+	m.loadAndReconcile()
 
 	m.mu.RLock()
 	j, ok := m.jobs[JobID("job-orphan")]
@@ -201,6 +209,131 @@ func TestPersistAndReconcileViaManager(t *testing.T) {
 	require.True(t, ok, "orphan job should be loaded into registry")
 	assert.Equal(t, stateFailed, atomic.LoadInt32(&j.state),
 		"orphan job should be reconciled to failed")
+}
+
+// TestSweepStaleInstanceDirsRemovesDeadKeepsLiveAndOwn verifies that
+// sweepStaleInstanceDirs removes dirs whose PID is dead, keeps dirs whose PID
+// is alive, keeps its own dir, and skips dirs that do not match the naming
+// scheme.
+func TestSweepStaleInstanceDirsRemovesDeadKeepsLiveAndOwn(t *testing.T) {
+	root := t.TempDir()
+
+	for _, name := range []string{"111-1", "222-2", "333-3", "notanid"} {
+		dir := filepath.Join(root, name)
+		require.NoError(t, os.MkdirAll(dir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "dummy.json"), []byte("{}"), 0o600))
+	}
+
+	alive := func(pid int) bool { return pid == 222 }
+	sweepStaleInstanceDirs(root, "333-3", alive)
+
+	assert.NoDirExists(t, filepath.Join(root, "111-1"), "dead pid dir should be removed")
+	assert.DirExists(t, filepath.Join(root, "222-2"), "live pid dir should be kept")
+	assert.DirExists(t, filepath.Join(root, "333-3"), "own dir should be kept")
+	assert.DirExists(t, filepath.Join(root, "notanid"), "unparseable dir should be kept")
+}
+
+// TestPerInstanceScopingIgnoresLiveSibling verifies that a manager does not
+// load records from a sibling instance dir whose PID is still alive, and does
+// not sweep that sibling dir.
+func TestPerInstanceScopingIgnoresLiveSibling(t *testing.T) {
+	root := t.TempDir()
+	now := time.Unix(2000, 0)
+
+	// Create a sibling dir named with our own (live) PID but a different nanos
+	// suffix so it looks like a different instance of the same process.
+	siblingName := fmt.Sprintf("%d-1", os.Getpid())
+	siblingDir := filepath.Join(root, siblingName)
+	require.NoError(t, os.MkdirAll(siblingDir, 0o750))
+
+	sibRec := JobRecord{
+		ID:        "job-other",
+		Tool:      ToolSandboxScript,
+		Status:    string(JobStatusRunning),
+		StartedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, writeJobRecord(siblingDir, sibRec))
+
+	m := newJobManager(root, func(_ context.Context, _ SandboxID) error { return nil },
+		func() time.Time { return now })
+	defer m.Shutdown()
+
+	m.mu.RLock()
+	_, loaded := m.jobs[JobID("job-other")]
+	m.mu.RUnlock()
+	assert.False(t, loaded, "job from live sibling should not be loaded")
+
+	_, err := os.Stat(siblingDir)
+	assert.NoError(t, err, "live sibling dir should not be swept")
+}
+
+// TestShutdownRemovesOwnSubdir verifies that Shutdown removes the instance's
+// own state subdir from disk.
+func TestShutdownRemovesOwnSubdir(t *testing.T) {
+	root := t.TempDir()
+	now := time.Unix(3000, 0)
+
+	m := newJobManager(root, func(_ context.Context, _ SandboxID) error { return nil },
+		func() time.Time { return now })
+	subdir := m.stateDir
+
+	// Persist a record so the subdir is created on disk.
+	rec := JobRecord{
+		ID:        "job-probe",
+		Tool:      ToolSandboxScript,
+		Status:    string(JobStatusSucceeded),
+		StartedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, writeJobRecord(subdir, rec))
+	_, err := os.Stat(subdir)
+	require.NoError(t, err, "subdir should exist before Shutdown")
+
+	m.Shutdown()
+
+	_, err = os.Stat(subdir)
+	assert.True(t, os.IsNotExist(err), "subdir should be removed after Shutdown")
+}
+
+// TestReapDeletesDiskRecord verifies that reapExpired removes the on-disk
+// record for a TTL-expired job.
+func TestReapDeletesDiskRecord(t *testing.T) {
+	root := t.TempDir()
+	var tick atomic.Int64
+	now := func() time.Time { return time.Unix(tick.Load(), 0) }
+	m := newJobManager(root, func(_ context.Context, _ SandboxID) error { return nil }, now)
+	defer m.Shutdown()
+
+	release := make(chan struct{})
+	id := m.Start("", ToolSandboxScript, syncRun(release, JobOutcome{}, nil))
+	close(release)
+
+	// Wait for the goroutine to finish.
+	m.mu.RLock()
+	j := m.jobs[id]
+	m.mu.RUnlock()
+	require.NotNil(t, j)
+	<-j.done
+
+	// Confirm the record exists on disk.
+	recordPath := filepath.Join(m.stateDir, string(id)+".json")
+	_, err := os.Stat(recordPath)
+	require.NoError(t, err, "job record should exist on disk after completion")
+
+	// Advance clock past TTL and reap.
+	tick.Store(int64(jobTTL/time.Second) + 10)
+	m.reapExpired()
+
+	_, err = os.Stat(recordPath)
+	assert.True(t, os.IsNotExist(err), "job record should be removed after reap")
+}
+
+// TestProcessAlive verifies that processAlive correctly reports liveness.
+func TestProcessAlive(t *testing.T) {
+	assert.True(t, processAlive(os.Getpid()), "current process should be alive")
+	assert.False(t, processAlive(0), "pid 0 should not be treated as alive")
+	assert.False(t, processAlive(1<<30), "very high pid should not exist")
 }
 
 // TestLoadJobsSkipsCorruptJSON verifies that a corrupt JSON file is skipped

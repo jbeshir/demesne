@@ -78,10 +78,10 @@ type internalAgentSpec struct {
 	outputPath      string
 	outputFormat    string
 	successCriteria []string
-	// onStart and onSandbox are the JobManager lifecycle hooks for
-	// background runs; nil for blocking callers.
-	onStart   func(JobID, string, string)
-	onSandbox func(SandboxID)
+	// onOutputReady and onSandboxCreated are the JobManager mid-run persistence
+	// hooks for background runs; nil for blocking callers.
+	onOutputReady    func(JobID, string, string)
+	onSandboxCreated func(SandboxID)
 	// bgSelf is the public JobID handle for the background job running
 	// this agent. It is stamped onto the spawnContext so nested child
 	// background jobs can register under this parent.
@@ -152,8 +152,8 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 		return AgentResult{}, err
 	}
 
-	if spec.onStart != nil {
-		spec.onStart(layout.jobID, layout.outHost, layout.resultsHost)
+	if spec.onOutputReady != nil {
+		spec.onOutputReady(layout.jobID, layout.outHost, layout.resultsHost)
 	}
 
 	// Register this run so its own in-sandbox demesne tools can spawn
@@ -235,12 +235,12 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	return finishAgentRun(exec.ExitCode, prep, layout, spec.tool), nil
 }
 
-// fireAgentHooks fires the onSandbox callback and records the child sibling
-// after a successful sandbox create. Extracted from runAgent to reduce its
-// cyclomatic complexity.
+// fireAgentHooks fires the onSandboxCreated callback and records the child
+// sibling after a successful sandbox create. Extracted from runAgent to reduce
+// its cyclomatic complexity.
 func fireAgentHooks(spec internalAgentSpec, layout sandboxLayout, sb *opensandbox.Sandbox) {
-	if spec.onSandbox != nil {
-		spec.onSandbox(SandboxID(sb.ID()))
+	if spec.onSandboxCreated != nil {
+		spec.onSandboxCreated(SandboxID(sb.ID()))
 	}
 	// Record this child as a sibling only after a successful create, so a
 	// failed spawn never poisons later siblings' /in/previous-jobs mounts.

@@ -29,8 +29,8 @@ func (r *Runner) startScriptJob(req ScriptRequest, child *childSpawn, parent Job
 func (r *Runner) startAgentJob(spec internalAgentSpec, parent JobID) JobID {
 	run := func(ctx context.Context, h JobHooks) (JobOutcome, error) {
 		s := spec
-		s.onStart = h.OnStart
-		s.onSandbox = h.OnSandbox
+		s.onOutputReady = h.OnOutputReady
+		s.onSandboxCreated = h.OnSandboxCreated
 		s.bgSelf = h.Self
 		res, err := r.runAgent(ctx, s)
 		if err != nil {

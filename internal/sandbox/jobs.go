@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -60,21 +61,25 @@ const (
 // ErrJobNotFound is returned when an operation references an unknown JobID.
 var ErrJobNotFound = errors.New("job not found")
 
-// JobHooks are optional callbacks the JobManager sets on each run so it can
-// record the internal run-job UUID and the assigned sandbox ID.
-// Both callbacks may be nil. Self is populated by JobManager.Start before
-// invoking run so the closure can stamp its own handle onto spawned children.
+// JobHooks are mid-run persistence checkpoints the JobManager sets on each
+// run so it can write outHost/sandboxID to disk WHILE the job runs. This lets
+// live Status calls read cost/stdout from disk and lets a restart identify the
+// container via its sandboxID. There is deliberately NO end hook: the
+// goroutine in JobManager.Start owns completion — it sets outcome/finishedAt/
+// state after run() returns. Both callbacks may be nil. Self is populated by
+// JobManager.Start before invoking run so the closure can stamp its own handle
+// onto spawned children.
 type JobHooks struct {
 	// Self is the public JobID handle for the job executing with these hooks.
 	Self JobID
-	// OnStart is called once the run has minted its run-job UUID and output
-	// directory; runJobID is the internal uuid, outHost is the host path of
-	// the job's /out directory, and resultsHost is the sidecar-results dir
-	// where the proxy writes usage.json during the run (empty for scripts).
-	OnStart func(runJobID JobID, outHost, resultsHost string)
-	// OnSandbox is called once the underlying sandbox container has been
+	// OnOutputReady is called once the run has minted its run-job UUID and
+	// output directory; runJobID is the internal uuid, outHost is the host
+	// path of the job's /out directory, and resultsHost is the sidecar-results
+	// dir where the proxy writes usage.json during the run (empty for scripts).
+	OnOutputReady func(runJobID JobID, outHost, resultsHost string)
+	// OnSandboxCreated is called once the underlying sandbox container has been
 	// created; id is its runtime ID.
-	OnSandbox func(SandboxID)
+	OnSandboxCreated func(SandboxID)
 }
 
 // JobOutcome carries the result of a completed (succeeded or failed) job.
@@ -170,7 +175,9 @@ type JobManager struct {
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
 	wg         sync.WaitGroup
-	stateDir   string
+	instanceID string // unique identity for this process: "<pid>-<startnanos>"
+	jobsRoot   string // the shared .jobs root dir passed as the stateDir param
+	stateDir   string // this instance's own subdir: <jobsRoot>/<instanceID>
 	destroyer  func(context.Context, SandboxID) error
 	now        func() time.Time
 }
@@ -213,14 +220,34 @@ func newJobManager(
 	now func() time.Time,
 ) *JobManager {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Capture process identity using the real OS PID and wall time, NOT the
+	// injected clock. This is identity, not logical time: the actual PID and
+	// nanosecond start time distinguish this instance from siblings and restarts.
+	pid := os.Getpid()
+	startNanos := time.Now().UnixNano()
+
 	m := &JobManager{
 		jobs:       make(map[JobID]*job),
 		children:   make(map[JobID][]JobID),
 		rootCtx:    ctx,
 		rootCancel: cancel,
-		stateDir:   stateDir,
 		destroyer:  destroyer,
 		now:        now,
+	}
+	m.instanceID = fmt.Sprintf("%d-%d", pid, startNanos)
+	m.jobsRoot = stateDir
+	if stateDir != "" {
+		m.stateDir = filepath.Join(stateDir, m.instanceID)
+	}
+
+	// Sweep stale instance dirs from previously crashed demesne processes.
+	// Cross-restart recovery of job status by a NEW process is intentionally
+	// dropped: a restarted demesne is a new instance; old job_ids →
+	// ErrJobNotFound, which is honest. Orphaned CONTAINERS are still reaped by
+	// ReapOrphans (separate path that does not touch this registry).
+	if m.jobsRoot != "" {
+		sweepStaleInstanceDirs(m.jobsRoot, m.instanceID, processAlive)
 	}
 	m.loadAndReconcile()
 	go m.reapLoop()
@@ -238,6 +265,13 @@ func NewJobManager(stateDir string, destroyer func(context.Context, SandboxID) e
 func (m *JobManager) Shutdown() {
 	m.rootCancel()
 	m.wg.Wait()
+	// Terminal state is already in memory; nothing cross-process needs the
+	// instance subdir after all goroutines have exited.
+	if m.stateDir != "" {
+		if err := os.RemoveAll(m.stateDir); err != nil {
+			log.Printf("sandbox: remove instance job dir %s: %v", m.stateDir, err)
+		}
+	}
 }
 
 // Start registers a new background job and launches it in a goroutine.
@@ -281,22 +315,22 @@ func (m *JobManager) Start(
 
 	hooks := JobHooks{
 		Self: id,
-		OnStart: func(runJobID JobID, outHost, resultsHost string) {
+		OnOutputReady: func(runJobID JobID, outHost, resultsHost string) {
 			j.mu.Lock()
 			j.runJobID = runJobID
 			j.outHost = outHost
 			j.resultsHost = resultsHost
 			j.mu.Unlock()
 			if err := m.persistJobRecord(j); err != nil {
-				log.Printf("sandbox: persist job %s on start: %v", j.id, err)
+				log.Printf("sandbox: persist job %s on output ready: %v", j.id, err)
 			}
 		},
-		OnSandbox: func(id SandboxID) {
+		OnSandboxCreated: func(id SandboxID) {
 			j.mu.Lock()
 			j.sandboxID = id
 			j.mu.Unlock()
 			if err := m.persistJobRecord(j); err != nil {
-				log.Printf("sandbox: persist job %s on sandbox: %v", j.id, err)
+				log.Printf("sandbox: persist job %s on sandbox created: %v", j.id, err)
 			}
 		},
 	}
@@ -594,9 +628,10 @@ func (m *JobManager) persistJobRecord(j *job) error {
 	return writeJobRecord(m.stateDir, rec)
 }
 
-// loadAndReconcile loads persisted job records from disk, marks any that were
-// "running" (orphaned by a previous process crash) as "failed", and
-// populates the in-memory registry with the resulting terminal jobs.
+// loadAndReconcile loads persisted job records from THIS instance's own subdir
+// (m.stateDir). On a fresh PID the subdir does not exist yet, so this is
+// defensive — normally a no-op. Any records whose status is "running" are
+// marked "failed" (the goroutines that owned them are gone).
 func (m *JobManager) loadAndReconcile() {
 	if m.stateDir == "" {
 		return
@@ -676,8 +711,8 @@ func (m *JobManager) reapLoop() {
 func (m *JobManager) reapExpired() {
 	cutoff := m.now().Add(-jobTTL)
 
-	// Collect expired IDs under write lock to avoid holding lock across
-	// multiple calls.
+	// Collect expired IDs under write lock; do NOT do file IO while holding mu.
+	var expired []JobID
 	m.mu.Lock()
 	for id, j := range m.jobs {
 		if !isTerminal(atomic.LoadInt32(&j.state)) {
@@ -691,7 +726,18 @@ func (m *JobManager) reapExpired() {
 		if !finished.IsZero() && finished.Before(cutoff) {
 			delete(m.jobs, id)
 			delete(m.children, id)
+			expired = append(expired, id)
 		}
 	}
 	m.mu.Unlock()
+
+	// Delete disk records after releasing the lock.
+	if m.stateDir == "" {
+		return
+	}
+	for _, id := range expired {
+		if err := removeJobRecord(m.stateDir, string(id)); err != nil {
+			log.Printf("sandbox: remove reaped job record %s: %v", id, err)
+		}
+	}
 }

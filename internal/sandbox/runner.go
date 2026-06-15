@@ -97,9 +97,12 @@ type Runner struct {
 }
 
 // NewRunner builds a Runner from cfg with an empty child registry and a
-// JobManager persisting state under cfg.OutputRoot/.jobs. The MCP-aggregator
-// wiring (MCPServers, MCPSocketPath, MCPToolCatalogue) is populated after
-// construction via SetMCPWiring, once the aggregator has started.
+// JobManager persisting state under a per-instance subdir
+// <OutputRoot>/.jobs/<instanceID>/. The shared <OutputRoot>/.jobs root is
+// passed to newJobManager, which appends its own instanceID subdir. The
+// MCP-aggregator wiring (MCPServers, MCPSocketPath, MCPToolCatalogue) is
+// populated after construction via SetMCPWiring, once the aggregator has
+// started.
 func NewRunner(cfg Config) *Runner {
 	r := &Runner{cfg: cfg, registry: newChildRegistry()}
 	stateDir := filepath.Join(cfg.OutputRoot, ".jobs")
@@ -134,21 +137,21 @@ func (r *Runner) RunScript(ctx context.Context, req ScriptRequest) (ScriptResult
 // runScript backs RunScript and the in-sandbox child sandbox_script.
 // When child is set, the sandbox inherits the parent's /in and
 // /workspace and writes to /out/child/<name>. hooks carries the
-// optional OnStart/OnSandbox callbacks set by the JobManager for
+// optional OnOutputReady/OnSandboxCreated callbacks set by the JobManager for
 // background runs; blocking callers pass JobHooks{}.
 func (r *Runner) runScript(
 	ctx context.Context, req ScriptRequest, child *childSpawn, hooks JobHooks,
 ) (ScriptResult, error) {
 	sb, outputHost, jobID, err := r.prepareSandbox(ctx, sandboxPrepOptions{
-		Image:          req.Image,
-		Egress:         req.Egress,
-		Files:          req.Files,
-		Directories:    req.Directories,
-		Tool:           ToolSandboxScript,
-		TimeoutSeconds: oneShotSandboxTTLSeconds,
-		Child:          child,
-		OnStart:        hooks.OnStart,
-		OnSandbox:      hooks.OnSandbox,
+		Image:            req.Image,
+		Egress:           req.Egress,
+		Files:            req.Files,
+		Directories:      req.Directories,
+		Tool:             ToolSandboxScript,
+		TimeoutSeconds:   oneShotSandboxTTLSeconds,
+		Child:            child,
+		OnOutputReady:    hooks.OnOutputReady,
+		OnSandboxCreated: hooks.OnSandboxCreated,
 	})
 	if err != nil {
 		return ScriptResult{}, err
@@ -339,13 +342,13 @@ type sandboxPrepOptions struct {
 	// parent's /in mounts and shared /workspace, and its /out is
 	// <parentOut>/child/<name>. Files/Directories are ignored.
 	Child *childSpawn
-	// OnStart is called once the jobID and outputHost are known. Nil for
+	// OnOutputReady is called once the jobID and outputHost are known. Nil for
 	// blocking callers. resultsHost is always "" for script sandboxes (no agent
-	// cost to track); agent runs use a separate path via internalAgentSpec.onStart.
-	OnStart func(jobID JobID, outHost, resultsHost string)
-	// OnSandbox is called once the sandbox container has been created. Nil
-	// for blocking callers.
-	OnSandbox func(SandboxID)
+	// cost to track); agent runs use a separate path via internalAgentSpec.onOutputReady.
+	OnOutputReady func(jobID JobID, outHost, resultsHost string)
+	// OnSandboxCreated is called once the sandbox container has been created.
+	// Nil for blocking callers.
+	OnSandboxCreated func(SandboxID)
 }
 
 // prepareSandbox validates inputs, mints the per-job UUID + host /out dir,
@@ -386,15 +389,15 @@ func (r *Runner) prepareSandbox(
 	if opts.TimeoutSeconds <= 0 {
 		return nil, "", "", fmt.Errorf("sandboxPrepOptions: TimeoutSeconds must be set for %s", opts.Tool)
 	}
-	if opts.OnStart != nil {
-		opts.OnStart(jobID, outputHost, "")
+	if opts.OnOutputReady != nil {
+		opts.OnOutputReady(jobID, outputHost, "")
 	}
 	sb, err := r.launchSandbox(ctx, imageURI, mounts, policy, opts.TimeoutSeconds, jobID, opts.Tool)
 	if err != nil {
 		return nil, "", "", err
 	}
-	if opts.OnSandbox != nil {
-		opts.OnSandbox(SandboxID(sb.ID()))
+	if opts.OnSandboxCreated != nil {
+		opts.OnSandboxCreated(SandboxID(sb.ID()))
 	}
 	// Record this child as a sibling only after a successful create, so a
 	// failed spawn never poisons later siblings' /in/previous-jobs mounts.

@@ -2,12 +2,15 @@ package sandbox
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -99,6 +102,83 @@ func reconcileRunning(recs []JobRecord, stateDir string, now time.Time) []JobRec
 		}
 	}
 	return recs
+}
+
+// processAlive reports whether pid is a live process. syscall.Kill(pid,0)
+// delivers no signal: nil or EPERM => the process exists (EPERM means it is
+// owned by another user); ESRCH => no such process. Any other errno is
+// treated conservatively as alive so the sweep never deletes a live
+// instance's records.
+func processAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, syscall.ESRCH) {
+		return false
+	}
+	return true
+}
+
+// pidFromInstanceDir extracts the owning PID from an instance dir name of the
+// form "<pid>-<startnanos>". Returns ok=false for any name that does not
+// parse so the caller skips (never deletes) unrecognised entries.
+func pidFromInstanceDir(name string) (int, bool) {
+	parts := strings.SplitN(name, "-", 2)
+	if len(parts) != 2 {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(parts[0])
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
+}
+
+// sweepStaleInstanceDirs removes sibling instance subdirectories under
+// jobsRoot whose owning PID is no longer alive, reclaiming on-disk job
+// records left by crashed demesne instances. It never touches ownID, never
+// touches a dir whose PID is still alive, and only ever removes job-record
+// dirs — container cleanup for crashed instances is handled separately by
+// ReapOrphans. Parse failures / unreadable entries are skipped.
+func sweepStaleInstanceDirs(jobsRoot, ownID string, alive func(pid int) bool) {
+	entries, err := os.ReadDir(jobsRoot)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("sandbox: sweep stale job dirs: read %s: %v", jobsRoot, err)
+		}
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == ownID {
+			continue
+		}
+		pid, ok := pidFromInstanceDir(e.Name())
+		if !ok {
+			continue
+		}
+		if alive(pid) {
+			continue
+		}
+		dir := filepath.Join(jobsRoot, e.Name())
+		if err := os.RemoveAll(dir); err != nil {
+			log.Printf("sandbox: sweep stale job dir %s: %v", e.Name(), err)
+			continue
+		}
+		log.Printf("sandbox: swept stale job registry dir %s (owner pid %d not alive)", e.Name(), pid)
+	}
+}
+
+// removeJobRecord deletes <stateDir>/<id>.json; a missing file is not an error.
+func removeJobRecord(stateDir, id string) error {
+	path := filepath.Join(stateDir, id+".json")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove job record: %w", err)
+	}
+	return nil
 }
 
 // tailFile returns the last maxBytes bytes of the file at path, dropping any
