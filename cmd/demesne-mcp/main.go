@@ -58,6 +58,7 @@ func run() error {
 	// mounts the runner's own demesne MCP server (the in-sandbox
 	// child-spawning tools) as an extra server.
 	runner := sandbox.NewRunner(cfg)
+	defer runner.Shutdown()
 	demesneName, demesneTools, demesneHandler := runner.ChildMCPServer()
 
 	// Each demesne-mcp instance (one per Claude Code session) gets its own

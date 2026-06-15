@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`background` option** on `sandbox_script`, `sandbox_agent`, and `sandbox_research` (host and in-sandbox child surfaces): when `true`, the tool returns immediately with `{job_id, status:"running"}` instead of blocking.
+- **`sandbox_status`** tool (host and child): non-blocking status snapshot for a background job — returns status, elapsed time, a stdout tail, and cost/exit-code once terminal.
+- **`sandbox_wait`** tool (host and child): blocks up to `timeout_seconds` (default 30, hard-capped at 120) for a background job to reach a terminal state; returns the final result or `{status:"running", message:"still running; call sandbox_wait again"}` on timeout.
+- **`sandbox_cancel`** tool (host and child): cancels a background job and its entire descendant subtree depth-first, tearing down each sandbox via the existing sidecar/egress deferred path.
+- **Disk-backed job registry** (`internal/sandbox/jobs_persist.go`): job state is written atomically to `<output_root>/.jobs/` so the registry survives MCP-server restarts; running jobs at startup are reconciled to `failed`.
+
 ## [0.1.1] - 2026-06-10
 
 ### Added

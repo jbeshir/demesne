@@ -16,6 +16,11 @@ Run an AI agent inside a fresh sandbox against the caller's prompt.
 | `output_path` | string | no | — | Optional. Where the agent should write its final artefact. Rendered as a Definition of done block. |
 | `output_format` | string | no | — | Optional. Expected shape/format of the output. |
 | `success_criteria` | array of strings | no | — | Optional. Checklist of conditions the output must satisfy. |
+| `background` | boolean | no | `false` | When `true`, returns immediately with `{job_id, status:"running"}` instead of blocking; poll with `sandbox_status` / `sandbox_wait`, cancel with `sandbox_cancel`. |
+
+## Async usage
+
+Pass `background: true` to start an agent run without blocking the MCP tool-call. The response is `{job_id, status: "running"}`. Poll the job with `sandbox_status` or block (up to 120s per call) with `sandbox_wait`. Cancel the job and its descendant subtree with `sandbox_cancel`. Use this when the agent run might exceed the ~240s client tool-call timeout.
 
 ## Annotations
 

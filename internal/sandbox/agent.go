@@ -78,6 +78,14 @@ type internalAgentSpec struct {
 	outputPath      string
 	outputFormat    string
 	successCriteria []string
+	// onStart and onSandbox are the JobManager lifecycle hooks for
+	// background runs; nil for blocking callers.
+	onStart   func(JobID, string, string)
+	onSandbox func(SandboxID)
+	// bgSelf is the public JobID handle for the background job running
+	// this agent. It is stamped onto the spawnContext so nested child
+	// background jobs can register under this parent.
+	bgSelf JobID
 }
 
 // Agent runs an agent (e.g. claude-code) inside a fresh sandbox against
@@ -144,6 +152,10 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 		return AgentResult{}, err
 	}
 
+	if spec.onStart != nil {
+		spec.onStart(layout.jobID, layout.outHost, layout.resultsHost)
+	}
+
 	// Register this run so its own in-sandbox demesne tools can spawn
 	// children that inherit our inputs + workspace and nest under our
 	// /out. Deregister on the way out.
@@ -153,6 +165,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 		workspaceHost:  layout.workspaceHost,
 		outHost:        layout.outHost,
 		depth:          layout.depth,
+		bgJobID:        spec.bgSelf,
 		usedNames:      map[string]bool{},
 		siblingOutputs: map[string]string{},
 	})
@@ -164,11 +177,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	if err != nil {
 		return AgentResult{}, err
 	}
-	// Record this child as a sibling only after a successful create, so a
-	// failed spawn never poisons later siblings' /in/previous-jobs mounts.
-	if spec.child != nil {
-		spec.child.parent.recordSibling(spec.child.name, layout.outHost)
-	}
+	fireAgentHooks(spec, layout, sb)
 	defer killSandbox(ctx, sb)
 
 	proxyCfg := r.buildProxyConfig(prep.agent, agentToken, layout.resultsHost, prep.codexTokens)
@@ -223,23 +232,35 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 		return AgentResult{}, fmt.Errorf("run agent: %w", err)
 	}
 
-	exitCode := 0
-	if exec.ExitCode != nil {
-		exitCode = *exec.ExitCode
+	return finishAgentRun(exec.ExitCode, prep, layout, spec.tool), nil
+}
+
+// fireAgentHooks fires the onSandbox callback and records the child sibling
+// after a successful sandbox create. Extracted from runAgent to reduce its
+// cyclomatic complexity.
+func fireAgentHooks(spec internalAgentSpec, layout sandboxLayout, sb *opensandbox.Sandbox) {
+	if spec.onSandbox != nil {
+		spec.onSandbox(SandboxID(sb.ID()))
 	}
+	// Record this child as a sibling only after a successful create, so a
+	// failed spawn never poisons later siblings' /in/previous-jobs mounts.
+	if spec.child != nil {
+		spec.child.parent.recordSibling(spec.child.name, layout.outHost)
+	}
+}
 
-	// The agent's stdout went to the transcript file (not the SDK
-	// stream), so recover the final answer from it for the MCP result.
+// finishAgentRun reads the usage snapshot and transcript from disk, copies
+// usage into /out, rolls up results.json, and builds the AgentResult.
+// Extracted from runAgent to keep its cyclomatic complexity in bounds.
+func finishAgentRun(exitCodePtr *int, prep agentPrep, layout sandboxLayout, tool string) AgentResult {
+	exitCode := 0
+	if exitCodePtr != nil {
+		exitCode = *exitCodePtr
+	}
 	stdout := tailStdout(prep.agent.ResultText(readAgentTranscript(layout.outHost)))
-
 	usage := readUsageSnapshot(layout.resultsHost)
-	// Copy the usage record into /out so it's surfaced alongside the
-	// agent's artefacts when the host inspects the output dir later.
 	copyUsageToOut(layout.resultsHost, layout.outHost)
-
-	// Roll up own + descendant usage into results.json at /out.
-	total := writeResults(layout, spec.tool, exitCode, usage.CostUSD)
-
+	total := writeResults(layout, tool, exitCode, usage.CostUSD)
 	return AgentResult{
 		JobID:         layout.jobID,
 		OutputPath:    layout.outHost,
@@ -249,7 +270,7 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 		CostUSD:       usage.CostUSD,
 		TotalUsageUSD: total,
 		Stderr:        tailStderr(readAgentStderr(layout.outHost)),
-	}, nil
+	}
 }
 
 // buildProxyConfig selects the vendor proxy for the

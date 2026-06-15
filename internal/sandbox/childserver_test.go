@@ -137,6 +137,7 @@ func TestChildMCPServer_Catalogue(t *testing.T) {
 	}
 	for _, want := range []string{
 		ToolSandboxScript, ToolSandboxAgent, ToolSandboxResearch,
+		ToolSandboxStatus, ToolSandboxWait, ToolSandboxCancel,
 		ToolSandboxCreate, ToolSandboxExec, ToolSandboxDestroy,
 	} {
 		assert.True(t, got[want], "missing tool %q", want)
@@ -227,6 +228,26 @@ func TestHandleChildCreate_RejectsOpenEgress(t *testing.T) {
 	assert.True(t, res.IsError)
 }
 
+// TestChildMCPServer_BackgroundParamPresent verifies that sandbox_script,
+// sandbox_agent, and sandbox_research in the child catalogue each expose a
+// "background" boolean property (phase02 feature).
+func TestChildMCPServer_BackgroundParamPresent(t *testing.T) {
+	r := NewRunner(Config{})
+	_, tools, _ := r.ChildMCPServer()
+
+	byName := make(map[string]mcp.Tool, len(tools))
+	for _, tl := range tools {
+		byName[tl.Name] = tl
+	}
+
+	for _, toolName := range []string{ToolSandboxScript, ToolSandboxAgent, ToolSandboxResearch} {
+		tl, ok := byName[toolName]
+		require.True(t, ok, "tool %q not in child catalogue", toolName)
+		_, hasBg := tl.InputSchema.Properties[childParamBackground]
+		assert.True(t, hasBg, "tool %q must expose %q property", toolName, childParamBackground)
+	}
+}
+
 func TestHandleChildScript_NoParentIdentity(t *testing.T) {
 	r := NewRunner(Config{})
 	req := mcp.CallToolRequest{}
@@ -235,4 +256,53 @@ func TestHandleChildScript_NoParentIdentity(t *testing.T) {
 	res, err := r.handleChildScript(context.Background(), req)
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
+}
+
+func TestFormatChildWaitResult_TerminalCarriesFullResult(t *testing.T) {
+	out := formatChildWaitResult(WaitResult{
+		JobID:         JobID("job-1"),
+		Status:        JobStatusSucceeded,
+		ResultText:    "the final answer",
+		OutputPath:    "/out/child/x",
+		ExitCode:      0,
+		CostUSD:       0.0042,
+		TotalUsageUSD: 0.0091,
+	})
+	for _, want := range []string{
+		"job_id: job-1", "status: succeeded", "output_dir: /out/child/x",
+		"exit_code: 0", "cost_usd: 0.0042", "total_usage_usd: 0.0091", "the final answer",
+	} {
+		assert.Contains(t, out, want)
+	}
+}
+
+func TestFormatChildWaitResult_RunningSentinel(t *testing.T) {
+	out := formatChildWaitResult(WaitResult{
+		JobID:   JobID("job-2"),
+		Status:  JobStatusRunning,
+		Message: "still running; call sandbox_wait again",
+	})
+	assert.Contains(t, out, "status: running")
+	assert.Contains(t, out, "still running; call sandbox_wait again")
+	// A still-running wait must not claim a terminal output dir or cost.
+	assert.NotContains(t, out, "output_dir:")
+	assert.NotContains(t, out, "cost_usd:")
+}
+
+func TestFormatChildStatusResult_CarriesCostAndTail(t *testing.T) {
+	out := formatChildStatusResult(StatusResult{
+		JobID:          JobID("job-3"),
+		Status:         JobStatusRunning,
+		ElapsedSeconds: 12.5,
+		StdoutTail:     "tail bytes",
+		CostUSD:        0.001,
+		TotalUsageUSD:  0.001,
+		ExitCode:       0,
+	})
+	for _, want := range []string{
+		"job_id: job-3", "status: running", "elapsed_seconds: 12.5",
+		"cost_usd: 0.0010", "tail bytes",
+	} {
+		assert.Contains(t, out, want)
+	}
 }
