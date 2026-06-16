@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jbeshir/demesne/docs/reference/tools/sandbox_wait.schema.json",
+  "title": "sandbox_wait input",
+  "type": "object",
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "description": "Job ID returned by a background sandbox_script, sandbox_agent, or sandbox_research call."
+    },
+    "timeout_seconds": {
+      "type": "number",
+      "description": "Maximum seconds to wait for the job to reach a terminal state. 0 or omitted → 30 s default; hard-capped at 120 s.",
+      "default": 30
+    }
+  },
+  "required": ["job_id"],
+  "additionalProperties": false
+}

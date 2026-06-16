@@ -52,6 +52,11 @@
       "type": "array",
       "description": "Optional. Checklist of conditions the output must satisfy.",
       "items": { "type": "string" }
+    },
+    "background": {
+      "type": "boolean",
+      "description": "When true, returns immediately with {job_id, status:\"running\"} instead of blocking; poll with sandbox_status / sandbox_wait, cancel with sandbox_cancel.",
+      "default": false
     }
   },
   "required": ["prompt"],

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jbeshir/demesne/docs/reference/tools/sandbox_cancel.schema.json",
+  "title": "sandbox_cancel input",
+  "type": "object",
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "description": "Job ID returned by a background sandbox_script, sandbox_agent, or sandbox_research call."
+    }
+  },
+  "required": ["job_id"],
+  "additionalProperties": false
+}

@@ -22,6 +22,11 @@ type spawnContext struct {
 	workspaceHost string
 	outHost       string
 	depth         int
+	// bgJobID is the public JobManager handle for the background job that
+	// owns this spawn context, or "" for blocking (non-background) parents.
+	// Child background jobs read this to register themselves under the
+	// correct parent in the job tree.
+	bgJobID JobID
 
 	mu        sync.Mutex
 	usedNames map[string]bool

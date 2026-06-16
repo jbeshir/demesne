@@ -27,6 +27,9 @@ type ScriptRequest struct {
 	Egress      EgressMode
 	Files       []string
 	Directories []string
+	// Background, when true, starts the job asynchronously and returns
+	// immediately. Poll with Status/Wait; cancel with Cancel.
+	Background bool
 }
 
 // ScriptResult captures the outputs of a single sandbox_script invocation.
@@ -100,6 +103,9 @@ type AgentRequest struct {
 	OutputPath      string
 	OutputFormat    string
 	SuccessCriteria []string
+	// Background, when true, starts the job asynchronously and returns
+	// immediately. Poll with Status/Wait; cancel with Cancel.
+	Background bool
 }
 
 // AgentResult captures the outputs of sandbox_agent.
@@ -129,4 +135,28 @@ type ResearchRequest struct {
 	OutputPath      string
 	OutputFormat    string
 	SuccessCriteria []string
+	// Background, when true, starts the job asynchronously and returns
+	// immediately. Poll with Status/Wait; cancel with Cancel.
+	Background bool
+}
+
+// StatusRequest captures the inputs to sandbox_status.
+type StatusRequest struct {
+	// JobID is the public handle returned by a background spawn.
+	JobID JobID
+}
+
+// WaitRequest captures the inputs to sandbox_wait.
+type WaitRequest struct {
+	// JobID is the public handle returned by a background spawn.
+	JobID JobID
+	// TimeoutSeconds is the maximum time to wait; clamped to [1ms, 120s].
+	// Zero or negative uses the default of 30s.
+	TimeoutSeconds int
+}
+
+// CancelRequest captures the inputs to sandbox_cancel.
+type CancelRequest struct {
+	// JobID is the public handle returned by a background spawn.
+	JobID JobID
 }

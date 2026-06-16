@@ -26,6 +26,9 @@ const (
 	paramOutputPath      = "output_path"
 	paramOutputFormat    = "output_format"
 	paramSuccessCriteria = "success_criteria"
+	paramBackground      = "background"
+	paramJobID           = "job_id"
+	paramTimeoutSeconds  = "timeout_seconds"
 	sandboxHandleDesc    = "Sandbox handle returned by sandbox_create."
 
 	// agentNameCodex / agentNameClaudeCode are the caller-facing
@@ -47,6 +50,12 @@ type Runner interface {
 	Destroy(ctx context.Context, req sandbox.DestroyRequest) error
 	Agent(ctx context.Context, req sandbox.AgentRequest) (sandbox.AgentResult, error)
 	Research(ctx context.Context, req sandbox.ResearchRequest) (sandbox.AgentResult, error)
+	StartScript(req sandbox.ScriptRequest) sandbox.JobID
+	StartAgent(req sandbox.AgentRequest) sandbox.JobID
+	StartResearch(req sandbox.ResearchRequest) sandbox.JobID
+	Status(req sandbox.StatusRequest) (sandbox.StatusResult, error)
+	Wait(ctx context.Context, req sandbox.WaitRequest) (sandbox.WaitResult, error)
+	Cancel(ctx context.Context, req sandbox.CancelRequest) (sandbox.CancelResult, error)
 	// AvailableAgents reports which agent providers have host credentials
 	// configured (codex-first), with each provider's model allowlist. The
 	// server uses it to filter the `agent` / `model` enums advertised on
@@ -261,6 +270,11 @@ func (s *Server) registerTools() {
 			mcp.Description(directoriesDesc),
 			mcp.Items(stringArrayItems()),
 		),
+		mcp.WithBoolean(paramBackground,
+			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
+				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"cancel with sandbox_cancel."),
+		),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(false),
@@ -409,6 +423,11 @@ func (s *Server) registerTools() {
 				"Rendered as a bulleted Definition of done block."),
 			mcp.Items(stringArrayItems()),
 		),
+		mcp.WithBoolean(paramBackground,
+			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
+				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"cancel with sandbox_cancel."),
+		),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(false),
@@ -448,11 +467,59 @@ func (s *Server) registerTools() {
 				"Rendered as a bulleted Definition of done block."),
 			mcp.Items(stringArrayItems()),
 		),
+		mcp.WithBoolean(paramBackground,
+			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
+				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"cancel with sandbox_cancel."),
+		),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true),
 	), s.handleSandboxResearch)
+
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxStatus,
+		mcp.WithDescription(statusToolDescription),
+		mcp.WithOutputSchema[statusOutput](),
+		mcp.WithString(paramJobID,
+			mcp.Required(),
+			mcp.Description("Job ID returned by a background sandbox_script/agent/research call."),
+		),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+	), s.handleSandboxStatus)
+
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxWait,
+		mcp.WithDescription(waitToolDescription),
+		mcp.WithOutputSchema[waitOutput](),
+		mcp.WithString(paramJobID,
+			mcp.Required(),
+			mcp.Description("Job ID returned by a background sandbox_script/agent/research call."),
+		),
+		mcp.WithNumber(paramTimeoutSeconds,
+			mcp.Description("Maximum seconds to wait for the job to reach a terminal state. "+
+				"0 or omitted → 30 s default; hard-capped at 120 s."),
+		),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+	), s.handleSandboxWait)
+
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxCancel,
+		mcp.WithDescription(cancelToolDescription),
+		mcp.WithOutputSchema[cancelOutput](),
+		mcp.WithString(paramJobID,
+			mcp.Required(),
+			mcp.Description("Job ID returned by a background sandbox_script/agent/research call."),
+		),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+	), s.handleSandboxCancel)
 }
 
 const imageParamDescription = "Container image. One of: 'node' (node:22), " +
@@ -540,6 +607,23 @@ pricing; it is reported regardless of how the underlying OAuth token
 is billed (for example, Claude Code OAuth tokens typically authorise
 against a Claude Console subscription rather than per-request API
 billing, so the user is not charged per request).`
+
+const statusToolDescription = `Get the current status of a background sandbox job.
+
+Returns the job ID, status (running/succeeded/failed/cancelled), elapsed
+time, a tail of any captured stdout so far, and cost/exit-code when the
+job has completed. Use sandbox_wait to block until completion.`
+
+const waitToolDescription = `Block until a background sandbox job reaches a terminal state.
+
+Returns when the job succeeds, fails, or is cancelled — or when the
+optional timeout_seconds elapses (status is still "running" in that case).
+ctx cancellation abandons the wait without affecting the job.`
+
+const cancelToolDescription = `Request cancellation of a background sandbox job and its descendants.
+
+Idempotent: calling cancel on an already-terminal job returns its final
+status without error. Returns the job ID and its resulting status.`
 
 const researchToolDescription = `Run a long-running research agent in a fresh sandbox with unrestricted
 outbound internet access.

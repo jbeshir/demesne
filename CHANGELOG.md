@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`background` option** on `sandbox_script`, `sandbox_agent`, and `sandbox_research` (host and in-sandbox child surfaces): when `true`, the tool returns immediately with `{job_id, status:"running"}` instead of blocking.
+- **`sandbox_status`** tool (host and child): non-blocking status snapshot for a background job — returns status, elapsed time, a stdout tail, and cost/exit-code once terminal.
+- **`sandbox_wait`** tool (host and child): blocks up to `timeout_seconds` (default 30, hard-capped at 120) for a background job to reach a terminal state; returns the final result or `{status:"running", message:"still running; call sandbox_wait again"}` on timeout.
+- **`sandbox_cancel`** tool (host and child): cancels a background job and its entire descendant subtree depth-first, tearing down each sandbox via the existing sidecar/egress deferred path.
+- **In-memory job registry** (`internal/sandbox/jobs.go`): job state lives in memory for the process lifetime with no on-disk persistence; jobs do NOT survive an MCP-server restart (a stale job_id then returns `ErrJobNotFound`); a TTL reaper retains terminal jobs ~1h to bound memory; orphaned containers from a crashed/restarted process are reaped independently by `ReapOrphans` via the `demesne.owner` label.
+
+### Changed
+- **Internal job hooks** (`JobHooks`, `internalAgentSpec`, `sandboxPrepOptions`): the mid-run job-tracking plumbing was reduced to a single `OnOutputReady(outHost, resultsHost)` callback that records the live output/results paths for `sandbox_status`; the write-only `OnSandboxCreated` hook and run-UUID parameter (and their now-dead job fields) were dropped. Internal only — no behaviour change; the MCP tool surface (`sandbox_status`/`sandbox_wait`/`sandbox_cancel`) is unchanged.
+
+### Fixed
+
 ## [0.1.1] - 2026-06-10
 
 ### Added

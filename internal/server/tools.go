@@ -33,13 +33,18 @@ func (s *Server) handleSandboxScript(
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	res, err := s.runner.RunScript(ctx, sandbox.ScriptRequest{
+	req := sandbox.ScriptRequest{
 		Command:     command,
 		Image:       image,
 		Egress:      sandbox.EgressMode(egress),
 		Files:       files,
 		Directories: directories,
-	})
+	}
+	if request.GetBool(paramBackground, false) {
+		jobID := s.runner.StartScript(req)
+		return formatJobStarted(jobID), nil
+	}
+	res, err := s.runner.RunScript(ctx, req)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -207,7 +212,7 @@ func (s *Server) handleSandboxAgent(
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	res, err := s.runner.Agent(ctx, sandbox.AgentRequest{
+	agentReq := sandbox.AgentRequest{
 		Agent:           agentName,
 		Model:           model,
 		Prompt:          prompt,
@@ -218,7 +223,12 @@ func (s *Server) handleSandboxAgent(
 		OutputPath:      outputPath,
 		OutputFormat:    outputFormat,
 		SuccessCriteria: successCriteria,
-	})
+	}
+	if request.GetBool(paramBackground, false) {
+		jobID := s.runner.StartAgent(agentReq)
+		return formatJobStarted(jobID), nil
+	}
+	res, err := s.runner.Agent(ctx, agentReq)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -244,7 +254,7 @@ func (s *Server) handleSandboxResearch(
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	res, err := s.runner.Research(ctx, sandbox.ResearchRequest{
+	researchReq := sandbox.ResearchRequest{
 		Agent:           agentName,
 		Model:           model,
 		Prompt:          prompt,
@@ -252,11 +262,65 @@ func (s *Server) handleSandboxResearch(
 		OutputPath:      outputPath,
 		OutputFormat:    outputFormat,
 		SuccessCriteria: successCriteria,
-	})
+	}
+	if request.GetBool(paramBackground, false) {
+		jobID := s.runner.StartResearch(researchReq)
+		return formatJobStarted(jobID), nil
+	}
+	res, err := s.runner.Research(ctx, researchReq)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return formatAgentRunResult(res), nil
+}
+
+func (s *Server) handleSandboxStatus(
+	ctx context.Context,
+	request mcp.CallToolRequest,
+) (*mcp.CallToolResult, error) {
+	jobID, errRes := requireNonEmpty(request, paramJobID)
+	if errRes != nil {
+		return errRes, nil
+	}
+	res, err := s.runner.Status(sandbox.StatusRequest{JobID: sandbox.JobID(jobID)})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return formatStatusResult(res), nil
+}
+
+func (s *Server) handleSandboxWait(
+	ctx context.Context,
+	request mcp.CallToolRequest,
+) (*mcp.CallToolResult, error) {
+	jobID, errRes := requireNonEmpty(request, paramJobID)
+	if errRes != nil {
+		return errRes, nil
+	}
+	timeout := request.GetInt(paramTimeoutSeconds, 0)
+	res, err := s.runner.Wait(ctx, sandbox.WaitRequest{
+		JobID:          sandbox.JobID(jobID),
+		TimeoutSeconds: timeout,
+	})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return formatWaitResult(res), nil
+}
+
+func (s *Server) handleSandboxCancel(
+	ctx context.Context,
+	request mcp.CallToolRequest,
+) (*mcp.CallToolResult, error) {
+	jobID, errRes := requireNonEmpty(request, paramJobID)
+	if errRes != nil {
+		return errRes, nil
+	}
+	res, err := s.runner.Cancel(ctx, sandbox.CancelRequest{JobID: sandbox.JobID(jobID)})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return formatCancelResult(res), nil
 }
 
 // requireNonEmpty extracts a required, non-empty string param, returning an

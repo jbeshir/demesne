@@ -29,6 +29,7 @@ const (
 	// so the goconst linter doesn't repeat-flag them as they spread.
 	testModelHaiku  = "haiku"
 	testModelSonnet = "sonnet"
+	testPromptWork  = "do something"
 )
 
 type fakeRunner struct {
@@ -64,6 +65,31 @@ type fakeRunner struct {
 	researchErr    error
 	available      []sandbox.AgentOption
 	allowedPaths   []string
+
+	// Async start fields — injectable return values and call captures.
+	startScriptCalls    int
+	gotStartScriptReq   sandbox.ScriptRequest
+	startScriptJobID    sandbox.JobID
+	startAgentCalls     int
+	gotStartAgentReq    sandbox.AgentRequest
+	startAgentJobID     sandbox.JobID
+	startResearchCalls  int
+	gotStartResearchReq sandbox.ResearchRequest
+	startResearchJobID  sandbox.JobID
+
+	// Status/Wait/Cancel injectable return values and call captures.
+	statusCalls  int
+	gotStatusReq sandbox.StatusRequest
+	statusResult sandbox.StatusResult
+	statusErr    error
+	waitCalls    int
+	gotWaitReq   sandbox.WaitRequest
+	waitResult   sandbox.WaitResult
+	waitErr      error
+	cancelCalls  int
+	gotCancelReq sandbox.CancelRequest
+	cancelResult sandbox.CancelResult
+	cancelErr    error
 }
 
 func (f *fakeRunner) RunScript(_ context.Context, req sandbox.ScriptRequest) (sandbox.ScriptResult, error) {
@@ -112,6 +138,51 @@ func (f *fakeRunner) Research(_ context.Context, req sandbox.ResearchRequest) (s
 	f.researchCalls++
 	f.gotResearchReq = req
 	return f.researchRes, f.researchErr
+}
+
+func (f *fakeRunner) StartScript(req sandbox.ScriptRequest) sandbox.JobID {
+	f.startScriptCalls++
+	f.gotStartScriptReq = req
+	if f.startScriptJobID != "" {
+		return f.startScriptJobID
+	}
+	return "fake-job-script"
+}
+
+func (f *fakeRunner) StartAgent(req sandbox.AgentRequest) sandbox.JobID {
+	f.startAgentCalls++
+	f.gotStartAgentReq = req
+	if f.startAgentJobID != "" {
+		return f.startAgentJobID
+	}
+	return "fake-job-agent"
+}
+
+func (f *fakeRunner) StartResearch(req sandbox.ResearchRequest) sandbox.JobID {
+	f.startResearchCalls++
+	f.gotStartResearchReq = req
+	if f.startResearchJobID != "" {
+		return f.startResearchJobID
+	}
+	return "fake-job-research"
+}
+
+func (f *fakeRunner) Status(req sandbox.StatusRequest) (sandbox.StatusResult, error) {
+	f.statusCalls++
+	f.gotStatusReq = req
+	return f.statusResult, f.statusErr
+}
+
+func (f *fakeRunner) Wait(_ context.Context, req sandbox.WaitRequest) (sandbox.WaitResult, error) {
+	f.waitCalls++
+	f.gotWaitReq = req
+	return f.waitResult, f.waitErr
+}
+
+func (f *fakeRunner) Cancel(_ context.Context, req sandbox.CancelRequest) (sandbox.CancelResult, error) {
+	f.cancelCalls++
+	f.gotCancelReq = req
+	return f.cancelResult, f.cancelErr
 }
 
 func (f *fakeRunner) AvailableAgents() []sandbox.AgentOption { return f.available }
@@ -455,7 +526,7 @@ func TestHandleSandboxAgent_OutputContractWired(t *testing.T) {
 	r := &fakeRunner{agentRes: sandbox.AgentResult{JobID: "x", OutputPath: "/tmp/x"}}
 	s := NewServer(r)
 	got, err := s.handleSandboxAgent(context.Background(), newRequest(map[string]any{
-		paramPrompt:          "do something",
+		paramPrompt:          testPromptWork,
 		paramOutputPath:      "/out/result.md",
 		paramOutputFormat:    "Markdown report",
 		paramSuccessCriteria: []any{"section A present", "no errors"},

@@ -53,6 +53,9 @@ const (
 	ToolSandboxDestroy  = "sandbox_destroy"
 	ToolSandboxUpload   = "sandbox_upload"
 	ToolSandboxDownload = "sandbox_download"
+	ToolSandboxStatus   = "sandbox_status"
+	ToolSandboxWait     = "sandbox_wait"
+	ToolSandboxCancel   = "sandbox_cancel"
 	mountOut            = "/out"
 	mountWorkspace      = "/workspace"
 	outVolumeName       = "out"
@@ -90,13 +93,24 @@ var dockerRemoveFn = dockerForceRemove
 type Runner struct {
 	cfg      Config
 	registry *ChildRegistry
+	jobs     *JobManager
 }
 
-// NewRunner builds a Runner from cfg with an empty child registry. The MCP-aggregator wiring
-// (MCPServers, MCPSocketPath, MCPToolCatalogue) is populated after construction via SetMCPWiring,
-// once the aggregator has started.
+// NewRunner builds a Runner from cfg with an empty child registry and an
+// in-memory JobManager. Jobs are not persisted to disk and do not survive
+// a process restart. The MCP-aggregator wiring (MCPServers, MCPSocketPath,
+// MCPToolCatalogue) is populated after construction via SetMCPWiring, once
+// the aggregator has started.
 func NewRunner(cfg Config) *Runner {
-	return &Runner{cfg: cfg, registry: newChildRegistry()}
+	r := &Runner{cfg: cfg, registry: newChildRegistry()}
+	r.jobs = NewJobManager()
+	return r
+}
+
+// Shutdown stops the job manager's background reaper and waits for all
+// in-flight job goroutines to complete. Call once at process exit.
+func (r *Runner) Shutdown() {
+	r.jobs.Shutdown()
 }
 
 // SetMCPWiring records the host MCP aggregator's exposed servers,
@@ -112,13 +126,17 @@ func (r *Runner) SetMCPWiring(servers []string, socketPath string, catalogue mcp
 // RunScript executes one sandbox_script invocation end-to-end: create a
 // fresh sandbox, run a single command, return stdout, tear the sandbox down.
 func (r *Runner) RunScript(ctx context.Context, req ScriptRequest) (ScriptResult, error) {
-	return r.runScript(ctx, req, nil)
+	return r.runScript(ctx, req, nil, JobHooks{})
 }
 
 // runScript backs RunScript and the in-sandbox child sandbox_script.
 // When child is set, the sandbox inherits the parent's /in and
-// /workspace and writes to /out/child/<name>.
-func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childSpawn) (ScriptResult, error) {
+// /workspace and writes to /out/child/<name>. hooks carries the
+// optional OnOutputReady callback set by the JobManager for background
+// runs; blocking callers pass JobHooks{}.
+func (r *Runner) runScript(
+	ctx context.Context, req ScriptRequest, child *childSpawn, hooks JobHooks,
+) (ScriptResult, error) {
 	sb, outputHost, jobID, err := r.prepareSandbox(ctx, sandboxPrepOptions{
 		Image:          req.Image,
 		Egress:         req.Egress,
@@ -127,6 +145,7 @@ func (r *Runner) runScript(ctx context.Context, req ScriptRequest, child *childS
 		Tool:           ToolSandboxScript,
 		TimeoutSeconds: oneShotSandboxTTLSeconds,
 		Child:          child,
+		OnOutputReady:  hooks.OnOutputReady,
 	})
 	if err != nil {
 		return ScriptResult{}, err
@@ -317,6 +336,10 @@ type sandboxPrepOptions struct {
 	// parent's /in mounts and shared /workspace, and its /out is
 	// <parentOut>/child/<name>. Files/Directories are ignored.
 	Child *childSpawn
+	// OnOutputReady is called once the output dir is known. Nil for blocking
+	// callers. resultsHost is always "" for script sandboxes (no agent cost to
+	// track); agent runs use a separate path via internalAgentSpec.onOutputReady.
+	OnOutputReady func(outHost, resultsHost string)
 }
 
 // prepareSandbox validates inputs, mints the per-job UUID + host /out dir,
@@ -356,6 +379,9 @@ func (r *Runner) prepareSandbox(
 
 	if opts.TimeoutSeconds <= 0 {
 		return nil, "", "", fmt.Errorf("sandboxPrepOptions: TimeoutSeconds must be set for %s", opts.Tool)
+	}
+	if opts.OnOutputReady != nil {
+		opts.OnOutputReady(outputHost, "")
 	}
 	sb, err := r.launchSandbox(ctx, imageURI, mounts, policy, opts.TimeoutSeconds, jobID, opts.Tool)
 	if err != nil {

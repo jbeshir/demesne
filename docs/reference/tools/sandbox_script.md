@@ -11,6 +11,11 @@ Run a single shell command in a fresh sandbox and return its stdout and stderr.
 | `egress` | string | no | `package-managers` | Outbound network policy. `package-managers` allows npm, PyPI, and conda registries; `none` denies all egress. |
 | `files` | array of strings | no | — | Host file paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
 | `directories` | array of strings | no | — | Host directory paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
+| `background` | boolean | no | `false` | When `true`, returns immediately with `{job_id, status:"running"}` instead of blocking; poll with `sandbox_status` / `sandbox_wait`, cancel with `sandbox_cancel`. |
+
+## Async usage
+
+Pass `background: true` to start a long-running command without blocking the MCP tool-call. The response is `{job_id, status: "running"}`. Poll the job with `sandbox_status` or block (up to 120s per call) with `sandbox_wait`. Cancel the job and its descendant subtree with `sandbox_cancel`. Use this when the command might exceed the ~240s client tool-call timeout.
 
 ## Annotations
 

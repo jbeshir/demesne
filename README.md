@@ -61,6 +61,18 @@ For the full walkthrough, see [Quickstart](docs/tutorial/quickstart.md).
 | `sandbox_agent`    | Run an AI coding agent (`codex` or `claude-code` — defaults to `codex` when Codex credentials are configured, otherwise `claude-code`) in a fresh sandbox against a caller-supplied prompt. Outbound HTTPS is restricted to the vendor proxy. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary. | [ref](docs/reference/tools/sandbox_agent.md) |
 | `sandbox_research` | Run a long-running research agent with no input mounts and unrestricted outbound internet access. Returns exit code, stdout, stderr, the `/out` host path, and the (indicative) cost summary.                                              | [ref](docs/reference/tools/sandbox_research.md) |
 
+### Background / async jobs
+
+All three spawn tools (`sandbox_script`, `sandbox_agent`, `sandbox_research`) accept an optional `background: true` parameter. When set, the tool returns immediately with `{job_id, status: "running"}` instead of blocking. Use the complementary job-control tools to manage the run:
+
+| Tool | Description |
+|------|-------------|
+| `sandbox_status` | Non-blocking snapshot of status, elapsed time, stdout tail, and cost. |
+| `sandbox_wait` | Block up to `timeout_seconds` (default 30, max 120) for a terminal state; returns the final result or a `"still running"` sentinel if the timeout elapses. Call in a loop to poll. |
+| `sandbox_cancel` | Cancel the job and its entire descendant subtree; idempotent on already-terminal jobs. |
+
+Use `background: true` when a run might exceed the ~240s client tool-call timeout — for example, a multi-hour research agent or a long compilation. The job registry is in-memory; jobs do NOT survive MCP-server restarts (a stale job_id returns an error after restart); completed jobs are retained ~1h via a TTL reaper.
+
 For a step-by-step walkthrough of the persistent-sandbox lifecycle, see the [Quickstart](docs/tutorial/quickstart.md) and the [`sandbox_create`](docs/reference/tools/sandbox_create.md) / [`sandbox_exec`](docs/reference/tools/sandbox_exec.md) reference pages.
 
 ## Docs
