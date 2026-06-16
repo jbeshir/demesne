@@ -70,11 +70,11 @@ func validateContainerID(id string) error {
 // AnthropicProxyConfig carries the auth values the vendor proxy
 // needs. The agent-facing token is validated by the proxy on every
 // inbound request; the upstream token is what the proxy sends to the
-// real vendor API. Keeping both off-host avoids storing them in sidecar
-// image layers or container args (visible via docker inspect) — they're
-// passed via docker run -e instead. ResultsHost is the host path
-// bind-mounted to SidecarResultsDir; the vendor proxy writes its
-// usage.json there.
+// real vendor API. Both are passed via docker run -e, which keeps them
+// out of image layers and out of the untrusted agent sandbox — the host
+// is trusted, so visibility via docker inspect (Config.Env) to host
+// processes is acceptable. ResultsHost is the host path bind-mounted to
+// SidecarResultsDir; the vendor proxy writes its usage.json there.
 type AnthropicProxyConfig struct {
 	AgentToken    string
 	UpstreamToken string
@@ -86,7 +86,10 @@ type AnthropicProxyConfig struct {
 // validates on every inbound request; Tokens is the ChatGPT OAuth token
 // set, already refreshed+persisted host-side before launch — the proxy
 // forwards its access token as-is and never refreshes. Both are passed
-// via docker run -e (kept off image layers / inspect-visible args).
+// via docker run -e, which keeps them out of image layers and out of the
+// untrusted agent sandbox; env vars are visible via docker inspect
+// (Config.Env) to host processes, but the host is trusted — the sandbox
+// edge is the only trust boundary here.
 // ResultsHost is bind-mounted to SidecarResultsDir; the proxy writes its
 // usage.json there.
 type CodexProxyConfig struct {

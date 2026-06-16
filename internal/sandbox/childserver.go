@@ -401,6 +401,7 @@ func (r *Runner) handleChildStatus(_ context.Context, req mcp.CallToolRequest) (
 }
 
 func (r *Runner) handleChildWait(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	defer keepAlive(ctx)()
 	jobID, err := req.RequireString(childParamJobID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
