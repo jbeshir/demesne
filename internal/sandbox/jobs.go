@@ -384,8 +384,11 @@ func (m *JobManager) Wait(ctx context.Context, id JobID, timeout time.Duration) 
 		return WaitResult{}, fmt.Errorf("%w: %s", ErrJobNotFound, id)
 	}
 
-	// Fast path: already terminal.
+	// Fast path: already terminal. Wait for j.done so the goroutine has
+	// finished writing j.outcome (state flips terminal before the outcome
+	// write; done is closed after it).
 	if isTerminal(atomic.LoadInt32(&j.state)) {
+		<-j.done
 		return m.buildWaitResult(j), nil
 	}
 
@@ -432,7 +435,7 @@ func (m *JobManager) buildWaitResult(j *job) WaitResult {
 // current status without error. An unknown id returns ErrJobNotFound.
 func (m *JobManager) Cancel(ctx context.Context, id JobID) (CancelResult, error) {
 	m.mu.RLock()
-	_, ok := m.jobs[id]
+	j, ok := m.jobs[id]
 	m.mu.RUnlock()
 	if !ok {
 		return CancelResult{}, fmt.Errorf("%w: %s", ErrJobNotFound, id)
@@ -440,9 +443,6 @@ func (m *JobManager) Cancel(ctx context.Context, id JobID) (CancelResult, error)
 
 	m.cancelSubtree(id)
 
-	m.mu.RLock()
-	j := m.jobs[id]
-	m.mu.RUnlock()
 	return CancelResult{
 		JobID:  id,
 		Status: jobStateToStatus(atomic.LoadInt32(&j.state)),
