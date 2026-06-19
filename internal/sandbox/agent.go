@@ -216,9 +216,9 @@ func (r *Runner) runAgent(ctx context.Context, spec internalAgentSpec) (AgentRes
 	// survives an interrupted run) without any SDK streaming handlers.
 	setup := fmt.Sprintf("mkdir -p %s && cd %s && ln -sf %s/%s ./%s",
 		sub, sub, agents.AgentConfigDir, ctxName, ctxName)
-	command := fmt.Sprintf("%s && %s > /out/%s 2> /out/%s",
+	command := fmt.Sprintf("%s && { %s > /out/%s 2> /out/%s; rc=$?; %s; exit $rc; }",
 		setup, shellQuote(prep.agent.Command(spec.prompt, prep.model)),
-		agentTranscriptBasename, agentStderrBasename)
+		agentTranscriptBasename, agentStderrBasename, prep.agent.PostRunCapture())
 
 	exec, err := sb.RunCommandWithOpts(ctx, opensandbox.RunCommandRequest{
 		Command: command,
@@ -246,7 +246,8 @@ func recordChildSibling(spec internalAgentSpec, layout sandboxLayout) {
 }
 
 // finishAgentRun reads the usage snapshot and transcript from disk, copies
-// usage into /out, rolls up results.json, and builds the AgentResult.
+// usage into /out, distills attribution records (anthropic-only), rolls up
+// results.json, and builds the AgentResult.
 // Extracted from runAgent to keep its cyclomatic complexity in bounds.
 func finishAgentRun(exitCodePtr *int, prep agentPrep, layout sandboxLayout, tool string) AgentResult {
 	exitCode := 0
@@ -256,16 +257,21 @@ func finishAgentRun(exitCodePtr *int, prep agentPrep, layout sandboxLayout, tool
 	stdout := tailStdout(prep.agent.ResultText(readAgentTranscript(layout.outHost)))
 	usage := readUsageSnapshot(layout.resultsHost)
 	copyUsageToOut(layout.resultsHost, layout.outHost)
-	total := writeResults(layout, tool, exitCode, usage.CostUSD)
+	if prep.agent.ProxyVendor() == agents.ProxyAnthropic {
+		distillAttribution(layout.workspaceHost, layout.jobID, layout.outHost)
+	}
+	total, perModel := writeResults(layout, tool, exitCode, usage.CostUSD)
 	return AgentResult{
-		JobID:         layout.jobID,
-		OutputPath:    layout.outHost,
-		WorkspacePath: layout.workspaceHost,
-		Stdout:        stdout,
-		ExitCode:      exitCode,
-		CostUSD:       usage.CostUSD,
-		TotalUsageUSD: total,
-		Stderr:        tailStderr(readAgentStderr(layout.outHost)),
+		JobID:          layout.jobID,
+		OutputPath:     layout.outHost,
+		WorkspacePath:  layout.workspaceHost,
+		Stdout:         stdout,
+		ExitCode:       exitCode,
+		CostUSD:        usage.CostUSD,
+		TotalUsageUSD:  total,
+		Stderr:         tailStderr(readAgentStderr(layout.outHost)),
+		PerModelTokens: perModel,
+		UsageSummary:   buildUsageSummary(perModel, layout.outHost),
 	}
 }
 
@@ -837,17 +843,20 @@ func readUsageSnapshot(resultsHost string) usageSnapshot {
 	return s
 }
 
-// copyUsageToOut copies the proxy's usage.json from the sidecar
-// results dir to the agent's /out so the caller has a single place
-// to find it. Best-effort: errors are logged non-fatally because the
+// copyUsageToOut copies usage.json and usage.jsonl from the sidecar
+// results dir to the agent's /out so the caller has a single place to
+// find them. Best-effort: errors are logged non-fatally because the
 // summary in AgentResult already carries the headline numbers.
+// usage.jsonl must be present before writeResults reads it for the
+// per-model token rollup.
 func copyUsageToOut(resultsHost, outHost string) {
-	src := filepath.Join(resultsHost, "usage.json")
-	data, err := readOutputPath(src)
-	if err != nil {
-		return
-	}
-	if err := writeOutputFile(outHost, "usage.json", data); err != nil {
-		log.Printf("demesne: copy usage.json to out: %v", err)
+	for _, name := range []string{"usage.json", "usage.jsonl"} {
+		data, err := readOutputPath(filepath.Join(resultsHost, name))
+		if err != nil {
+			continue
+		}
+		if err := writeOutputFile(outHost, name, data); err != nil {
+			log.Printf("demesne: copy %s to out: %v", name, err)
+		}
 	}
 }

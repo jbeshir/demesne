@@ -23,7 +23,7 @@ type Tracker struct {
 func NewTracker(usagePath string) *Tracker {
 	return &Tracker{proxycommon.NewTracker[TokenCounts](
 		usagePath, "anthropic proxy",
-		combineCounts, modelCostUSD, modelReport,
+		combineCounts, modelCostUSD, modelReport, normalizeTokens,
 	)}
 }
 
@@ -31,8 +31,8 @@ func NewTracker(usagePath string) *Tracker {
 // and rewrites usage.json. modelID may be a dated Anthropic ID (e.g.
 // "claude-opus-4-8-20260101"); pricing uses longest-prefix-match so
 // dated IDs route to their family.
-func (t *Tracker) Add(id ModelID, tc TokenCounts) {
-	t.Tracker.Add(string(id), tc)
+func (t *Tracker) Add(id ModelID, tc TokenCounts, requestID string) {
+	t.Tracker.Add(string(id), tc, requestID)
 }
 
 // snapshot returns the current state. Called only by in-package tests;
@@ -70,6 +70,15 @@ func modelReport(m string, tc TokenCounts) any {
 	}
 }
 
+func normalizeTokens(tc TokenCounts) proxycommon.TokenBreakdown {
+	return proxycommon.TokenBreakdown{
+		Input:         tc.InputTokens,
+		Output:        tc.OutputTokens,
+		CacheCreation: tc.CacheCreationInputTokens,
+		CacheRead:     tc.CacheReadInputTokens,
+	}
+}
+
 // Snapshot is the JSON-serializable view of the tracker.
 type Snapshot struct {
 	CostUSD  USD                    `json:"cost_usd"`
@@ -94,9 +103,9 @@ const contentTypeEventStream = "text/event-stream"
 // Streaming responses (Content-Type starts with text/event-stream) are
 // parsed line-by-line as SSE; non-streaming responses are buffered and
 // parsed as a single JSON document at close.
-func wrapResponseBody(upstream io.ReadCloser, contentType string, t *Tracker) io.ReadCloser {
+func wrapResponseBody(upstream io.ReadCloser, contentType string, requestID string, t *Tracker) io.ReadCloser {
 	if strings.HasPrefix(contentType, contentTypeEventStream) {
-		state := &sseState{tracker: t}
+		state := &sseState{tracker: t, requestID: requestID}
 		return proxycommon.NewSSEInterceptor(upstream, state.handleLine, state.flush)
 	}
 	return proxycommon.NewJSONInterceptor(upstream, func(data []byte) {
@@ -105,21 +114,24 @@ func wrapResponseBody(upstream io.ReadCloser, contentType string, t *Tracker) io
 			Usage *TokenCounts `json:"usage"`
 		}
 		if err := json.Unmarshal(data, &body); err != nil {
+			t.AddDroppedParseError()
 			return
 		}
 		if body.Usage == nil {
+			t.AddDroppedNoUsageBlock()
 			return
 		}
-		t.Add(ModelID(body.Model), *body.Usage)
+		t.Add(ModelID(body.Model), *body.Usage, requestID)
 	})
 }
 
 // sseState holds per-response SSE parsing state for the Anthropic vendor.
 type sseState struct {
-	tracker  *Tracker
-	modelID  ModelID
-	counts   TokenCounts
-	sawStart bool
+	tracker   *Tracker
+	modelID   ModelID
+	counts    TokenCounts
+	sawStart  bool
+	requestID string
 }
 
 type sseEvent struct {
@@ -142,7 +154,7 @@ func (s *sseState) handleLine(line string) {
 	var ev sseEvent
 	if err := json.Unmarshal([]byte(payload), &ev); err != nil {
 		// Anthropic occasionally emits comment lines / unknown events;
-		// silently drop anything we can't parse.
+		// per-line parse failures are expected and not counted as drops.
 		return
 	}
 	switch ev.Type {
@@ -186,7 +198,9 @@ func (s *sseState) applyDelta(ev sseEvent) {
 }
 
 func (s *sseState) flush() {
-	if s.sawStart {
-		s.tracker.Add(s.modelID, s.counts)
+	if !s.sawStart {
+		s.tracker.AddDroppedNoUsageBlock()
+		return
 	}
+	s.tracker.Add(s.modelID, s.counts, s.requestID)
 }

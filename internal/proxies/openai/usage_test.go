@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,8 +24,8 @@ func TestTracker_AddAccumulates(t *testing.T) {
 	tc2.OutputTokens = 25
 	tc2.InputTokensDetails.CachedTokens = 30
 	tc2.OutputTokensDetails.ReasoningTokens = 5
-	tr.Add("gpt-5.5", tc1)
-	tr.Add("gpt-5.5", tc2)
+	tr.Add("gpt-5.5", tc1, "")
+	tr.Add("gpt-5.5", tc2, "")
 	snap := tr.snapshot()
 	model := snap.PerModel["gpt-5.5"]
 	assert.Equal(t, int64(150), model.InputTokens)
@@ -40,7 +41,7 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 	var tc TokenCounts
 	tc.InputTokens = 100
 	tc.OutputTokens = 200
-	tr.Add("gpt-5.5", tc)
+	tr.Add("gpt-5.5", tc, "")
 
 	data, err := os.ReadFile(path) //nolint:gosec // path is under t.TempDir()
 	require.NoError(t, err)
@@ -69,7 +70,7 @@ data: [DONE]
 func TestSSEInterceptor_ResponseCompleted(t *testing.T) {
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(sseFixture)}
-	w := wrapResponseBody(r, "", tr)
+	w := wrapResponseBody(r, "", "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -92,7 +93,7 @@ func TestWrapResponseBody_DispatchesByContentType(t *testing.T) {
 	for _, ct := range []string{"", "text/event-stream", "text/event-stream; charset=utf-8"} {
 		tr := NewTracker("")
 		r := &nopReadCloser{Reader: strings.NewReader(sseFixture)}
-		w := wrapResponseBody(r, ct, tr)
+		w := wrapResponseBody(r, ct, "", tr)
 		_, err := io.Copy(io.Discard, w)
 		require.NoError(t, err)
 		require.NoError(t, w.Close())
@@ -105,7 +106,7 @@ func TestSSEInterceptor_HandlesSplitReads(t *testing.T) {
 	// Feed one byte at a time to exercise the buffer.
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: byteByByteReader(sseFixture)}
-	w := wrapResponseBody(r, "", tr)
+	w := wrapResponseBody(r, "", "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -125,7 +126,7 @@ data: [DONE]
 `
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, "", tr)
+	w := wrapResponseBody(r, "", "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -146,7 +147,7 @@ data: [DONE]
 `
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, "", tr)
+	w := wrapResponseBody(r, "", "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -161,7 +162,7 @@ func TestSSEInterceptor_IgnoresGarbage(t *testing.T) {
 	body := "data: not-json-at-all\n\nfoo: bar\n\ndata: {\"type\":\"unknown\"}\n\n"
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, "", tr)
+	w := wrapResponseBody(r, "", "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -172,7 +173,7 @@ func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
 	body := `{"id":"resp_1","model":"gpt-5.5","usage":{"input_tokens":13,"output_tokens":7,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0},"total_tokens":20}}`
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, "application/json", tr)
+	w := wrapResponseBody(r, "application/json", "", tr)
 	out, err := io.ReadAll(w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -182,6 +183,123 @@ func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
 	m := snap4.PerModel["gpt-5.5"]
 	assert.Equal(t, int64(13), m.InputTokens)
 	assert.Equal(t, int64(7), m.OutputTokens)
+}
+
+// TestSSEInterceptor_CapturesResponseID confirms the response.id from the
+// SSE body is written as the requestId in usage.jsonl.
+func TestSSEInterceptor_CapturesResponseID(t *testing.T) {
+	dir := t.TempDir()
+	tr := NewTracker(filepath.Join(dir, "usage.json"))
+	r := &nopReadCloser{Reader: strings.NewReader(sseFixture)}
+	w := wrapResponseBody(r, "", "", tr)
+	_, err := io.Copy(io.Discard, w)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	data, err := os.ReadFile(filepath.Join(dir, "usage.jsonl")) //nolint:gosec // test reads a path it just wrote
+	require.NoError(t, err)
+	var rec struct {
+		RequestID string `json:"requestId"`
+		TS        string `json:"ts"`
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 1)
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &rec))
+	assert.Equal(t, "resp_1", rec.RequestID)
+	_, err = time.Parse(time.RFC3339, rec.TS)
+	assert.NoError(t, err, "ts must be parseable as RFC3339")
+}
+
+// TestSSEInterceptor_FallsBackToXRequestID confirms that when no response.id
+// appears in the SSE body the x-request-id header value is used.
+func TestSSEInterceptor_FallsBackToXRequestID(t *testing.T) {
+	// Stream with no id in the response object.
+	body := `data: {"type":"response.completed","response":{"model":"gpt-5.5","usage":{"input_tokens":10,"output_tokens":5}}}
+
+data: [DONE]
+
+`
+	dir := t.TempDir()
+	tr := NewTracker(filepath.Join(dir, "usage.json"))
+	r := &nopReadCloser{Reader: strings.NewReader(body)}
+	w := wrapResponseBody(r, "", "x-req-fallback", tr)
+	_, err := io.Copy(io.Discard, w)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	data, err := os.ReadFile(filepath.Join(dir, "usage.jsonl")) //nolint:gosec // test reads a path it just wrote
+	require.NoError(t, err)
+	var rec struct {
+		RequestID string `json:"requestId"`
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 1)
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &rec))
+	assert.Equal(t, "x-req-fallback", rec.RequestID)
+}
+
+// TestJSONInterceptor_CapturesBodyID confirms the top-level "id" field from
+// a non-streaming JSON response is written as the requestId in usage.jsonl.
+func TestJSONInterceptor_CapturesBodyID(t *testing.T) {
+	body := `{"id":"resp_json_1","model":"gpt-5.5","usage":{"input_tokens":13,"output_tokens":7}}`
+	dir := t.TempDir()
+	tr := NewTracker(filepath.Join(dir, "usage.json"))
+	r := &nopReadCloser{Reader: strings.NewReader(body)}
+	w := wrapResponseBody(r, "application/json", "x-ignored", tr)
+	_, err := io.ReadAll(w)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	data, err := os.ReadFile(filepath.Join(dir, "usage.jsonl")) //nolint:gosec // test reads a path it just wrote
+	require.NoError(t, err)
+	var rec struct {
+		RequestID string `json:"requestId"`
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 1)
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &rec))
+	// body id takes precedence over xRequestID.
+	assert.Equal(t, "resp_json_1", rec.RequestID)
+}
+
+// TestSSEInterceptor_DropsOnNoUsage confirms that an SSE stream with no
+// usage event increments the no-usage-block dropped counter.
+func TestSSEInterceptor_DropsOnNoUsage(t *testing.T) {
+	body := "data: {\"type\":\"unknown\"}\n\ndata: [DONE]\n\n"
+	tr := NewTracker("")
+	r := &nopReadCloser{Reader: strings.NewReader(body)}
+	w := wrapResponseBody(r, "", "", tr)
+	_, _ = io.Copy(io.Discard, w)
+	_ = w.Close()
+	snap := tr.Snapshot()
+	require.NotNil(t, snap.Dropped)
+	assert.Equal(t, int64(1), snap.Dropped.NoUsageBlock)
+}
+
+// TestJSONInterceptor_DropsOnParseError confirms a malformed JSON response
+// increments the parse-error dropped counter.
+func TestJSONInterceptor_DropsOnParseError(t *testing.T) {
+	tr := NewTracker("")
+	r := &nopReadCloser{Reader: strings.NewReader("not-valid-json")}
+	w := wrapResponseBody(r, "application/json", "", tr)
+	_, _ = io.ReadAll(w)
+	_ = w.Close()
+	snap := tr.Snapshot()
+	require.NotNil(t, snap.Dropped)
+	assert.Equal(t, int64(1), snap.Dropped.ParseErrors)
+}
+
+// TestJSONInterceptor_DropsOnNoUsageBlock confirms a JSON response body with
+// no usage field increments the no-usage-block dropped counter.
+func TestJSONInterceptor_DropsOnNoUsageBlock(t *testing.T) {
+	tr := NewTracker("")
+	r := &nopReadCloser{Reader: strings.NewReader(`{"model":"gpt-5.5"}`)}
+	w := wrapResponseBody(r, "application/json", "", tr)
+	_, _ = io.ReadAll(w)
+	_ = w.Close()
+	snap := tr.Snapshot()
+	require.NotNil(t, snap.Dropped)
+	assert.Equal(t, int64(1), snap.Dropped.NoUsageBlock)
 }
 
 type nopReadCloser struct{ io.Reader }

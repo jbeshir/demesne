@@ -122,6 +122,16 @@ type AgentResult struct {
 	// sandbox this run spawned (see results.json).
 	TotalUsageUSD float64
 	Stderr        string
+	// PerModelTokens is the four-token-type breakdown (input, output,
+	// cache_creation, cache_read) per model ID, aggregated across this
+	// run and all its descendant sandboxes. Nil when no requests were
+	// recorded.
+	PerModelTokens map[string]TokenTotals
+	// UsageSummary is a one-line human-readable summary of token usage:
+	// cache-read percentage of input-side tokens, plus the top subagents
+	// by token consumption from attribution.jsonl. Empty when no usage
+	// was recorded.
+	UsageSummary string `json:"usage_summary,omitempty"`
 }
 
 // ResearchRequest captures the inputs to sandbox_research. It mirrors

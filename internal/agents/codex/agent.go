@@ -60,6 +60,8 @@ func (codexAgent) Command(prompt string, model ModelName) []string {
 	return []string{"sh", wrapperScriptPath, string(model), prompt}
 }
 
+func (codexAgent) PostRunCapture() string { return ":" }
+
 func (codexAgent) EnvVars(agentToken string, _ ModelName) map[string]string {
 	// The real OpenAI key never appears here; it lives only in the sidecar
 	// proxy. The proxy URL is baked into config.toml's base_url via

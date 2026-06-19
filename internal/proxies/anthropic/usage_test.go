@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,8 +15,8 @@ import (
 
 func TestTracker_AddAccumulates(t *testing.T) {
 	tr := NewTracker("")
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200})
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 50, OutputTokens: 25})
+	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200}, "")
+	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 50, OutputTokens: 25}, "")
 	snap := tr.snapshot()
 	model := snap.PerModel["claude-sonnet-4-6"]
 	assert.Equal(t, int64(150), model.InputTokens)
@@ -28,7 +29,7 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "usage.json")
 	tr := NewTracker(path)
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200})
+	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200}, "")
 
 	data, err := os.ReadFile(path) //nolint:gosec // path is under t.TempDir()
 	require.NoError(t, err)
@@ -59,7 +60,7 @@ func TestSSEInterceptor_AccumulatesFromStartAndDelta(t *testing.T) {
 
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, contentTypeEventStream, tr)
+	w := wrapResponseBody(r, contentTypeEventStream, "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -82,7 +83,7 @@ data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}
 	// Feed one byte at a time to exercise the buffer.
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: byteByByteReader(body)}
-	w := wrapResponseBody(r, contentTypeEventStream, tr)
+	w := wrapResponseBody(r, contentTypeEventStream, "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -95,7 +96,7 @@ func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
 	body := `{"id":"msg_1","type":"message","role":"assistant","model":"` + "claude-sonnet-4-6" + `","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":13,"output_tokens":7}}`
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, "application/json", tr)
+	w := wrapResponseBody(r, "application/json", "", tr)
 	out, err := io.ReadAll(w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
@@ -109,11 +110,110 @@ func TestSSEInterceptor_IgnoresGarbage(t *testing.T) {
 	body := "data: not-json-at-all\n\nfoo: bar\n\ndata: {\"type\":\"unknown\"}\n\n"
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
-	w := wrapResponseBody(r, contentTypeEventStream, tr)
+	w := wrapResponseBody(r, contentTypeEventStream, "", tr)
 	_, err := io.Copy(io.Discard, w)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 	assert.InDelta(t, 0.0, float64(tr.snapshot().CostUSD), 1e-9)
+}
+
+// TestSSEInterceptor_ThreadsRequestID confirms the requestID passed to
+// wrapResponseBody ends up in the usage.jsonl line.
+func TestSSEInterceptor_ThreadsRequestID(t *testing.T) {
+	body := strings.Join([]string{
+		`event: message_start`,
+		`data: {"type":"message_start","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":10,"output_tokens":1}}}`,
+		``,
+		`event: message_delta`,
+		`data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}`,
+		``,
+	}, "\n")
+
+	dir := t.TempDir()
+	tr := NewTracker(filepath.Join(dir, "usage.json"))
+	r := &nopReadCloser{Reader: strings.NewReader(body)}
+	w := wrapResponseBody(r, contentTypeEventStream, "req-sse-abc", tr)
+	_, err := io.Copy(io.Discard, w)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	data, err := os.ReadFile(filepath.Join(dir, "usage.jsonl")) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err)
+	var rec struct {
+		RequestID string `json:"requestId"`
+		TS        string `json:"ts"`
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 1)
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &rec))
+	assert.Equal(t, "req-sse-abc", rec.RequestID)
+	_, err = time.Parse(time.RFC3339, rec.TS)
+	assert.NoError(t, err, "ts must be parseable as RFC3339")
+}
+
+// TestJSONInterceptor_ThreadsRequestID confirms the requestID is recorded
+// in usage.jsonl for non-streaming responses.
+func TestJSONInterceptor_ThreadsRequestID(t *testing.T) {
+	body := `{"model":"claude-sonnet-4-6","usage":{"input_tokens":5,"output_tokens":3}}`
+	dir := t.TempDir()
+	tr := NewTracker(filepath.Join(dir, "usage.json"))
+	r := &nopReadCloser{Reader: strings.NewReader(body)}
+	w := wrapResponseBody(r, "application/json", "req-json-xyz", tr)
+	_, err := io.ReadAll(w)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	data, err := os.ReadFile(filepath.Join(dir, "usage.jsonl")) //nolint:gosec // path under t.TempDir()
+	require.NoError(t, err)
+	var rec struct {
+		RequestID string `json:"requestId"`
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 1)
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &rec))
+	assert.Equal(t, "req-json-xyz", rec.RequestID)
+}
+
+// TestJSONInterceptor_DropsOnParseError confirms a malformed response body
+// increments the parse-error dropped counter.
+func TestJSONInterceptor_DropsOnParseError(t *testing.T) {
+	tr := NewTracker("")
+	r := &nopReadCloser{Reader: strings.NewReader("not-valid-json")}
+	w := wrapResponseBody(r, "application/json", "", tr)
+	_, _ = io.ReadAll(w)
+	_ = w.Close()
+	snap := tr.Snapshot()
+	require.NotNil(t, snap.Dropped)
+	assert.Equal(t, int64(1), snap.Dropped.ParseErrors)
+	assert.Equal(t, int64(0), snap.Dropped.NoUsageBlock)
+}
+
+// TestJSONInterceptor_DropsOnNoUsage confirms a response body with no usage
+// block increments the no-usage-block dropped counter.
+func TestJSONInterceptor_DropsOnNoUsage(t *testing.T) {
+	tr := NewTracker("")
+	r := &nopReadCloser{Reader: strings.NewReader(`{"model":"claude-sonnet-4-6"}`)}
+	w := wrapResponseBody(r, "application/json", "", tr)
+	_, _ = io.ReadAll(w)
+	_ = w.Close()
+	snap := tr.Snapshot()
+	require.NotNil(t, snap.Dropped)
+	assert.Equal(t, int64(0), snap.Dropped.ParseErrors)
+	assert.Equal(t, int64(1), snap.Dropped.NoUsageBlock)
+}
+
+// TestSSEInterceptor_DropsOnNoStart confirms an SSE stream with no
+// message_start event increments the no-usage-block dropped counter.
+func TestSSEInterceptor_DropsOnNoStart(t *testing.T) {
+	body := "data: {\"type\":\"unknown\"}\n\n"
+	tr := NewTracker("")
+	r := &nopReadCloser{Reader: strings.NewReader(body)}
+	w := wrapResponseBody(r, contentTypeEventStream, "", tr)
+	_, _ = io.Copy(io.Discard, w)
+	_ = w.Close()
+	snap := tr.Snapshot()
+	require.NotNil(t, snap.Dropped)
+	assert.Equal(t, int64(1), snap.Dropped.NoUsageBlock)
 }
 
 type nopReadCloser struct{ io.Reader }

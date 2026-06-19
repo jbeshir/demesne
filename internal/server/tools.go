@@ -323,6 +323,26 @@ func (s *Server) handleSandboxCancel(
 	return formatCancelResult(res), nil
 }
 
+func (s *Server) handleSandboxUsageReport(
+	_ context.Context,
+	request mcp.CallToolRequest,
+) (*mcp.CallToolResult, error) {
+	jobID := request.GetString(paramJobID, "")
+	outputDir := request.GetString(paramOutputDir, "")
+	if jobID == "" && outputDir == "" {
+		return mcp.NewToolResultError("job_id or output_dir is required"), nil
+	}
+
+	res, err := s.runner.UsageReport(sandbox.UsageReportRequest{
+		JobID:     sandbox.JobID(jobID),
+		OutputDir: outputDir,
+	})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return formatUsageReport(res), nil
+}
+
 // requireNonEmpty extracts a required, non-empty string param, returning an
 // error result when the param is absent or empty.
 func requireNonEmpty(req mcp.CallToolRequest, key string) (string, *mcp.CallToolResult) {

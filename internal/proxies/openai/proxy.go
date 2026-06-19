@@ -159,7 +159,8 @@ func newProxyServer(
 	}
 	if tracker != nil {
 		rp.ModifyResponse = func(resp *http.Response) error {
-			resp.Body = wrapResponseBody(resp.Body, resp.Header.Get("Content-Type"), tracker)
+			xReqID := resp.Header.Get("x-request-id")
+			resp.Body = wrapResponseBody(resp.Body, resp.Header.Get("Content-Type"), xReqID, tracker)
 			return nil
 		}
 	}

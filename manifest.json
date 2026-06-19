@@ -105,7 +105,8 @@
     { "name": "sandbox_research", "description": "Run a long-running research agent in a fresh sandbox with unrestricted outbound internet access" },
     { "name": "sandbox_status", "description": "Poll the status of a background job (started with background=true); returns status, elapsed time, stdout tail, and cost once terminal" },
     { "name": "sandbox_wait", "description": "Block up to timeout_seconds (default 30, max 120) for a background job to finish; returns the final result or a still-running sentinel" },
-    { "name": "sandbox_cancel", "description": "Cancel a background job and its entire descendant subtree depth-first; idempotent on already-terminal jobs" }
+    { "name": "sandbox_cancel", "description": "Cancel a background job and its entire descendant subtree depth-first; idempotent on already-terminal jobs" },
+    { "name": "sandbox_usage_report", "description": "Return an aggregated cost and token breakdown for a completed job. Accepts job_id or output_dir (at least one required). Cost is indicative list-price; subagent attribution is claude-code only." }
   ],
   "compatibility": {
     "platforms": ["darwin", "win32", "linux"]
