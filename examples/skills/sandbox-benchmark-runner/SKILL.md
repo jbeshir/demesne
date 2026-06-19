@@ -18,7 +18,7 @@ Run a parameter sweep through a demesne pipeline: the host launches a slow-tier 
    ```
    Run IDs must be zero-padded (`run-000`, `run-001`) to match child naming. For grid search: Cartesian product of all axes. For Bayesian/randomised search: pick the next batch from `/workspace/results.jsonl` (accumulated prior results) and append to `runs.jsonl`; cap the loop at **10 iterations AND a maximum total run count AND a wall-clock budget** — without all three the orchestrator can loop indefinitely.
 
-3. **Execute.** Spawn one `sandbox_script` per configuration (`name=run-NNN`, DNS-1123: lowercase, digits, interior hyphens, ≤40 chars — a bad name produces an invalid volume name and poisons sibling spawns), batched ≤4 concurrent (recommended, not a demesne-enforced cap; use fewer when runs are memory-heavy or you want fair per-run CPU allocation). Each child runs one configuration and writes:
+3. **Execute.** Spawn one `sandbox_script` per configuration (`name=run-NNN`, DNS-1123: lowercase, digits, interior hyphens, ≤40 chars — a bad name produces an invalid volume name and poisons sibling spawns). Dispatch each with `background: true` (collect its `job_id`) and poll with `sandbox_wait`, keeping **≤8 in flight** (a host-resource guard, not a demesne-enforced cap; use fewer when runs are memory-heavy or you want fair per-run CPU allocation, and launch a replacement as each finishes when there are more configs than that). Blocking calls are issued one per turn and run sequentially, so background dispatch is what runs configurations concurrently. Each child runs one configuration and writes:
    ```json
    {
      "run_id": "run-000",
@@ -52,7 +52,7 @@ Brief it as a complete document:
 2. **The parameter grid** — explicit axes and values (grid search), or sampling budget and prior (Bayesian; include the cap: 10 iterations, 4 runs each = 40 total max).
 3. **The per-run command** — exact shell command, required environment variables, dataset/code paths available in the sandbox.
 4. **Mount contract** — `sandbox_script` has no `files:`/`directories:` of its own; mount datasets/code into the orchestrator via `directories:`/`files:` at launch (runs inherit at `/in/<name>`) or stage into `/workspace`.
-5. **The pipeline contract** — the seven steps above: runs are `sandbox_script` not `sandbox_agent`, batches ≤4 concurrent, retry policy (2×, mark failed, never drop), synthesiser is the only `sandbox_agent` child.
+5. **The pipeline contract** — the seven steps above: runs are `sandbox_script` not `sandbox_agent`, background dispatch with ≤8 in flight via `sandbox_wait`, retry policy (2×, mark failed, never drop), synthesiser is the only `sandbox_agent` child.
 6. **The metrics.json schema** — embed the exact schema; a run that does not write it is treated as failed.
 7. **Image and egress** — `anaconda`/`python`/`go`/`node` + `none`/`package-managers`; prefer `anaconda` + `none` with pinned deps for reproducible benchmarks. If unsure, prefer `anaconda` + `package-managers`; it is slower to start but avoids re-installing the scientific stack.
 8. **The deliver step** — plain `cp` from synthesiser's `/out/child/synthesiser/` into the orchestrator's own `/out`; this is the orchestrator's job, not a child's.

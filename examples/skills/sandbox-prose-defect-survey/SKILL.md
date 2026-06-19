@@ -13,7 +13,7 @@ Survey a project's prose — documentation, READMEs, examples, code comments, an
 
 2. **Finalise taxonomy.** Read `/out/child/research01/TAXONOMY.md`. Keep ~10 types; drop or merge any wholly inapplicable to this project, noting what was dropped and why. Write the consolidated numbered list to `/workspace/TAXONOMY.md` and `/out/TAXONOMY.md`. This becomes the spec the detection children work from.
 
-3. **Detect.** Spawn one medium-tier `sandbox_agent` per finalised flaw type (`name=detect-<slug>`, lowercase DNS-1123 — letters, digits, interior hyphens, ≤40 chars; malformed names produce invalid volume names and poison sibling spawns). Detection children inherit the `/in/<repo>` mount and share `/workspace`; their outputs land at `/out/child/detect-<slug>/REPORT.md`. Run in batches of ≤4 concurrent — a recommended batch size, not a demesne-enforced cap; spawning all ten at once degrades keepalive stability. Cap at ~10–12 agents total.
+3. **Detect.** Spawn one medium-tier `sandbox_agent` per finalised flaw type (`name=detect-<slug>`, lowercase DNS-1123 — letters, digits, interior hyphens, ≤40 chars; malformed names produce invalid volume names and poison sibling spawns). Detection children inherit the `/in/<repo>` mount and share `/workspace`; their outputs land at `/out/child/detect-<slug>/REPORT.md`. Dispatch each with `background: true` and poll with `sandbox_wait`, keeping **≤8 jobs in flight** — a host-resource guard, not a demesne-enforced cap. Cap at ~10–12 agents total.
 
    Each child gets the prose-surface map and its single flaw type. It must:
    - Read the text, not skim it.
@@ -34,7 +34,7 @@ Survey a project's prose — documentation, READMEs, examples, code comments, an
 Brief it as a complete document:
 
 1. **The target and its docs** — what the project is and the shape of its docs (Diátaxis tree? single README? generated help?), plus the prose-surface map so detection children know every text surface.
-2. **The pipeline contract** — the four steps above, child-naming rule, that `sandbox_research` is isolated (open web, no repo access), and the ≤4-concurrent detection batch.
+2. **The pipeline contract** — the four steps above, child-naming rule, that `sandbox_research` is isolated (open web, no repo access), and the background-dispatch detection fan-out (≤8 in flight via `sandbox_wait`).
 3. **The taxonomy bar** — ~10 distinct prose-flaw types grounded in cited commentary (not model priors); drop/merge inapplicable ones.
 4. **Detection discipline** — read not skim; verbatim quote with file:line; confirmed vs. suspected; "clean on this axis" is a valid, valuable result; no manufactured findings; improvement plan per type tied to specific quotes.
 5. **The boundary with the code survey** — claims false against the code are docs/code-alignment findings; detection children flag-and-hand-off, not adjudicate.
@@ -55,5 +55,5 @@ Brief it as a complete document:
 
 - **`directories: ["<abs path to repo>"]` is mandatory** — detection children inherit this mount and read the project's text from `/in/<repo>`. Forgetting it leaves them with nothing to survey.
 - Tier: **slow** for the orchestrator; **medium** for the research child and detection children.
-- State the ≤4-concurrent detection batch explicitly in the orchestrator prompt — the default failure mode is spawning all ten at once.
+- State the background-dispatch detection fan-out (≤8 in flight) explicitly in the orchestrator prompt. Blocking calls won't do: the orchestrator issues children one per turn, so blocking detectors are never issued in parallel and run sequentially however the prompt is phrased.
 - Verify load-bearing findings in context before they drive rewrites — prose judgement is subjective; a "confirmed high-severity" from a medium-tier child should be re-read by the host before becoming a rewrite target.- Scripts and data work run in demesne, never on the host. The host's only role is reading the returned `/out`, verifying the top findings, and deciding what to rewrite.

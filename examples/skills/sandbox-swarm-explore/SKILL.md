@@ -14,7 +14,7 @@ Drive a broad exploration through a demesne swarm. You (the host) author one orc
 
 2. **PARAMS.** Orchestrator writes `/workspace/params.jsonl`, one record per child: `name` (DNS-1123 label — lowercase letters, digits, interior hyphens, ≤40 chars; bad names produce invalid volume names and poison sibling spawns), `seed`/`param` (the varying quantity), and `preamble` (the child's lens or initial condition). Write the full `params.jsonl` **before spawning any child** — the parameter set must be auditable before any child is spawned. For deterministic children the preamble may be minimal; for generative children, distinct preambles are the **primary mechanism of lens diversity** and must be meaningfully distinct per child.
 
-3. **SWARM.** Dispatch N children **in batches of ≤4 concurrent** (recommended; demesne enforces no cap, but beyond four, MCP keepalive pressure degrades stability). Spawn ≤4 in one tool-call message, wait for all to complete, then the next batch.
+3. **SWARM.** Dispatch each child with `background: true` (collect its `job_id`) and poll with `sandbox_wait` until all reach a terminal state. Keep **≤8 in flight** — a host-resource guard, demesne enforces no cap; for N > 8, launch a replacement each time a job finishes (a rolling window). Do not use blocking calls: the orchestrator issues children one per turn, so blocking children are never issued in parallel and the swarm runs sequentially.
 
    Children are **fully isolated**: do not reference `/in/previous-jobs/` in swarm child prompts. Each child reads only its embedded params record and writes exclusively to its own `/out` — never to a shared `/workspace/` path (two children writing `/workspace/result.json` stomp each other). Each child produces:
    - `/out/finding.json` — required; structured per spec.md schema.
@@ -44,7 +44,7 @@ Brief it as a complete document:
 4. **The output schema** — field names and types for `/out/finding.json`. The aggregator's contract; under-specifying produces JSON it cannot reliably parse.
 5. **The swarm flavour** — deterministic (`sandbox_script`) or generative (`sandbox_agent`). If generative, describe what dimension of the preamble varies (role, constraint, prior belief, attack angle).
 6. **The aggregator mandate** — outliers from ≤2 children that are internally consistent must appear in `OUTLIERS.md` with an argument for or against. "Majority wins" collapses the swarm's value.
-7. **The pipeline contract** — the six steps above; batches of ≤4; no `/in/previous-jobs/` for swarm children; orchestrator-level copy in DELIVER.
+7. **The pipeline contract** — the six steps above; background dispatch with ≤8 in flight via `sandbox_wait`; no `/in/previous-jobs/` for swarm children; orchestrator-level copy in DELIVER.
 
 Over-specify the contract; under-specify the solution.
 
@@ -63,4 +63,4 @@ Over-specify the contract; under-specify the solution.
 
 - **`directories: ["<abs path>"]`** if swarm children need access to a repo or dataset. Optional — omit for pure generative sweeps.
 - Tier: **slow** for orchestrator and aggregator; **medium** for swarm children (the orchestrator sets this).
-- Explicitly say "≤4 concurrent" in the orchestrator prompt — the instinct is to fire all N at once.
+- Explicitly say "background dispatch, ≤8 jobs in flight, poll with `sandbox_wait`" in the orchestrator prompt — blocking children are issued one per turn and never run concurrently, so the swarm must dispatch in the background.

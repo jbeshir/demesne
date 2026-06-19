@@ -15,7 +15,7 @@ The taxonomy is re-researched every run (not a hardcoded list) so it tracks evol
 
 2. **Finalise taxonomy.** Read `/out/child/research01/TAXONOMY.md`. Keep ~10 types; drop or merge any wholly inapplicable to the target (note what was dropped and why). Write the consolidated numbered list to `/out/TAXONOMY.md` (name + description + detection signals + source). Do not reuse a canned list — the fresh research is what differentiates this from a fixed-dimension audit. One type to always keep even if the research doesn't surface it: **docs/code-alignment** (stale docs or comments that contradict the actual code).
 
-3. **Detect.** Spawn one medium-tier `sandbox_agent` per finalised type (`name=detect-<slug>` — DNS-1123: lowercase letters, digits, interior hyphens, ≤40 chars; bad names produce invalid volume names and poison sibling spawns), in **batches of ≤4 concurrent** (a recommended batch, not a demesne-enforced cap; spawning all 10 at once degrades stability). Cap at 10–12 types total. Use `egress=none` — detection is read-only. Each child:
+3. **Detect.** Spawn one medium-tier `sandbox_agent` per finalised type (`name=detect-<slug>` — DNS-1123: lowercase letters, digits, interior hyphens, ≤40 chars; bad names produce invalid volume names and poison sibling spawns), dispatched with `background: true` and polled to completion with `sandbox_wait` — keep **≤8 jobs in flight** (a host-resource guard, not a demesne cap). Cap at 10–12 types total. Use `egress=none` — detection is read-only. Each child:
    - Reads the repo from `/in/<repo>` (inherited read-only mount).
    - **Confirms by reading code, not grep-then-guess** — a grep/signal hit locates a candidate; a finding requires reading the surrounding code.
    - Reports each instance with `file:line`, a short excerpt, why it qualifies, and severity; marks **confirmed vs suspected**.
@@ -39,7 +39,7 @@ The taxonomy is re-researched every run (not a hardcoded list) so it tracks evol
 Brief it as a complete document:
 
 1. **Target and domain** — what the codebase is and what kind of system; a repo map (key dirs/packages) so detection children don't have to rediscover structure.
-2. **Pipeline contract** — the four steps above; child-naming rule; `sandbox_research` is isolated (open web, no repo access); batches of ≤4 detection children.
+2. **Pipeline contract** — the four steps above; child-naming rule; `sandbox_research` is isolated (open web, no repo access); background-dispatched detection children (≤8 in flight via `sandbox_wait`).
 3. **Taxonomy bar** — ~10 distinct types, cited sources, domain-appropriate; drop/merge inapplicable; always include docs/code-alignment lens.
 4. **Detection discipline** — confirm by reading code; `file:line` evidence; confirmed vs suspected; "clean on this axis" is valid; no manufactured findings; improvement plan per type.
 5. **Prior-state note** — if the repo has had quality passes, say so; agents should expect honest near-empty reports on hardened axes.
@@ -59,7 +59,7 @@ Brief it as a complete document:
 
 - **`directories: ["<abs path to repo>"]` is mandatory** — detection children inherit this mount and read the repo from `/in/<repo>`. Without it they have nothing to survey.
 - Tier: **slow** for the orchestrator; **medium** for the research child and detection children (the orchestrator sets this).
-- Detection in **batches of ≤4 concurrent** — say this explicitly in the prompt; the default failure mode is spawning all ten at once.
+- Detection fans out via **background dispatch + `sandbox_wait`, ≤8 in flight** — say this explicitly in the prompt. Blocking calls won't do: the orchestrator issues children one per turn, so blocking detectors are never issued in parallel and run sequentially however the prompt is phrased.
 ## Host-side landing
 
 1. Read `/out/EXECUTIVE_SUMMARY.md` for the findings table, cross-cutting themes, and prioritised remediation list.
