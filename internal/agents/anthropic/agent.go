@@ -93,3 +93,13 @@ func (claudeCodeAgent) EnvVars(oauthToken string, model ModelName) map[string]st
 }
 
 func (claudeCodeAgent) ProxyVendor() agents.ProxyVendor { return agents.ProxyAnthropic }
+
+// claudeCodeCaptureSnippet is the /bin/sh snippet run after claude-code
+// exits. It copies the on-disk transcript tree (main session JSONL plus
+// any nested subagent JSONLs under */subagents/) into .demesne-attrib
+// beneath the agent's private cwd so the host can distill attribution
+// records. No-op when the directory is absent. Never changes the exit code.
+const claudeCodeCaptureSnippet = `d="${HOME:-/root}/.claude/projects"; if [ -d "$d" ]; then` +
+	` mkdir -p .demesne-attrib && cp -a "$d/." .demesne-attrib/ 2>/dev/null || true; fi`
+
+func (claudeCodeAgent) PostRunCapture() string { return claudeCodeCaptureSnippet }

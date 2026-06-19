@@ -45,20 +45,21 @@ const (
 )
 
 const (
-	ToolSandboxScript   = "sandbox_script"
-	ToolSandboxAgent    = "sandbox_agent"
-	ToolSandboxResearch = "sandbox_research"
-	ToolSandboxCreate   = "sandbox_create"
-	ToolSandboxExec     = "sandbox_exec"
-	ToolSandboxDestroy  = "sandbox_destroy"
-	ToolSandboxUpload   = "sandbox_upload"
-	ToolSandboxDownload = "sandbox_download"
-	ToolSandboxStatus   = "sandbox_status"
-	ToolSandboxWait     = "sandbox_wait"
-	ToolSandboxCancel   = "sandbox_cancel"
-	mountOut            = "/out"
-	mountWorkspace      = "/workspace"
-	outVolumeName       = "out"
+	ToolSandboxScript      = "sandbox_script"
+	ToolSandboxAgent       = "sandbox_agent"
+	ToolSandboxResearch    = "sandbox_research"
+	ToolSandboxCreate      = "sandbox_create"
+	ToolSandboxExec        = "sandbox_exec"
+	ToolSandboxDestroy     = "sandbox_destroy"
+	ToolSandboxUpload      = "sandbox_upload"
+	ToolSandboxDownload    = "sandbox_download"
+	ToolSandboxStatus      = "sandbox_status"
+	ToolSandboxWait        = "sandbox_wait"
+	ToolSandboxCancel      = "sandbox_cancel"
+	ToolSandboxUsageReport = "sandbox_usage_report"
+	mountOut               = "/out"
+	mountWorkspace         = "/workspace"
+	outVolumeName          = "out"
 )
 
 // createSandboxMaxAttempts is the maximum number of times launchSandbox will

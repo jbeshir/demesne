@@ -22,7 +22,7 @@ type Tracker struct {
 func NewTracker(usagePath string) *Tracker {
 	return &Tracker{proxycommon.NewTracker[TokenCounts](
 		usagePath, "openai proxy",
-		combineCounts, modelCostUSD, modelReport,
+		combineCounts, modelCostUSD, modelReport, normalizeTokens,
 	)}
 }
 
@@ -30,8 +30,8 @@ func NewTracker(usagePath string) *Tracker {
 // and rewrites usage.json. modelID may be a versioned OpenAI ID (e.g.
 // "gpt-5.5-2026..."); pricing uses longest-prefix-match so versioned
 // IDs route to their family.
-func (t *Tracker) Add(id ModelID, tc TokenCounts) {
-	t.Tracker.Add(string(id), tc)
+func (t *Tracker) Add(id ModelID, tc TokenCounts, requestID string) {
+	t.Tracker.Add(string(id), tc, requestID)
 }
 
 // snapshot returns the current state. Called only by in-package tests;
@@ -70,6 +70,15 @@ func modelReport(m string, tc TokenCounts) any {
 	}
 }
 
+func normalizeTokens(tc TokenCounts) proxycommon.TokenBreakdown {
+	return proxycommon.TokenBreakdown{
+		Input:         tc.InputTokens,
+		Output:        tc.OutputTokens,
+		CacheCreation: 0, // OpenAI does not report cache writes separately
+		CacheRead:     tc.InputTokensDetails.CachedTokens,
+	}
+}
+
 // Snapshot is the JSON-serializable view of the tracker.
 type Snapshot struct {
 	CostUSD  USD                    `json:"cost_usd"`
@@ -95,32 +104,44 @@ const contentTypeJSON = "application/json"
 // reliably set a Content-Type header (it commonly arrives empty), so we
 // default to the SSE parser and use the single-document JSON parser only
 // when the response is explicitly application/json.
-func wrapResponseBody(upstream io.ReadCloser, contentType string, t *Tracker) io.ReadCloser {
+//
+// xRequestID is the x-request-id response header value, used as a
+// fallback request identifier when the response body carries no id field.
+func wrapResponseBody(upstream io.ReadCloser, contentType string, xRequestID string, t *Tracker) io.ReadCloser {
 	if strings.HasPrefix(contentType, contentTypeJSON) {
 		return proxycommon.NewJSONInterceptor(upstream, func(data []byte) {
 			var body struct {
+				ID    string       `json:"id"`
 				Model string       `json:"model"`
 				Usage *TokenCounts `json:"usage"`
 			}
 			if err := json.Unmarshal(data, &body); err != nil {
+				t.AddDroppedParseError()
 				return
 			}
 			if body.Usage == nil {
+				t.AddDroppedNoUsageBlock()
 				return
 			}
-			t.Add(ModelID(body.Model), *body.Usage)
+			reqID := body.ID
+			if reqID == "" {
+				reqID = xRequestID
+			}
+			t.Add(ModelID(body.Model), *body.Usage, reqID)
 		})
 	}
-	state := &sseState{tracker: t}
+	state := &sseState{tracker: t, xRequestID: xRequestID}
 	return proxycommon.NewSSEInterceptor(upstream, state.handleLine, state.flush)
 }
 
 // sseState holds per-response SSE parsing state for the OpenAI vendor.
 type sseState struct {
-	tracker  *Tracker
-	modelID  ModelID
-	counts   TokenCounts
-	sawUsage bool
+	tracker    *Tracker
+	modelID    ModelID
+	counts     TokenCounts
+	sawUsage   bool
+	requestID  string // response.id from the SSE body
+	xRequestID string // fallback: x-request-id response header
 }
 
 // sseEvent is the minimal shape of an OpenAI Responses API SSE event.
@@ -129,29 +150,16 @@ type sseState struct {
 type sseEvent struct {
 	Type     string `json:"type"`
 	Response *struct {
+		ID    string       `json:"id"`
 		Model string       `json:"model"`
 		Usage *TokenCounts `json:"usage"`
 	} `json:"response"`
 	Usage *TokenCounts `json:"usage"` // top-level fallback; prefer response.completed
 }
 
-func (s *sseState) handleLine(line string) {
-	if !strings.HasPrefix(line, "data:") {
-		return
-	}
-	payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-	if payload == "" || payload == "[DONE]" {
-		return
-	}
-	var ev sseEvent
-	if err := json.Unmarshal([]byte(payload), &ev); err != nil {
-		// Unknown event types and comment lines are silently dropped.
-		return
-	}
-	// Update tracked model from any event that carries it.
-	if ev.Response != nil && ev.Response.Model != "" {
-		s.modelID = ModelID(ev.Response.Model)
-	}
+// applyEvent applies the usage data from ev to s. Separated from handleLine
+// to keep handleLine below the gocyclo threshold.
+func (s *sseState) applyEvent(ev sseEvent) {
 	switch ev.Type {
 	case "response.completed":
 		// Primary path: response.completed carries the definitive usage.
@@ -170,8 +178,42 @@ func (s *sseState) handleLine(line string) {
 	}
 }
 
-func (s *sseState) flush() {
-	if s.sawUsage {
-		s.tracker.Add(s.modelID, s.counts)
+func (s *sseState) handleLine(line string) {
+	if !strings.HasPrefix(line, "data:") {
+		return
 	}
+	payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+	if payload == "" || payload == "[DONE]" {
+		return
+	}
+	var ev sseEvent
+	if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+		// Unknown event types and comment lines are silently dropped;
+		// per-line parse failures are expected and not counted as drops.
+		return
+	}
+	// Update tracked model and request ID from any event that carries them.
+	if ev.Response != nil {
+		if ev.Response.Model != "" {
+			s.modelID = ModelID(ev.Response.Model)
+		}
+		if ev.Response.ID != "" {
+			s.requestID = ev.Response.ID
+		}
+	}
+	s.applyEvent(ev)
+}
+
+func (s *sseState) flush() {
+	if !s.sawUsage {
+		s.tracker.AddDroppedNoUsageBlock()
+		return
+	}
+	// requestID is recorded for completeness and is NOT used for subagent
+	// attribution (anthropic/claude-code only).
+	reqID := s.requestID
+	if reqID == "" {
+		reqID = s.xRequestID
+	}
+	s.tracker.Add(s.modelID, s.counts, reqID)
 }

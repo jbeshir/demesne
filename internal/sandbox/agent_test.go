@@ -222,6 +222,7 @@ func (vendorStubAgent) Models() []agents.ModelName                         { ret
 func (vendorStubAgent) Command(string, agents.ModelName) []string          { return nil }
 func (vendorStubAgent) EnvVars(string, agents.ModelName) map[string]string { return nil }
 func (s vendorStubAgent) ProxyVendor() agents.ProxyVendor                  { return s.vendor }
+func (vendorStubAgent) PostRunCapture() string                             { return ":" }
 
 // TestBuildProxyConfig verifies the runner routes each agent vendor to its
 // matching sidecar credential proxy with the correct upstream credential,

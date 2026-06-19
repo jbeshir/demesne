@@ -90,6 +90,12 @@ type fakeRunner struct {
 	gotCancelReq sandbox.CancelRequest
 	cancelResult sandbox.CancelResult
 	cancelErr    error
+
+	// UsageReport injectable return values and call captures.
+	usageReportCalls  int
+	gotUsageReportReq sandbox.UsageReportRequest
+	usageReportRes    sandbox.UsageReport
+	usageReportErr    error
 }
 
 func (f *fakeRunner) RunScript(_ context.Context, req sandbox.ScriptRequest) (sandbox.ScriptResult, error) {
@@ -183,6 +189,12 @@ func (f *fakeRunner) Cancel(_ context.Context, req sandbox.CancelRequest) (sandb
 	f.cancelCalls++
 	f.gotCancelReq = req
 	return f.cancelResult, f.cancelErr
+}
+
+func (f *fakeRunner) UsageReport(req sandbox.UsageReportRequest) (sandbox.UsageReport, error) {
+	f.usageReportCalls++
+	f.gotUsageReportReq = req
+	return f.usageReportRes, f.usageReportErr
 }
 
 func (f *fakeRunner) AvailableAgents() []sandbox.AgentOption { return f.available }
@@ -674,4 +686,64 @@ func TestHandleSandboxResearch_RunnerErrorSurfaced(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, got.IsError)
 	assert.Contains(t, resultText(t, got), testError)
+}
+
+func TestHandleSandboxUsageReport_MissingParams(t *testing.T) {
+	cases := []map[string]any{
+		{},
+		{paramJobID: "", paramOutputDir: ""},
+	}
+	for i, args := range cases {
+		r := &fakeRunner{}
+		s := NewServer(r)
+		got, err := s.handleSandboxUsageReport(context.Background(), newRequest(args))
+		require.NoError(t, err)
+		assert.True(t, got.IsError, msgIsError, i, args)
+		assert.Zero(t, r.usageReportCalls, msgNoCall, i)
+	}
+}
+
+func TestHandleSandboxUsageReport_HappyPath(t *testing.T) {
+	r := &fakeRunner{
+		usageReportRes: sandbox.UsageReport{
+			TotalCostUSD: 0.1234,
+			ByModel: []sandbox.ModelUsage{
+				{Model: "claude-haiku-4-5", CostUSD: 0.1234},
+			},
+		},
+	}
+	s := NewServer(r)
+	got, err := s.handleSandboxUsageReport(context.Background(), newRequest(map[string]any{
+		paramJobID: "job-123",
+	}))
+	require.NoError(t, err)
+	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
+	assert.Equal(t, 1, r.usageReportCalls)
+	assert.Equal(t, sandbox.JobID("job-123"), r.gotUsageReportReq.JobID)
+	text := resultText(t, got)
+	assert.Contains(t, text, "total_cost_usd")
+	out := resultStructured[usageReportOutput](t, got)
+	assert.InDelta(t, 0.1234, out.TotalCostUSD, 1e-9)
+}
+
+func TestHandleSandboxUsageReport_RunnerErrorSurfaced(t *testing.T) {
+	r := &fakeRunner{usageReportErr: errors.New(testError)}
+	s := NewServer(r)
+	got, err := s.handleSandboxUsageReport(context.Background(), newRequest(map[string]any{
+		paramJobID: "job-x",
+	}))
+	require.NoError(t, err)
+	assert.True(t, got.IsError)
+	assert.Contains(t, resultText(t, got), testError)
+}
+
+func TestHandleSandboxUsageReport_OutputDirParam(t *testing.T) {
+	r := &fakeRunner{}
+	s := NewServer(r)
+	_, err := s.handleSandboxUsageReport(context.Background(), newRequest(map[string]any{
+		paramOutputDir: "/some/out/dir",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "/some/out/dir", r.gotUsageReportReq.OutputDir)
+	assert.Equal(t, sandbox.JobID(""), r.gotUsageReportReq.JobID)
 }

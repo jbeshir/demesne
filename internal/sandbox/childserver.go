@@ -43,6 +43,9 @@ const (
 	childParamTimeoutSeconds  = "timeout_seconds"
 )
 
+// jsonItemType is the "type" key used in JSON Schema item descriptors.
+const jsonItemType = "type"
+
 // keepAlive holds the nested MCP connection open while a child runs. A
 // child-spawning handler blocks for the child's whole lifecycle and
 // sends nothing over MCP (the child's output streams to /out, a host
@@ -136,7 +139,7 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		),
 		mcp.WithArray(childParamSuccessCriteria,
 			mcp.Description("Optional. Checklist of conditions the output must satisfy."),
-			mcp.Items(map[string]any{"type": "string"}),
+			mcp.Items(map[string]any{jsonItemType: "string"}),
 		),
 		mcp.WithBoolean(childParamBackground, mcp.Description(childBackgroundDescription)),
 	), r.handleChildAgent)
@@ -158,7 +161,7 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		),
 		mcp.WithArray(childParamSuccessCriteria,
 			mcp.Description("Optional. Checklist of conditions the output must satisfy."),
-			mcp.Items(map[string]any{"type": "string"}),
+			mcp.Items(map[string]any{jsonItemType: "string"}),
 		),
 		mcp.WithBoolean(childParamBackground, mcp.Description(childBackgroundDescription)),
 	), r.handleChildResearch)

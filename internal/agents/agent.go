@@ -167,6 +167,13 @@ type Agent interface {
 	// ProxyVendor reports which sidecar credential-proxy this agent's CLI
 	// requires. The runner uses it to wire the matching upstream credential.
 	ProxyVendor() ProxyVendor
+
+	// PostRunCapture returns a /bin/sh snippet executed AFTER the agent
+	// exits, with cwd set to the agent's private workspace subdir. The
+	// runner wraps it as: rc=$?; CAPTURE; exit $rc — so the snippet must
+	// not change the exit code. Implementations that need no post-run
+	// action return ":" (the sh no-op).
+	PostRunCapture() string
 }
 
 var (

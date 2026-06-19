@@ -12,6 +12,7 @@ import (
 
 const (
 	paramSandboxID       = "sandbox_id"
+	paramOutputDir       = "output_dir"
 	paramCommand         = "command"
 	paramImage           = "image"
 	paramEgress          = "egress"
@@ -56,6 +57,9 @@ type Runner interface {
 	Status(req sandbox.StatusRequest) (sandbox.StatusResult, error)
 	Wait(ctx context.Context, req sandbox.WaitRequest) (sandbox.WaitResult, error)
 	Cancel(ctx context.Context, req sandbox.CancelRequest) (sandbox.CancelResult, error)
+	// UsageReport reads the output tree for a job or explicit directory and
+	// returns an aggregated cost and token breakdown.
+	UsageReport(req sandbox.UsageReportRequest) (sandbox.UsageReport, error)
 	// AvailableAgents reports which agent providers have host credentials
 	// configured (codex-first), with each provider's model allowlist. The
 	// server uses it to filter the `agent` / `model` enums advertised on
@@ -520,6 +524,26 @@ func (s *Server) registerTools() {
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithOpenWorldHintAnnotation(false),
 	), s.handleSandboxCancel)
+
+	s.mcpServer.AddTool(mcp.NewTool(sandbox.ToolSandboxUsageReport,
+		mcp.WithDescription(usageReportToolDescription),
+		mcp.WithOutputSchema[usageReportOutput](),
+		mcp.WithString(paramJobID,
+			mcp.Description("Job ID from a sandbox_agent or sandbox_research run. "+
+				"Used to locate the output directory at OutputRoot/<job_id>/out. "+
+				"At least one of job_id or output_dir is required."),
+		),
+		mcp.WithString(paramOutputDir,
+			mcp.Description("Explicit host path of the /out root to report on. "+
+				"Takes precedence over job_id when both are supplied. "+
+				"Must be inside OutputRoot. "+
+				"At least one of job_id or output_dir is required."),
+		),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+	), s.handleSandboxUsageReport)
 }
 
 const imageParamDescription = "Container image. One of: 'node' (node:22), " +
@@ -648,3 +672,28 @@ published API pricing; it is reported regardless of how the underlying
 OAuth token is billed (for example, Claude Code OAuth tokens typically
 authorise against a Claude Console subscription rather than
 per-request API billing, so the user is not charged per request).`
+
+const usageReportToolDescription = `Return an aggregated cost and token breakdown for a completed job.
+
+Reads the output tree rooted at the job's /out directory (located via
+job_id or an explicit output_dir) and returns:
+  - total_cost_usd: vendor-reported cost across the whole tree
+  - token_type_totals: tree-wide input/output/cache_creation/cache_read counts
+  - cache_read_pct: cache_read / (input + cache_creation + cache_read)
+  - by_model: per-model token and cost breakdown
+  - by_subagent: per-subagent attribution breakdown
+  - by_child: per-node own cost and token breakdown (one entry per node)
+  - dropped: aggregate dropped-usage counters
+
+Cost figures are taken from each node's usage.json (authoritative vendor
+totals). Per-subagent costs are INDICATIVE list-price, computed from
+usage.jsonl token counts via the Anthropic pricing table; they are NOT
+the authoritative vendor total and are provided for attribution purposes
+only. Subagent attribution is available ONLY for claude-code runs
+(requires attribution.jsonl written by the proxy distillation step);
+codex and other runs will show all spend under "(main)". Any spend that
+cannot be attributed to a named subagent — including all non-Anthropic
+requests and any rounding gap — is reconciled into "(main)".
+
+Accepts job_id OR output_dir (at least one required). output_dir takes
+precedence and must be inside OutputRoot.`
