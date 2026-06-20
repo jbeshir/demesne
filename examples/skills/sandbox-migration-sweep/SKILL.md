@@ -14,9 +14,9 @@ Apply one well-specified edit operation to many similar targets through a demesn
 
 2. **Write the spec at `/workspace/migration.md`.** Required sections: the rule as a before→after transformation with 2–3 concrete examples; the target file pattern (glob or `grep` expression); the exclusion list (auto-generated files, vendored code, test fixtures unless explicitly in scope); and the per-shard verification command. Spec precision is the biggest predictor of sweep quality — an ambiguous rule produces divergent edits across shards. Over-specify the rule.
 
-3. **Enumerate.** Run `find`/`grep` via Bash against `/workspace/repo` to produce `/workspace/targets.jsonl` (one record per file: `{"path":"<abs path>","shard":<n>}`). Chunk into S shards of ≤20 files; write assignments to `/workspace/shards.jsonl`. If N > 200 files, stop and propose splitting the sweep across multiple runs (per subsystem or directory) rather than fanning out 15+ simultaneous editor agents, which stresses sandbox infrastructure and makes failure diagnosis harder.
+3. **Enumerate.** Run `find`/`grep` via Bash against `/workspace/repo` to produce `/workspace/targets.jsonl` (one record per file: `{"path":"<abs path>","shard":<n>}`). Chunk into S shards of ≤20 files; write assignments to `/workspace/shards.jsonl`. If N > 200 files, stop and propose splitting the sweep across multiple runs (per subsystem or directory) rather than running a sweep so large its many shards stream through for a very long time, which stresses sandbox infrastructure and makes failure diagnosis harder.
 
-4. **Edit, one medium-tier `sandbox_agent` per shard.** Spawn with `name=edit-shard-NN` (lowercase DNS-1123 — letters, digits, interior hyphens, ≤40 chars; bad names produce invalid volume names and poison sibling spawns), in batches of ≤4 concurrent; wait for each batch to complete before spawning the next. Four is a recommended batch size — demesne enforces no cap, but beyond four the MCP keepalive pressure on nested sandboxes degrades stability. The editor's prompt MUST begin with worktree setup:
+4. **Edit, one medium-tier `sandbox_agent` per shard.** Spawn with `name=edit-shard-NN` (lowercase DNS-1123 — letters, digits, interior hyphens, ≤40 chars; bad names produce invalid volume names and poison sibling spawns), dispatching each with `background: true` (collect its `job_id`) and polling with `sandbox_wait`; keep **≤8 in flight** and launch a replacement each time a shard finishes (a rolling window). A host-resource guard, not a demesne-enforced cap — these editors are full agents mutating worktrees, so use fewer if the edits are heavy. Blocking calls are issued one per turn and run sequentially. The editor's prompt MUST begin with worktree setup:
    ```
    git -C /workspace/repo worktree add /workspace/wt-<shard> shard/<shard>
    ```
@@ -38,7 +38,7 @@ Brief it as a complete document:
 
 1. **The migration rule** — exact edit, 2–3 before→after examples, target pattern, exclusion list, verification command. "Update the API" produces inconsistent edits; spell out the textual transformation.
 2. **The repo path** — `/in/<repo>` (matched to your `directories:` mount); tell it to `cp -a /in/<repo>/. /workspace/repo`.
-3. **The pipeline contract** — the seven steps above, the ≤4 concurrent editor batch, worktree-per-shard, quarantine on non-zero verifier.
+3. **The pipeline contract** — the seven steps above, the background-dispatched editor fan-out (≤8 in flight via `sandbox_wait`), worktree-per-shard, quarantine on non-zero verifier.
 4. **The verification command exactly** — image and self-contained command (e.g. `cd /workspace/wt-<shard> && go build ./...`). The verifier sandbox has no host environment.
 5. **The shard cap** — if N > 200 files, warn and split the run.
 6. **Author identity** — commit all changes as `Pipeline <pipeline@local>`; the host re-authors after fetching.

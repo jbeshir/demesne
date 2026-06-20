@@ -14,6 +14,18 @@ Substitute `<your-agent-skill-dir>` for whatever location your agent loads skill
 
 Every skill follows the same shape: the host authors one prompt, launches a single slow-tier `sandbox_agent` orchestrator, and that orchestrator fans the work out across child sandboxes (`sandbox_agent`, `sandbox_research`, `sandbox_script`). The orchestrator's children read each other's completed output at `/in/previous-jobs/<name>/` and surface results by copying them into `/out`. Skills name model **tiers** — slow, medium, fast — rather than specific models, so they run on whichever agent you've configured; the host maps each tier to a concrete model when it launches the run. See [the nested-sandboxes reference](../../docs/reference/nested-sandboxes.md) and [Develop demesne skills](../../docs/how-to/develop-demesne-skills.md) for the mechanics these skills are built on.
 
+## Concurrent fan-out
+
+Skills that fan work out across sibling children dispatch them **in the background**, not with blocking calls. The observed behaviour is that an orchestrator agent issues its child calls **one per turn** — it will not emit several as parallel tool calls in a single message, even when explicitly instructed to (this was tested directly, and it holds regardless of how forcefully the prompt asks). A blocking `sandbox_agent`/`sandbox_research`/`sandbox_script` call does not return until its child has finished, so blocking children issued one per turn run strictly one after another — sequential fan-out, however the prompt is written. Passing `background: true` returns immediately with `{job_id, status: "running"}` while the child runs detached, so the orchestrator dispatches the next child right away and they run at the same time; that is the only way to get siblings running concurrently. It also sidesteps the ~240s client tool-call timeout a long blocking child would trip.
+
+The canonical fan-out loop every parallel stage uses:
+
+1. **Dispatch** each child with `background: true`, collecting its `job_id`. Keep at most **8 in flight** — a host-resource guard, not an MCP limit (demesne enforces no cap). For N ≤ 8 dispatch all N; for N > 8 dispatch 8 and launch one more each time a job finishes (a rolling window).
+2. **Poll** each `job_id` with `sandbox_wait` (`timeout_seconds: 120`), re-calling any still `running` until every job reaches a terminal state (`succeeded`/`failed`/`cancelled`); `sandbox_cancel` kills a stuck job and its subtree.
+3. **Harvest** each child's output from `/out/child/<name>/` (siblings read a completed peer at `/in/previous-jobs/<name>/`).
+
+Barriers still hold where a stage genuinely needs every prior result — a reducer over all map outputs, a judge over all candidates, debate round N+1 over round N: drain the whole in-flight set before dispatching the next stage. Steps that are **sequential by construction** — shared-`/workspace/repo` edit phases, a bisect probe loop — do not fan out at all and keep their blocking calls.
+
 ## The skills
 
 **Build / land code on a branch** — the orchestrator commits to a branch in `/out/repo`; the host lands it with `git fetch` + ff-merge.
@@ -53,4 +65,4 @@ Every skill follows the same shape: the host authors one prompt, launches a sing
 
 ## Adapting a skill
 
-Treat each `SKILL.md` as a template, not a fixed recipe. The frontmatter `description` is the trigger signal your agent matches against; the body is the contract the orchestrator follows. Tune the batch sizes, egress modes, images, and quarantine policy to your task — the constraints each skill calls out are the parts to keep.
+Treat each `SKILL.md` as a template, not a fixed recipe. The frontmatter `description` is the trigger signal your agent matches against; the body is the contract the orchestrator follows. Tune the in-flight concurrency cap, egress modes, images, and quarantine policy to your task — the constraints each skill calls out are the parts to keep. The background-dispatch fan-out loop (above) is the one mechanism to leave intact: blocking children do not run concurrently.
