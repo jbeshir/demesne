@@ -342,12 +342,62 @@ func agentCwdSubdir(jobID JobID) string {
 }
 
 // sandboxEnv is the environment injected into every sandbox at create
-// time: GOPROXY points at the sidecar's Go module proxy so `go` fetches
+// time.
+//
+// GOPROXY points at the sidecar's Go module proxy so `go` fetches
 // modules via 127.0.0.1 (the SO_MARK bypass reaches the real proxy)
 // even under egress=none. The /sumdb/ path is proxied too, so checksum
 // verification works unchanged.
+//
+// The remaining vars silence telemetry / metrics / analytics /
+// update-checks in the JS, Python, and Cloudflare build toolchains.
+// Under restricted egress these phone-home calls don't just leak data:
+// they hit the deny-by-default network policy and stall the build until
+// they time out. Names and values are exact — many tools accept only a
+// specific token (e.g. wrangler wants "false", not "0") and do not honor
+// the DO_NOT_TRACK convention. DO_NOT_TRACK=1 is set as the catch-all
+// that covers tools which respect it (Turborepo, Gatsby, Astro, and
+// future adopters); everything else needs its own var.
+//
+// Go's own toolchain telemetry (1.23+) has no working env-var opt-out
+// and defaults to local-only mode that never uploads, so egress alone
+// already prevents it from phoning home — nothing to set here.
 func sandboxEnv() map[string]string {
-	return map[string]string{"GOPROXY": proxygo.ProxyURL()}
+	// falseVal is the literal these vars require to mean "off"; hoisted
+	// so the recurring string is a single source of truth.
+	const falseVal = "false"
+
+	return map[string]string{
+		"GOPROXY": proxygo.ProxyURL(),
+
+		// Cross-tool standard (Turborepo, Gatsby, Astro, ...).
+		"DO_NOT_TRACK": "1",
+
+		// Cloudflare Wrangler — does not honor DO_NOT_TRACK.
+		"WRANGLER_SEND_METRICS":       falseVal,
+		"WRANGLER_SEND_ERROR_REPORTS": falseVal,
+
+		// JS framework / CLI telemetry — none honor DO_NOT_TRACK.
+		"NEXT_TELEMETRY_DISABLED":     "1",
+		"NUXT_TELEMETRY_DISABLED":     "1",
+		"NG_CLI_ANALYTICS":            falseVal,
+		"STORYBOOK_DISABLE_TELEMETRY": "1",
+		"VERCEL_TELEMETRY_DISABLED":   "1",
+		"YARN_ENABLE_TELEMETRY":       "0",
+
+		// npm noise / update-check / postinstall analytics.
+		"NO_UPDATE_NOTIFIER":     "1",
+		"npm_config_fund":        falseVal,
+		"DISABLE_OPENCOLLECTIVE": "true",
+
+		// Python — pip version check + interactive prompts.
+		"PIP_DISABLE_PIP_VERSION_CHECK": "1",
+		"PIP_NO_INPUT":                  "1",
+
+		// Other common build-toolchain phone-homes.
+		"CHECKPOINT_DISABLE": "1",    // Prisma / HashiCorp checkpoint
+		"NX_NO_CLOUD":        "true", // Nx Cloud
+	}
 }
 
 // startGoproxySidecar builds (if needed) and starts a sidecar carrying
