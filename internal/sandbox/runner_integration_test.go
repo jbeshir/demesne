@@ -621,3 +621,42 @@ func TestRunner_Integration_MediaImageConvertsFrame(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, info.Size(), int64(0))
 }
+
+// TestRunner_Integration_TwineImageHasTweego proves the twine image ships
+// the Tweego compiler and the Playwright/Node base, all at egress=none with
+// no input mounts. Lazily builds the demesne-twine image on first run (which
+// pulls the Playwright base and downloads the Tweego release + story
+// formats); subsequent runs reuse the cached layer. `tweego --version`
+// prints its banner but exits non-zero, so the command pipes it through grep
+// (which exits 0 on a match) before checking Node.
+func TestRunner_Integration_TwineImageHasTweego(t *testing.T) {
+	runner := integrationRunner(t)
+
+	res, err := runner.RunScript(context.Background(), ScriptRequest{
+		Image:   "twine",
+		Egress:  EgressNone,
+		Command: "tweego --version 2>&1 | grep -F Tweego && node -v",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q stderr=%q", res.Stdout, res.Stderr)
+	assert.Contains(t, res.Stdout, "v", "node -v should print a version")
+}
+
+// TestRunner_Integration_WebgamedevImageHasTemplate proves the webgamedev
+// image ships the Playwright/Node base and the warm Phaser + Vite +
+// TypeScript template with its node_modules already installed, all at
+// egress=none with no input mounts. Lazily builds the demesne-webgamedev
+// image on first run (which pulls the Playwright base and runs the
+// template's npm install + build); subsequent runs reuse the cached layer.
+func TestRunner_Integration_WebgamedevImageHasTemplate(t *testing.T) {
+	runner := integrationRunner(t)
+
+	res, err := runner.RunScript(context.Background(), ScriptRequest{
+		Image:   "webgamedev",
+		Egress:  EgressNone,
+		Command: "node -v && test -d /opt/game-template/node_modules && echo template-ok",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stdout=%q stderr=%q", res.Stdout, res.Stderr)
+	assert.Contains(t, res.Stdout, "template-ok")
+}

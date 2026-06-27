@@ -15,11 +15,13 @@ type ImageURI string
 // constants so the same string literal isn't repeated across the map,
 // the allowlist, the runner, and tests.
 const (
-	imageNode    = "node"
-	imagePython  = "python"
-	imageGo      = "go"
-	imageBrowser = "browser"
-	imageMedia   = "media"
+	imageNode       = "node"
+	imagePython     = "python"
+	imageGo         = "go"
+	imageBrowser    = "browser"
+	imageMedia      = "media"
+	imageTwine      = "twine"
+	imageWebgamedev = "webgamedev"
 )
 
 // DefaultImage is the image used when the caller does not specify one.
@@ -28,8 +30,9 @@ const DefaultImage = "anaconda"
 const imageAnaconda = "continuumio/anaconda3:latest"
 
 // Images maps the pull-based friendly names to concrete container image
-// references. Locally-built images (browser, media) are not here — the runner
-// routes them to their builder package so they build lazily.
+// references. Locally-built images (browser, media, twine, webgamedev) are
+// not here — the runner routes them to their builder package so they build
+// lazily.
 var Images = map[string]string{
 	imageNode:    "node:22",
 	imagePython:  "python:3.12",
@@ -42,12 +45,16 @@ var Images = map[string]string{
 // allowedImageNames lists every friendly name accepted by the sandbox
 // tools, including locally-built ones. Used in the not-in-allowlist
 // error so callers see the full allowlist, not just the static names.
-var allowedImageNames = []string{imageNode, imagePython, DefaultImage, imageGo, imageBrowser, imageMedia}
+var allowedImageNames = []string{
+	imageNode, imagePython, DefaultImage, imageGo,
+	imageBrowser, imageMedia, imageTwine, imageWebgamedev,
+}
 
 // staticImageURI resolves a pull-based friendly name to its image URI.
-// An empty name resolves to DefaultImage. The locally-built "browser" and
-// "media" names are not handled here; (*Runner).resolveImage routes them to
-// their builders before reaching this function.
+// An empty name resolves to DefaultImage. The locally-built "browser",
+// "media", "twine", and "webgamedev" names are not handled here;
+// (*Runner).resolveImage routes them to their builders before reaching this
+// function.
 func staticImageURI(name string) (ImageURI, error) {
 	if name == "" {
 		name = DefaultImage

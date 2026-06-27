@@ -19,6 +19,8 @@ import (
 	"github.com/jbeshir/demesne/internal/proxies"
 	"github.com/jbeshir/demesne/internal/sandbox/browserimage"
 	"github.com/jbeshir/demesne/internal/sandbox/mediaimage"
+	"github.com/jbeshir/demesne/internal/sandbox/twineimage"
+	"github.com/jbeshir/demesne/internal/sandbox/webgamedevimage"
 	"github.com/jbeshir/demesne/internal/sidecar"
 )
 
@@ -295,14 +297,15 @@ func (r *Runner) launchSandbox(
 }
 
 // resolveImage turns a friendly image name into a concrete container ref.
-// The locally-built "browser" and "media" images are built lazily on first
-// use via their builder packages; all other (pull-based) names — and the
-// empty name, which resolves to DefaultImage — go through staticImageURI.
+// The locally-built "browser", "media", "twine", and "webgamedev" images are
+// built lazily on first use via their builder packages; all other
+// (pull-based) names — and the empty name, which resolves to DefaultImage —
+// go through staticImageURI.
 //
 // Both builds run on the host docker daemon. Both host and nested callers
 // reach this same path (nested child tool calls are tunneled back to the
-// host runner), so `image=browser` and `image=media` are available to
-// in-sandbox pipelines too.
+// host runner), so the locally-built images are available to in-sandbox
+// pipelines too.
 func (r *Runner) resolveImage(ctx context.Context, name string) (ImageURI, error) {
 	if name == imageBrowser {
 		ref, err := browserimage.Ensure(ctx)
@@ -315,6 +318,20 @@ func (r *Runner) resolveImage(ctx context.Context, name string) (ImageURI, error
 		ref, err := mediaimage.Ensure(ctx)
 		if err != nil {
 			return "", fmt.Errorf("ensure media image: %w", err)
+		}
+		return ImageURI(ref), nil
+	}
+	if name == imageTwine {
+		ref, err := twineimage.Ensure(ctx)
+		if err != nil {
+			return "", fmt.Errorf("ensure twine image: %w", err)
+		}
+		return ImageURI(ref), nil
+	}
+	if name == imageWebgamedev {
+		ref, err := webgamedevimage.Ensure(ctx)
+		if err != nil {
+			return "", fmt.Errorf("ensure webgamedev image: %w", err)
 		}
 		return ImageURI(ref), nil
 	}

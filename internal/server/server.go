@@ -506,7 +506,11 @@ const imageParamDescription = "Container image. One of: 'node' (node:22), " +
 	"(demesne-built; Playwright JS + Chromium/Firefox/WebKit + Node, " +
 	"headless rendering at egress=none, built lazily on first use), " +
 	"'media' (demesne-built; ffmpeg + ImageMagick + libvips + audio tooling " +
-	"for video/audio/image conversion, built lazily on first use)."
+	"for video/audio/image conversion, built lazily on first use), " +
+	"'twine' (demesne-built; Tweego + Twine story formats + Chromium for " +
+	"offline interactive-fiction build/playtest, built lazily on first use), " +
+	"'webgamedev' (demesne-built; warm Phaser + Vite + TypeScript template + " +
+	"Chromium for offline HTML5-game build/playtest, built lazily on first use)."
 
 const egressParamDescription = "Outbound network policy. 'package-managers' (default) allows " +
 	"npm, PyPI, and conda registries; 'none' denies all egress."
