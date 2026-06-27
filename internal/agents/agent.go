@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/jbeshir/demesne/internal/egress"
@@ -40,6 +41,12 @@ const (
 // agent name has no registered provider. Use errors.Is to distinguish
 // this from operational (infra) errors without inspecting the text.
 var ErrUnknownAgent = errors.New("is not registered")
+
+// ErrUnknownModel is the sentinel wrapped by LookupByModel when no
+// registered provider claims the requested model. Use errors.Is to
+// distinguish this from operational (infra) errors without inspecting
+// the text.
+var ErrUnknownModel = errors.New("unknown model")
 
 // OutputContract captures an optional "definition of done" supplied by the caller to scope the
 // agent's terminating handoff: where to write the artefact, what shape it should take, and which
@@ -110,8 +117,8 @@ const AgentConfigDir = "/in/.agent"
 // Agent is the provider abstraction for sandbox_agent. Each vendor's
 // subpackage supplies one or more implementations.
 type Agent interface {
-	// Name is the caller-facing identifier (the value of the `agent` MCP
-	// parameter).
+	// Name is the caller-facing provider identifier used in the registry,
+	// error messages, and AvailableAgents.
 	Name() string
 
 	// EnsureImage ensures the provider's container image is available in
@@ -214,10 +221,28 @@ func Lookup(name string) (Agent, error) {
 	return nil, fmt.Errorf("agent %q %w (available: %v)", name, ErrUnknownAgent, available)
 }
 
-// DefaultAgent is the name resolved when sandbox_agent's `agent`
-// parameter is left empty AND the runner cannot make a
-// credential-aware choice (e.g. tests calling agents.Lookup("")
-// directly without a Config). The real default lives in
+// LookupByModel returns the agent registered for the given model alias.
+// On a miss it returns ErrUnknownModel with a sorted list of known models.
+func LookupByModel(model string) (Agent, error) {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	var known []string
+	for _, a := range registry {
+		for _, m := range a.Models() {
+			known = append(known, string(m))
+			if string(m) == model {
+				return a, nil
+			}
+		}
+	}
+	sort.Strings(known)
+	return nil, fmt.Errorf("model %q %w (known: %s)", model, ErrUnknownModel, strings.Join(known, ", "))
+}
+
+// DefaultAgent is the name Lookup falls back to when called with an
+// empty name AND the runner cannot make a credential-aware choice
+// (e.g. tests calling agents.Lookup("") directly without a Config).
+// The real default lives in
 // `internal/sandbox.resolveDefaultAgent`, which prefers codex when
 // its credentials are configured and falls back to claude-code
 // otherwise.

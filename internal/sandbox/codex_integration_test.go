@@ -51,7 +51,6 @@ func TestRunner_Integration_CodexAgent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	res, err := runner.Agent(ctx, AgentRequest{
-		Agent:  "codex",
 		Prompt: "Reply with the single word PONG and nothing else.",
 		Model:  "gpt-5.5",
 		Egress: EgressNone,

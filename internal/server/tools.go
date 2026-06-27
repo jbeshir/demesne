@@ -189,7 +189,6 @@ func (s *Server) handleSandboxAgent(
 		return errRes, nil
 	}
 
-	agentName := request.GetString(paramAgent, "")
 	model := request.GetString(paramModel, "")
 	preamble := request.GetString(paramPreamble, "")
 	egress := request.GetString(paramEgress, string(sandbox.EgressNone))
@@ -213,7 +212,6 @@ func (s *Server) handleSandboxAgent(
 	}
 
 	agentReq := sandbox.AgentRequest{
-		Agent:           agentName,
 		Model:           model,
 		Prompt:          prompt,
 		Preamble:        preamble,
@@ -244,7 +242,6 @@ func (s *Server) handleSandboxResearch(
 		return errRes, nil
 	}
 
-	agentName := request.GetString(paramAgent, "")
 	model := request.GetString(paramModel, "")
 	preamble := request.GetString(paramPreamble, "")
 	outputPath := request.GetString(paramOutputPath, "")
@@ -255,7 +252,6 @@ func (s *Server) handleSandboxResearch(
 	}
 
 	researchReq := sandbox.ResearchRequest{
-		Agent:           agentName,
 		Model:           model,
 		Prompt:          prompt,
 		Preamble:        preamble,

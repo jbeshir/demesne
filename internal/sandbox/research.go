@@ -14,7 +14,6 @@ import "context"
 // instead.
 func (r *Runner) Research(ctx context.Context, req ResearchRequest) (AgentResult, error) {
 	spec := internalAgentSpec{
-		agentName:       req.Agent,
 		model:           req.Model,
 		prompt:          req.Prompt,
 		preamble:        req.Preamble,

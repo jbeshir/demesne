@@ -510,7 +510,6 @@ func TestHandleSandboxAgent_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, sandbox.AgentRequest{
-		Agent:       "",
 		Model:       testModelHaiku,
 		Prompt:      "reply PONG",
 		Preamble:    "say only the word",
@@ -656,7 +655,6 @@ func TestHandleSandboxResearch_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, sandbox.ResearchRequest{
-		Agent:    "",
 		Model:    testModelSonnet,
 		Prompt:   "investigate the corpus",
 		Preamble: "stay focused",

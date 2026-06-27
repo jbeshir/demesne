@@ -57,7 +57,6 @@ func (r *Runner) StartScript(req ScriptRequest) JobID {
 // its public JobID handle immediately.
 func (r *Runner) StartAgent(req AgentRequest) JobID {
 	spec := internalAgentSpec{
-		agentName:       req.Agent,
 		model:           req.Model,
 		prompt:          req.Prompt,
 		preamble:        req.Preamble,
@@ -76,7 +75,6 @@ func (r *Runner) StartAgent(req AgentRequest) JobID {
 // returns its public JobID handle immediately.
 func (r *Runner) StartResearch(req ResearchRequest) JobID {
 	spec := internalAgentSpec{
-		agentName:       req.Agent,
 		model:           req.Model,
 		prompt:          req.Prompt,
 		preamble:        req.Preamble,

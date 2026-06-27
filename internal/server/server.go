@@ -19,7 +19,6 @@ const (
 	paramFiles           = "files"
 	paramDirectories     = "directories"
 	paramPrompt          = "prompt"
-	paramAgent           = "agent"
 	paramModel           = "model"
 	paramPreamble        = "preamble"
 	paramSrc             = "src"
@@ -62,7 +61,7 @@ type Runner interface {
 	UsageReport(req sandbox.UsageReportRequest) (sandbox.UsageReport, error)
 	// AvailableAgents reports which agent providers have host credentials
 	// configured (codex-first), with each provider's model allowlist. The
-	// server uses it to filter the `agent` / `model` enums advertised on
+	// server uses it to filter the `model` enum advertised on
 	// sandbox_agent / sandbox_research at registration time.
 	AvailableAgents() []sandbox.AgentOption
 	// AllowedMountPaths reports the host paths under which callers may
@@ -108,44 +107,13 @@ func (s *Server) Run() error { return s.RunContext(context.Background()) }
 
 func stringArrayItems() map[string]any { return map[string]any{"type": "string"} }
 
-// agentParamOptions returns the mcp tool options for the `agent`
-// parameter, filtered to the configured credentials. With ≥1 available
-// agent, the property advertises an enum of the available names
-// (single-value enum when only one is configured); the description
-// names them and preserves the existing default-resolution rule. With
-// zero available, no enum is set and the description points the user
-// at the credential env vars (the tools still error at call time).
-func agentParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
-	if len(available) == 0 {
-		return mcp.WithString(paramAgent, mcp.Description(
-			"Agent provider. No agent credentials are configured — set "+
-				"`DEMESNE_CODEX_AUTH_FILE` (Codex) or "+
-				"`DEMESNE_CLAUDE_CODE_OAUTH_TOKEN` (Claude Code) to enable "+
-				"sandbox_agent / sandbox_research.",
-		))
-	}
-	names := make([]string, len(available))
-	quoted := make([]string, len(available))
-	for i, a := range available {
-		names[i] = a.Name
-		quoted[i] = "`" + a.Name + "`"
-	}
-	var desc string
-	if len(available) == 1 {
-		desc = "Agent provider. " + quoted[0] + " is the only configured provider."
-	} else {
-		desc = "Agent provider. " + joinOr(quoted) + " — defaults to `codex` when omitted."
-	}
-	return mcp.WithString(paramAgent, mcp.Description(desc), mcp.Enum(names...))
-}
-
 // modelParamOptions returns the mcp tool options for the `model`
 // parameter, filtered to the configured credentials. The enum is the
 // de-duplicated union of available providers' model allowlists in
-// codex-first order; the description lists which models pair with
-// which available provider (filtered, so when only codex is configured
-// the claude-code clause is dropped). Zero available → no enum + a
-// brief note.
+// codex-first order; the description names the default-when-omitted
+// behavior and lists which models pair with which available provider
+// (filtered, so when only codex is configured the claude-code clause
+// is dropped). Zero available → no enum + a brief note.
 func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 	if len(available) == 0 {
 		return mcp.WithString(paramModel, mcp.Description(
@@ -175,7 +143,10 @@ func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 			clauses = append(clauses, "codex uses the gpt-5.x family")
 		}
 	}
-	desc := "Model for the agent. Provider-specific: " + joinSemi(clauses) + "."
+	desc := "Model for the agent. The provider is inferred automatically from the chosen model. " +
+		"When omitted, defaults to the default model of the credential-aware default provider " +
+		"(codex's gpt-5.5 when Codex credentials are configured, otherwise claude-code's sonnet). " +
+		"Provider-specific: " + joinSemi(clauses) + "."
 	return mcp.WithString(paramModel, mcp.Description(desc), mcp.Enum(models...))
 }
 
@@ -227,27 +198,12 @@ func uploadToolDescriptionFor(allowed []string) string {
 		" The sandbox destination is an absolute path; its parent directory must already exist."
 }
 
-// joinOr renders a slice as an English "a, b, or c" list. With one
-// element it returns that element; with two it returns "a or b".
-func joinOr(parts []string) string {
-	switch len(parts) {
-	case 0:
-		return ""
-	case 1:
-		return parts[0]
-	case 2:
-		return parts[0] + " or " + parts[1]
-	}
-	return strings.Join(parts[:len(parts)-1], ", ") + ", or " + parts[len(parts)-1]
-}
-
 // joinSemi joins clauses with "; " — used by the model-param
 // description so each provider's pairing reads as its own clause.
 func joinSemi(parts []string) string { return strings.Join(parts, "; ") }
 
 func (s *Server) registerTools() {
 	available := s.runner.AvailableAgents()
-	agentOpt := agentParamOptions(available)
 	modelOpt := modelParamOptions(available)
 	allowed := s.runner.AllowedMountPaths()
 	filesDesc := filesParamDescriptionFor(allowed)
@@ -386,7 +342,6 @@ func (s *Server) registerTools() {
 					"short 'definition of done' checklist.",
 			),
 		),
-		agentOpt,
 		modelOpt,
 		mcp.WithString(paramPreamble,
 			mcp.Description(
@@ -448,7 +403,6 @@ func (s *Server) registerTools() {
 					"and a short 'definition of done' checklist.",
 			),
 		),
-		agentOpt,
 		modelOpt,
 		mcp.WithString(paramPreamble,
 			mcp.Description(
