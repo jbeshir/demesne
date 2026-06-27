@@ -31,7 +31,6 @@ const (
 	childParamImage           = "image"
 	childParamEgress          = "egress"
 	childParamPrompt          = "prompt"
-	childParamAgent           = "agent"
 	childParamModel           = "model"
 	childParamPreamble        = "preamble"
 	childParamSandboxID       = "sandbox_id"
@@ -125,7 +124,6 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		mcp.WithDescription(childAgentDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description(childPromptDescription)),
-		mcp.WithString(childParamAgent, mcp.Description(childAgentDescriptionParam)),
 		mcp.WithString(childParamModel, mcp.Description(childModelDescription)),
 		mcp.WithString(childParamPreamble, mcp.Description(childPreambleDescription)),
 		mcp.WithString(childParamEgress, mcp.Description(childEgressDescriptionAgent)),
@@ -148,7 +146,6 @@ func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
 		mcp.WithDescription(childResearchDescription),
 		mcp.WithString(childParamName, mcp.Required(), mcp.Description(childNameDescription)),
 		mcp.WithString(childParamPrompt, mcp.Required(), mcp.Description(childResearchPromptDescription)),
-		mcp.WithString(childParamAgent, mcp.Description(childAgentDescriptionParam)),
 		mcp.WithString(childParamModel, mcp.Description(childModelDescription)),
 		mcp.WithString(childParamPreamble, mcp.Description(childPreambleDescription)),
 		mcp.WithString(childParamOutputPath,
@@ -275,7 +272,6 @@ func (r *Runner) handleChildAgent(ctx context.Context, req mcp.CallToolRequest) 
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	spec := internalAgentSpec{
-		agentName:       req.GetString(childParamAgent, ""),
 		model:           req.GetString(childParamModel, ""),
 		prompt:          prompt,
 		preamble:        req.GetString(childParamPreamble, ""),
@@ -314,7 +310,6 @@ func (r *Runner) handleChildResearch(ctx context.Context, req mcp.CallToolReques
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	spec := internalAgentSpec{
-		agentName:       req.GetString(childParamAgent, ""),
 		model:           req.GetString(childParamModel, ""),
 		prompt:          prompt,
 		preamble:        req.GetString(childParamPreamble, ""),
@@ -608,10 +603,7 @@ const childPreambleDescription = "Prose prepended to the child's context file. "
 
 const childModelDescription = "Model: 'fable' (most capable; hardest synthesis), " +
 	"'opus' (complex synthesis), 'sonnet' (default; general agentic work), " +
-	"'haiku' (lookup / cheap)."
-
-const childAgentDescriptionParam = "Agent provider. `codex` or `claude-code` — " +
-	"defaults to `codex` when Codex credentials are configured, otherwise `claude-code`."
+	"'haiku' (lookup / cheap). The provider is inferred automatically from the chosen model."
 
 const childCreateDescription = `Create a persistent child sandbox and return its handle.
 

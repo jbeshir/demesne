@@ -108,8 +108,8 @@ func TestAvailableAgentNames(t *testing.T) {
 }
 
 // TestAvailableAgents covers all four credential combinations for the
-// Runner method the server consumes to build the `agent` / `model`
-// enums. Models come from each provider's registered Models() so the
+// Runner method the server consumes to build the `model`
+// enum. Models come from each provider's registered Models() so the
 // test stays in sync with the catalog without hard-coding aliases.
 func TestAvailableAgents(t *testing.T) {
 	dir := t.TempDir()

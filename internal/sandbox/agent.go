@@ -66,7 +66,6 @@ type agentPrep struct {
 // before handing off. child is nil for host-invoked runs and set for
 // in-sandbox-spawned children (which inherit inputs + workspace).
 type internalAgentSpec struct {
-	agentName       string
 	model           string
 	prompt          string
 	preamble        string
@@ -105,7 +104,6 @@ type internalAgentSpec struct {
 // CLI finds it via the usual cwd lookup.
 func (r *Runner) Agent(ctx context.Context, req AgentRequest) (AgentResult, error) {
 	spec := internalAgentSpec{
-		agentName:       req.Agent,
 		model:           req.Model,
 		prompt:          req.Prompt,
 		preamble:        req.Preamble,
@@ -430,7 +428,7 @@ func (r *Runner) checkAgentCredentials(agent agents.Agent, tool string) error {
 		if r.cfg.CodexAuthFile == "" {
 			return errors.New(
 				"DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) is required for " +
-					tool + " when agent=\"codex\"",
+					tool + " when using a codex model",
 			)
 		}
 	}
@@ -447,6 +445,33 @@ func (r *Runner) resolveCodexTokens(ctx context.Context, agent agents.Agent) (pr
 	return proxyopenai.RefreshAuthFile(ctx, r.cfg.CodexAuthFile)
 }
 
+// resolveAgentModel selects the provider and model for a run. An empty
+// model falls back to the credential-aware default provider and that
+// provider's default model; a non-empty model fully determines the
+// provider, since model aliases are globally unique across providers.
+func (r *Runner) resolveAgentModel(rawModel string) (agents.Agent, agents.ModelName, error) {
+	if rawModel == "" {
+		agent, err := agents.Lookup(resolveDefaultAgent(r.cfg))
+		if err != nil {
+			return nil, "", err
+		}
+		model, err := agent.ResolveModel("")
+		if err != nil {
+			return nil, "", err
+		}
+		return agent, model, nil
+	}
+	agent, err := agents.LookupByModel(rawModel)
+	if err != nil {
+		return nil, "", err
+	}
+	model, err := agent.ResolveModel(rawModel)
+	if err != nil {
+		return nil, "", err
+	}
+	return agent, model, nil
+}
+
 // prepareAgent validates the request, looks up the provider, resolves
 // the model, describes inputs, refreshes+persists the Codex auth file
 // for codex runs, and ensures the provider's image is built. No
@@ -455,19 +480,11 @@ func (r *Runner) prepareAgent(ctx context.Context, spec internalAgentSpec) (agen
 	if strings.TrimSpace(spec.prompt) == "" {
 		return agentPrep{}, errors.New("prompt is required")
 	}
-	name := spec.agentName
-	if name == "" {
-		name = resolveDefaultAgent(r.cfg)
-	}
-	agent, err := agents.Lookup(name)
+	agent, model, err := r.resolveAgentModel(spec.model)
 	if err != nil {
 		return agentPrep{}, err
 	}
 	if err := r.checkAgentCredentials(agent, spec.tool); err != nil {
-		return agentPrep{}, err
-	}
-	model, err := agent.ResolveModel(spec.model)
-	if err != nil {
 		return agentPrep{}, err
 	}
 	codexTokens, err := r.resolveCodexTokens(ctx, agent)
@@ -527,7 +544,8 @@ func availableAgentNames(cfg Config) []string {
 }
 
 // resolveDefaultAgent picks the default agent provider when the caller
-// leaves the `agent` MCP parameter empty. It prefers Codex: both or
+// leaves the `model` parameter empty (with no model, the provider can't
+// be inferred, so it falls back to this default). It prefers Codex: both or
 // neither set → codex; only claude-code set → claude-code; only codex
 // set → codex. The neither-set branch falls through to codex so the
 // missing-auth error names the Codex setup path consistently.
@@ -541,7 +559,7 @@ func resolveDefaultAgent(cfg Config) string {
 
 // AgentOption describes one available agent provider and the model
 // allowlist that pairs with it. The server uses []AgentOption to
-// populate the `agent` and `model` enums on sandbox_agent /
+// populate the `model` enum on sandbox_agent /
 // sandbox_research at registration time, filtered to the configured
 // credentials. Codex-first order is preserved.
 type AgentOption struct {
@@ -560,7 +578,7 @@ func (r *Runner) AllowedMountPaths() []string { return r.cfg.AllowedPaths }
 // AvailableAgents returns the configured agent providers and their
 // model allowlists in codex-first order. Empty when no agent
 // credentials are configured. Used by the server to build the
-// runtime-filtered `agent` / `model` enums advertised on
+// runtime-filtered `model` enum advertised on
 // sandbox_agent / sandbox_research.
 func (r *Runner) AvailableAgents() []AgentOption {
 	names := availableAgentNames(r.cfg)

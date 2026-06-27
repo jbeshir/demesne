@@ -39,7 +39,7 @@ The OpenAI `ModelReport` differs from the Anthropic one: it omits the two cache-
 
 - **`cost_usd` is indicative.** Demesne computes it from an embedded per-model pricing table and the token counts reported by the upstream API. For Claude Code OAuth, the user is billed against a Claude Console subscription rather than on a per-request basis, so the figure is useful for relative cost tracking but is not what is actually charged. The same caveat applies to the OpenAI/codex provider, where ChatGPT-OAuth is subscription-based.
 - The Anthropic `usage.json` is written to `<output_dir>/usage.json` — the same directory returned as `output_dir` in the tool result. The sidecar writes it first to a private `sidecar-results/` directory and copies it to `/out` after the agent exits.
-- The OpenAI/codex case (`agent="codex"`) emits the same top-level shape (`cost_usd` + `per_model`), but each `ModelReport` entry carries `cached_tokens` and `reasoning_tokens` instead of the Anthropic cache fields.
+- The OpenAI/codex case (when a codex model is used) emits the same top-level shape (`cost_usd` + `per_model`), but each `ModelReport` entry carries `cached_tokens` and `reasoning_tokens` instead of the Anthropic cache fields.
 - If the sidecar never observed a usage block (e.g., the agent exited before any API call completed), `usage.json` may not exist or may reflect only the requests that did complete.
 
 ## Example

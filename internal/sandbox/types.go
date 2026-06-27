@@ -93,7 +93,6 @@ type DestroyRequest struct {
 
 // AgentRequest captures the inputs to sandbox_agent.
 type AgentRequest struct {
-	Agent           string
 	Model           string
 	Prompt          string
 	Preamble        string
@@ -138,7 +137,6 @@ type AgentResult struct {
 // AgentRequest minus the input-mount and egress knobs: research runs
 // have no /in/<basename> mounts and unrestricted outbound internet.
 type ResearchRequest struct {
-	Agent           string
 	Model           string
 	Prompt          string
 	Preamble        string

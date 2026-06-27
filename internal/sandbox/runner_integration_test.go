@@ -295,7 +295,6 @@ func TestRunner_Integration_Agent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	res, err := runner.Agent(ctx, AgentRequest{
-		Agent:  "claude-code",
 		Prompt: "Reply with the single word PONG and nothing else.",
 		Model:  "haiku",
 		Egress: EgressNone,
@@ -345,7 +344,6 @@ func TestRunner_Integration_Research(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	res, err := runner.Research(ctx, ResearchRequest{
-		Agent: "claude-code",
 		Prompt: "Use the Bash tool to run `curl -sSf https://example.com/` " +
 			"and reply with just the text inside the page's <title> tag.",
 		Model: "haiku",
@@ -400,7 +398,6 @@ func TestRunner_Integration_AgentWithMCP(t *testing.T) {
 	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), cat)
 
 	res, err := runner.Agent(ctx, AgentRequest{
-		Agent: "claude-code",
 		Prompt: "Call the workflowy `search_nodes` tool with the query \"demesne\". " +
 			"Then reply with exactly DONE and nothing else.",
 		Model:  "haiku",
@@ -456,7 +453,6 @@ func TestRunner_Integration_ChildSandbox(t *testing.T) {
 	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
 
 	res, err := runner.Agent(ctx, AgentRequest{
-		Agent: "claude-code",
 		Prompt: "Use the demesne MCP server's `sandbox_script` tool to spawn a child " +
 			"named \"probe\" that runs the command: echo hello-from-child > /out/result.txt. " +
 			"Then reply with exactly DONE and nothing else.",
@@ -582,7 +578,6 @@ func TestRunner_Integration_ChildBrowserRender(t *testing.T) {
 	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
 
 	res, err := runner.Agent(ctx, AgentRequest{
-		Agent:       "claude-code",
 		Model:       "sonnet",
 		Egress:      EgressNone,
 		Directories: []string{fixtureDir},
