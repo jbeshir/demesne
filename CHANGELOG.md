@@ -8,16 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [0.2.0] - 2026-06-27
+
+### Added
 - **`background` option** on `sandbox_script`, `sandbox_agent`, and `sandbox_research` (host and in-sandbox child surfaces): when `true`, the tool returns immediately with `{job_id, status:"running"}` instead of blocking.
 - **`sandbox_status`** tool (host and child): non-blocking status snapshot for a background job — returns status, elapsed time, a stdout tail, and cost/exit-code once terminal.
 - **`sandbox_wait`** tool (host and child): blocks up to `timeout_seconds` (default 30, hard-capped at 120) for a background job to reach a terminal state; returns the final result or `{status:"running", message:"still running; call sandbox_wait again"}` on timeout.
 - **`sandbox_cancel`** tool (host and child): cancels a background job and its entire descendant subtree depth-first, tearing down each sandbox via the existing sidecar/egress deferred path.
 - **In-memory job registry** (`internal/sandbox/jobs.go`): job state lives in memory for the process lifetime with no on-disk persistence; jobs do NOT survive an MCP-server restart (a stale job_id then returns `ErrJobNotFound`); a TTL reaper retains terminal jobs ~1h to bound memory; orphaned containers from a crashed/restarted process are reaped independently by `ReapOrphans` via the `demesne.owner` label.
+- **`sandbox_usage_report` tool**: token-usage & cost introspection for a finished job — walks the job's `/out` tree and breaks spend down by child/phase, model, token-type, and (claude-code) per-subagent, joining the per-request `usage.jsonl` against a distilled transcript `attribution.jsonl`; unattributed spend rolls up to `(main)` and is never dropped, with an `OutputRoot`-escape guard. `AgentResult` / `results.json` gain an additive `per_model_tokens` breakdown rolled up the descendant tree, and previously-silent parse / no-usage-block drops are now counted in `usage.json`.
 
 ### Changed
+- **claude-code agent image tracks the host Claude Code version**: the image build folds a `CLAUDE_CODE_VERSION` build arg (resolved from the host `claude --version`, falling back to `npm view` then `latest`) into its content-hash cache key, so the sandbox CLI rebuilds automatically on a host Claude Code upgrade instead of drifting behind and rejecting a freshly released model alias. No demesne release is needed for the sandbox to track the host. Image builders without a `BuildArgs` resolver hash exactly as before.
+- **Build-toolchain telemetry disabled in the sandbox env**: `sandboxEnv()` injects telemetry/analytics opt-out vars (wrangler `WRANGLER_SEND_METRICS`/`ERROR_REPORTS`, the Next/Nuxt/Angular/Storybook/Vercel/Yarn CLIs, npm update-notifier/funding noise, pip's version check, Prisma/HashiCorp checkpoint, Nx Cloud, plus `DO_NOT_TRACK=1` as a catch-all) so build tools don't phone home. Under restricted egress these calls previously stalled the build against the deny-by-default network policy until they timed out, so this also de-flakes and speeds up sandboxed builds.
 - **Internal job hooks** (`JobHooks`, `internalAgentSpec`, `sandboxPrepOptions`): the mid-run job-tracking plumbing was reduced to a single `OnOutputReady(outHost, resultsHost)` callback that records the live output/results paths for `sandbox_status`; the write-only `OnSandboxCreated` hook and run-UUID parameter (and their now-dead job fields) were dropped. Internal only — no behaviour change; the MCP tool surface (`sandbox_status`/`sandbox_wait`/`sandbox_cancel`) is unchanged.
 
-### Fixed
+### Removed
+- **`agent` parameter** on `sandbox_agent` / `sandbox_research` (and the in-sandbox child variants): model aliases are globally unique across providers, so the provider is now inferred from `model` via a registry-driven lookup guarded by a uniqueness test. Setting only a claude-code `model` such as `sonnet` no longer fails against the codex-first default provider (`model "sonnet" is not in the Codex allowlist`). An empty `model` preserves the credential-aware default: codex / `gpt-5.5` when Codex credentials are configured, otherwise claude-code / `sonnet`.
 
 ## [0.1.1] - 2026-06-10
 
@@ -143,5 +155,7 @@ The milestone sections below (M1–M6) are the per-feature development log that 
 - CI workflow, integration test suite (`runner_integration_test.go`), and README with architecture
   diagrams.
 
-[unreleased]: https://github.com/jbeshir/demesne/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/jbeshir/demesne/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jbeshir/demesne/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/jbeshir/demesne/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jbeshir/demesne/releases/tag/v0.1.0
