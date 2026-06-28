@@ -368,6 +368,18 @@ func sandboxEnv() map[string]string {
 	return map[string]string{
 		"GOPROXY": proxygo.ProxyURL(),
 
+		// Serialize the A and AAAA DNS queries glibc otherwise issues in
+		// parallel from a single UDP source port. Under restricted egress
+		// every lookup is NAT-redirected to the egress sidecar's resolver;
+		// the parallel pair races through conntrack, one query is dropped,
+		// and the lookup then stalls for glibc's full 5s timeout. The
+		// effect is intermittent but brutal under DNS bursts — npm's and
+		// pip's metadata-resolve phases routinely eat multiple 5s stalls.
+		// single-request-reopen uses a fresh socket per query (killing the
+		// race); the shorter timeout/attempts bound the cost of any
+		// residual loss. Honored by every glibc resolver in the sandbox.
+		"RES_OPTIONS": "single-request-reopen timeout:2 attempts:3",
+
 		// Cross-tool standard (Turborepo, Gatsby, Astro, ...).
 		"DO_NOT_TRACK": "1",
 
