@@ -1,7 +1,7 @@
 // Package browserimage builds the demesne-owned `browser` sandbox image:
 // the upstream mcr.microsoft.com/playwright base ships version-matched
 // browser binaries and Node but not the `playwright` JS package, so the
-// embedded Dockerfile adds it via `npm install -g playwright@1.60.0` and
+// embedded Dockerfile adds it via `npm install -g playwright@1.61.1` and
 // sets NODE_PATH so CommonJS `require('playwright')` resolves from any
 // cwd (including the read-only /in mount). Rebuilds are content-hash
 // keyed by the embedded Dockerfile via agentcommon.ImageBuilder, so any

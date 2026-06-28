@@ -7,7 +7,7 @@
 # Chromium/Firefox/WebKit + Node — is version-pinned and overridable; the
 # default joins the embedded-Dockerfile content hash, so a bump forces a
 # rebuild.
-ARG PLAYWRIGHT_TAG=v1.60.0-noble
+ARG PLAYWRIGHT_TAG=v1.61.1-noble
 FROM mcr.microsoft.com/playwright:${PLAYWRIGHT_TAG}
 
 # Playwright JS + Chromium/Firefox/WebKit + Node, identical to the browser
@@ -15,7 +15,7 @@ FROM mcr.microsoft.com/playwright:${PLAYWRIGHT_TAG}
 # `playwright` package via `require('playwright')` from any cwd (including
 # the read-only /in mount). The npm package version tracks the base tag and
 # is pinned via its own ARG for the same rebuild-on-bump reason.
-ARG PLAYWRIGHT_VERSION=1.60.0
+ARG PLAYWRIGHT_VERSION=1.61.1
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm install -g playwright@${PLAYWRIGHT_VERSION}
 ENV NODE_PATH=/usr/lib/node_modules
