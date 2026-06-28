@@ -623,23 +623,25 @@ func TestRunner_Integration_MediaImageConvertsFrame(t *testing.T) {
 }
 
 // TestRunner_Integration_TwineImageHasTweego proves the twine image ships
-// the Tweego compiler and the Playwright/Node base, all at egress=none with
-// no input mounts. Lazily builds the demesne-twine image on first run (which
-// pulls the Playwright base and downloads the Tweego release + story
-// formats); subsequent runs reuse the cached layer. `tweego --version`
-// prints its banner but exits non-zero, so the command pipes it through grep
-// (which exits 0 on a match) before checking Node.
+// the Tweego compiler, the Playwright/Node base, and the overlaid current
+// story format (Harlowe 3.3.9, not Tweego's stale bundled 3.1.0), all at
+// egress=none with no input mounts. Lazily builds the demesne-twine image on
+// first run (which pulls the Playwright base and downloads the Tweego release
+// + the current format.js); subsequent runs reuse the cached layer. `tweego
+// --version` prints its banner but exits non-zero, so the command pipes it
+// through grep (which exits 0 on a match) before checking Node and the format.
 func TestRunner_Integration_TwineImageHasTweego(t *testing.T) {
 	runner := integrationRunner(t)
 
 	res, err := runner.RunScript(context.Background(), ScriptRequest{
 		Image:   "twine",
 		Egress:  EgressNone,
-		Command: "tweego --version 2>&1 | grep -F Tweego && node -v",
+		Command: `tweego --version 2>&1 | grep -F Tweego && node -v && grep -Fq 3.3.9 "$TWEEGO_PATH/harlowe-3/format.js" && echo HARLOWE_OK`,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode, "stdout=%q stderr=%q", res.Stdout, res.Stderr)
 	assert.Contains(t, res.Stdout, "v", "node -v should print a version")
+	assert.Contains(t, res.Stdout, "HARLOWE_OK", "twine image should carry the overlaid Harlowe 3.3.9 format")
 }
 
 // TestRunner_Integration_WebgamedevImageHasTemplate proves the webgamedev

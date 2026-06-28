@@ -38,8 +38,27 @@ RUN set -eux; \
     rm tweego.zip; \
     install -m 0755 /opt/tweego/tweego /usr/local/bin/tweego
 
-# TWEEGO_PATH points Tweego at the bundled story formats from any cwd.
+# TWEEGO_PATH points Tweego at the story formats from any cwd.
 ENV TWEEGO_PATH=/opt/tweego/storyformats
+
+# Tweego 2.1.1's bundled Harlowe (3.1.0) and SugarCube (2.30.0) are years stale.
+# Overlay the current format.js for each — taken from the latest Twine 2 release
+# that ships them — onto the matching major-version directory. Tweego keys
+# formats by the directory name (`harlowe-3` / `sugarcube-2`), so replacing the
+# file in place upgrades the format the author compiles against. Each version is
+# an ARG so the cache key tracks a bump; the grep asserts the downloaded file is
+# the expected version, failing the build on a bad URL or empty fetch.
+ARG HARLOWE_VERSION=3.3.9
+ARG SUGARCUBE_VERSION=2.37.3
+ARG TWINEJS_TAG=2.12.0
+RUN set -eux; \
+    base="https://raw.githubusercontent.com/klembot/twinejs/refs/tags/${TWINEJS_TAG}/public/story-formats"; \
+    curl -fsSL -o "${TWEEGO_PATH}/harlowe-3/format.js" \
+        "${base}/harlowe-${HARLOWE_VERSION}/format.js"; \
+    curl -fsSL -o "${TWEEGO_PATH}/sugarcube-2/format.js" \
+        "${base}/sugarcube-${SUGARCUBE_VERSION}/format.js"; \
+    grep -F "${HARLOWE_VERSION}" "${TWEEGO_PATH}/harlowe-3/format.js" > /dev/null; \
+    grep -F "${SUGARCUBE_VERSION}" "${TWEEGO_PATH}/sugarcube-2/format.js" > /dev/null
 
 # Prove the compiler runs and the pinned version is the one baked in.
 # `tweego --version` prints its banner but exits non-zero (no compilation
