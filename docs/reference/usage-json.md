@@ -11,7 +11,7 @@ The top-level object and each per-model entry share the following structure.
 | Field | JSON tag | Type | Units | Description |
 |-------|----------|------|-------|-------------|
 | Total cost | `cost_usd` | number | USD | Sum of `cost_usd` across all models seen in this run. Indicative — see Notes. |
-| Per-model breakdown | `per_model` | object | — | Map from model ID string to a `ModelReport` object. Keys are the Anthropic or OpenAI model identifiers as returned by the API (e.g. `"claude-sonnet-4-6"`, `"gpt-5.5"`). |
+| Per-model breakdown | `per_model` | object | — | Map from model ID string to a `ModelReport` object. Keys are the Anthropic or OpenAI model identifiers as returned by the API (e.g. `"claude-sonnet-5"`, `"gpt-5.5"`). |
 
 ### Per-model entry — Anthropic provider (`ModelReport`)
 
@@ -44,13 +44,13 @@ The OpenAI `ModelReport` differs from the Anthropic one: it omits the two cache-
 
 ## Example
 
-Anthropic provider, one `claude-sonnet-4-6` run with prompt-cache activity:
+Anthropic provider, one `claude-sonnet-5` run with prompt-cache activity:
 
 ```json
 {
   "cost_usd": 0.0124,
   "per_model": {
-    "claude-sonnet-4-6": {
+    "claude-sonnet-5": {
       "input_tokens": 1820,
       "output_tokens": 312,
       "cache_creation_input_tokens": 4096,

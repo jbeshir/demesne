@@ -15,10 +15,10 @@ import (
 
 func TestTracker_AddAccumulates(t *testing.T) {
 	tr := NewTracker("")
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200}, "")
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 50, OutputTokens: 25}, "")
+	tr.Add("claude-sonnet-5", TokenCounts{InputTokens: 100, OutputTokens: 200}, "")
+	tr.Add("claude-sonnet-5", TokenCounts{InputTokens: 50, OutputTokens: 25}, "")
 	snap := tr.snapshot()
-	model := snap.PerModel["claude-sonnet-4-6"]
+	model := snap.PerModel["claude-sonnet-5"]
 	assert.Equal(t, int64(150), model.InputTokens)
 	assert.Equal(t, int64(225), model.OutputTokens)
 	// 150 input @ $3/MTok + 225 output @ $15/MTok = 0.00045 + 0.003375 = 0.003825
@@ -29,13 +29,13 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "usage.json")
 	tr := NewTracker(path)
-	tr.Add("claude-sonnet-4-6", TokenCounts{InputTokens: 100, OutputTokens: 200}, "")
+	tr.Add("claude-sonnet-5", TokenCounts{InputTokens: 100, OutputTokens: 200}, "")
 
 	data, err := os.ReadFile(path) //nolint:gosec // path is under t.TempDir()
 	require.NoError(t, err)
 	var snap Snapshot
 	require.NoError(t, json.Unmarshal(data, &snap))
-	assert.Equal(t, int64(100), snap.PerModel["claude-sonnet-4-6"].InputTokens)
+	assert.Equal(t, int64(100), snap.PerModel["claude-sonnet-5"].InputTokens)
 
 	// .tmp must not survive the rename.
 	_, err = os.Stat(path + ".tmp")
@@ -45,7 +45,7 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 func TestSSEInterceptor_AccumulatesFromStartAndDelta(t *testing.T) {
 	body := strings.Join([]string{
 		`event: message_start`,
-		`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-6-20260101","usage":{"input_tokens":42,"output_tokens":1,"cache_creation_input_tokens":7,"cache_read_input_tokens":3}}}`,
+		`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-5-20260615","usage":{"input_tokens":42,"output_tokens":1,"cache_creation_input_tokens":7,"cache_read_input_tokens":3}}}`,
 		``,
 		`event: content_block_delta`,
 		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}`,
@@ -65,7 +65,7 @@ func TestSSEInterceptor_AccumulatesFromStartAndDelta(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	m := tr.snapshot().PerModel["claude-sonnet-4-6-20260101"]
+	m := tr.snapshot().PerModel["claude-sonnet-5-20260615"]
 	assert.Equal(t, int64(42), m.InputTokens)
 	assert.Equal(t, int64(99), m.OutputTokens, "message_delta output supersedes message_start")
 	assert.Equal(t, int64(7), m.CacheCreationInputTokens)
@@ -93,7 +93,7 @@ data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}
 }
 
 func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
-	body := `{"id":"msg_1","type":"message","role":"assistant","model":"` + "claude-sonnet-4-6" + `","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":13,"output_tokens":7}}`
+	body := `{"id":"msg_1","type":"message","role":"assistant","model":"` + "claude-sonnet-5" + `","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":13,"output_tokens":7}}`
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
 	w := wrapResponseBody(r, "application/json", "", tr)
@@ -101,7 +101,7 @@ func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 	assert.Equal(t, body, string(out), "non-streaming body must pass through unchanged")
-	m := tr.snapshot().PerModel["claude-sonnet-4-6"]
+	m := tr.snapshot().PerModel["claude-sonnet-5"]
 	assert.Equal(t, int64(13), m.InputTokens)
 	assert.Equal(t, int64(7), m.OutputTokens)
 }
@@ -122,7 +122,7 @@ func TestSSEInterceptor_IgnoresGarbage(t *testing.T) {
 func TestSSEInterceptor_ThreadsRequestID(t *testing.T) {
 	body := strings.Join([]string{
 		`event: message_start`,
-		`data: {"type":"message_start","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":10,"output_tokens":1}}}`,
+		`data: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":10,"output_tokens":1}}}`,
 		``,
 		`event: message_delta`,
 		`data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}`,
@@ -154,7 +154,7 @@ func TestSSEInterceptor_ThreadsRequestID(t *testing.T) {
 // TestJSONInterceptor_ThreadsRequestID confirms the requestID is recorded
 // in usage.jsonl for non-streaming responses.
 func TestJSONInterceptor_ThreadsRequestID(t *testing.T) {
-	body := `{"model":"claude-sonnet-4-6","usage":{"input_tokens":5,"output_tokens":3}}`
+	body := `{"model":"claude-sonnet-5","usage":{"input_tokens":5,"output_tokens":3}}`
 	dir := t.TempDir()
 	tr := NewTracker(filepath.Join(dir, "usage.json"))
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
@@ -192,7 +192,7 @@ func TestJSONInterceptor_DropsOnParseError(t *testing.T) {
 // block increments the no-usage-block dropped counter.
 func TestJSONInterceptor_DropsOnNoUsage(t *testing.T) {
 	tr := NewTracker("")
-	r := &nopReadCloser{Reader: strings.NewReader(`{"model":"claude-sonnet-4-6"}`)}
+	r := &nopReadCloser{Reader: strings.NewReader(`{"model":"claude-sonnet-5"}`)}
 	w := wrapResponseBody(r, "application/json", "", tr)
 	_, _ = io.ReadAll(w)
 	_ = w.Close()

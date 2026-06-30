@@ -7,7 +7,7 @@ import (
 // USD represents US dollars (indicative).
 type USD float64
 
-// ModelID is an Anthropic API model identifier, e.g. "claude-sonnet-4-6",
+// ModelID is an Anthropic API model identifier, e.g. "claude-sonnet-5",
 // "claude-opus-4-8-20260101". Dated IDs resolve to their family via
 // longest-prefix match in LookupPricing.
 type ModelID string
@@ -45,7 +45,7 @@ var modelCatalog = []catalogEntry{
 	// sonnet — index 0 = DefaultModel; verified rates per MTok (in/out/write/read).
 	{
 		Alias:    "sonnet",
-		IDPrefix: "claude-sonnet-4-6",
+		IDPrefix: "claude-sonnet-5",
 		Pricing: Pricing{
 			InputPerMTok:      3.00,
 			OutputPerMTok:     15.00,
