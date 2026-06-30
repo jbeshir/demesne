@@ -42,7 +42,7 @@ A single scripted "press right for N frames" playtest does not scale to a multi-
     "steps": ["hold:right:20", "press:jump", "wait:30"],   // ordered action tokens
     "check": "g.getEnemyCount() === 0 && state === 'playing'" }  // a JS boolean expression
   ```
-  **Tokens:** `hold:<input>:<frames>`, `press:<input>`, `release:<input>`, `wait:<frames>`, and `call:<method>(<args>)` (a `window.__game` call); `<input>` names come from the design's control scheme, and symbolic args like `ENEMY_X` are page globals the game exposes, substituted before the run. **`check`** is one JavaScript boolean expression evaluated in global scope with `g` = `window.__game` and `state` = the current `data-game-state`. **Each phase appends its systems' scenarios; the playtest runs the whole suite every round**, so later phases regression-test earlier ones — the game analogue of build-widget's `journey.json` matrix.
+  **Tokens:** `hold:<input>:<frames>`, `press:<input>`, `release:<input>`, `wait:<frames>`, and `call:<method>(<args>)` (a `window.__game` call); `<input>` names come from the design's control scheme, and symbolic args like `ENEMY_X` are page globals the game exposes, substituted before the run. Note `press:<input>` is a **one-frame tap** (keydown → 1 frame → keyup), so for a game with variable-height / jump-cut a scripted `press:jump` is a **short hop** — use `hold:jump:<frames>` for a full-height jump. **`check`** is one JavaScript boolean expression evaluated in global scope with `g` = `window.__game` and `state` = the current `data-game-state`; **prefer outcome-class checks** (the player scored a stomp *and* kept all lives; `g.getScore() >= <value consistent with the cavern's content>`) over brittle exact-state absolutes (`=== 0`) that other content the milestone introduces (a cavern's own enemies) can violate. **Each phase appends its systems' scenarios; the playtest runs the whole suite every round**, so later phases regression-test earlier ones — the game analogue of build-widget's `journey.json` matrix.
 
 ## Procedure
 
@@ -50,7 +50,7 @@ A single scripted "press right for N frames" playtest does not scale to a multi-
 
 2. **Research** (`sandbox_research`, isolated, open egress) — genre mechanics and control conventions, a feasible scope for the ambition, and an asset approach. Returns `/out/FINDINGS.md`. A well-understood game can skip it.
 
-3. **Game design (the spec that drives everything)** — one medium-tier `sandbox_agent` turns the brief (plus any research) into `/workspace/DESIGN.md`: the core fantasy and the moment-to-moment loop; the full **mechanics and systems** the game needs (movement, combat, inventory, progression, economy, hazards, scoring — whatever applies); the entities and how they interact; the control scheme (keyboard + touch); the complete **`data-game-state` set** and the **`window.__game` surface**; win/lose plus progression/content (levels, waves, difficulty curve); the **asset list**; and — the keystone — the **system decomposition into an ordered list of vertical-slice milestones** (a thin playable core first, then each system layered onto it), with the **scenarios each milestone must satisfy**. This phase **right-sizes the build**: a one-mechanic toy yields a single milestone; a complex game yields many. The decomposition must be **dependency-consistent**: every `window.__game` method and `data-game-state` value a scenario references must be introduced no later than that scenario's milestone, and each scenario's `check` must be satisfiable by the behaviour the spec defines for that milestone (no internal contradictions — e.g. a step the spec says awards no score must not assert the score rose). Everything downstream is driven by `DESIGN.md`.
+3. **Game design (the spec that drives everything)** — one medium-tier `sandbox_agent` turns the brief (plus any research) into `/workspace/DESIGN.md`: the core fantasy and the moment-to-moment loop; the full **mechanics and systems** the game needs (movement, combat, inventory, progression, economy, hazards, scoring — whatever applies); the entities and how they interact; the control scheme (keyboard + touch); the complete **`data-game-state` set** and the **`window.__game` surface**; win/lose plus progression/content (levels, waves, difficulty curve); the **asset list**; and — the keystone — the **system decomposition into an ordered list of vertical-slice milestones** (a thin playable core first, then each system layered onto it), with the **scenarios each milestone must satisfy**. This phase **right-sizes the build**: a one-mechanic toy yields a single milestone; a complex game yields many. The decomposition must be **dependency-consistent**: every `window.__game` method and `data-game-state` value a scenario references must be introduced no later than that scenario's milestone, and each scenario's `check` must be satisfiable by the behaviour the spec defines for that milestone — **including the *other* content the same milestone introduces** (a `check` of `getEnemyCount() === 0` is unsatisfiable in a cavern that milestone fills with enemies). Prefer outcome-class checks over brittle absolutes, and avoid internal contradictions (a step the spec says awards no score must not assert the score rose). Everything downstream is driven by `DESIGN.md`.
 
 4. **Plan the phases** — from `DESIGN.md`'s decomposition the orchestrator writes `/workspace/PLAN.md`: the ordered, numbered implementation phases, each with its scope, the `data-game-state` values and `window.__game` methods it introduces, the scenarios it must make pass, and the assets it needs. **Phase 1 is always a thin playable vertical slice** (move + one core interaction + a reachable win/lose) so there is something real to build on and review from the start.
 
@@ -74,7 +74,9 @@ The harness is **deterministic by construction**: it drives the game's clock and
 - **Before the game loads** (`addInitScript`), install into the page: a **manual `requestAnimationFrame` queue** (the harness steps frames; the game never free-runs), a **virtual `performance.now()`/`Date.now()`** advanced a fixed `dt` per stepped frame, and a **seeded `Math.random`**.
 - **Boot** by stepping the rAF queue until `#game-ready` is attached — never a settle-timeout.
 - The game exposes its tuning **constants and entity positions as page globals**, so scenario tokens (`ENEMY_X`, …) substitute symbolically.
-- Per scenario: reset via `window.__game`, apply `setup` then `steps` (set the input, step the declared frames), then evaluate **`check` with indirect eval** — `(0, eval)(expr)` — so it runs in global scope with `g`/`state` bound (a direct-`eval` scoping slip is an easy own-goal). Screenshot to `/workspace/gallery/<name>.png`.
+- **Reload the page per scenario** (`page.goto` *inside* the loop) so each starts from a clean game and a clock reset to 0. Running the whole suite on one shared page lets accumulated physics bodies and the ever-growing virtual clock perturb later scenarios — the most common cause of a scenario that passes alone but fails after a prefix. `addInitScript` re-installs the deterministic env on every navigation; clear the per-scenario error list after each `goto`.
+- After each reload, re-boot to `#game-ready`, apply `setup` then `steps` (set the input, step the declared frames), then evaluate **`check`**: put `g`/`state` on `globalThis` *first*, then indirect-eval `(0, eval)(expr)` so the bound names **and** the game's page globals resolve in one global scope. (Binding `g`/`state` as evaluate-locals while indirect-eval'ing is the own-goal — indirect eval runs in global scope and can't see them.) Screenshot to `/workspace/gallery/<name>.png`.
+- **Timing-sensitive scenarios need a probe.** Landing a scripted action on a moving target (a top-stomp on a patrolling enemy) usually needs a short deterministic frame-probe to pick the spawn x / frame counts; budget for it, and assert the **outcome class** (scored a stomp *and* took no damage) rather than exact post-bounce kinematics.
 - **Exit non-zero** on any false `check`, unreached marker, or console/page error, naming the failing scenario.
 
 Skeleton (the orchestrator adapts the token→input/`__game` mapping from the design's control scheme):
@@ -88,20 +90,22 @@ const scenarios = require('./scenarios.json');
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.addInitScript(() => {
-    let t = 0; const cbs = [];                                   // manual rAF queue + virtual clock
+  await page.addInitScript(() => {                               // re-runs on EVERY navigation
+    let t = 0; const cbs = [];                                   // manual rAF queue + virtual clock from 0
     window.requestAnimationFrame = cb => (cbs.push(cb), cbs.length);
     performance.now = () => t; Date.now = () => t;
     let s = 12345; Math.random = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
     window.__step = (n = 1, dt = 1000 / 60) => { for (let i = 0; i < n; i++) { t += dt; cbs.splice(0).forEach(f => f(t)); } };
   });
-  await page.goto('file://' + process.env.GAME_DIR + '/dist/index.html');
-  while (!(await page.$('#game-ready'))) await page.evaluate(() => window.__step(1));
   for (const sc of scenarios) {
+    errors.length = 0;                                           // this scenario's errors only
+    await page.goto('file://' + process.env.GAME_DIR + '/dist/index.html');   // fresh state + clock per scenario
+    while (!(await page.$('#game-ready'))) await page.evaluate(() => window.__step(1));
     // apply sc.setup then sc.steps via window.__game + input + window.__step(frames) — token mapping here
     const ok = await page.evaluate(expr => {
-      const g = window.__game, state = document.documentElement.dataset.gameState;
-      return !!(0, eval)(expr);                                  // indirect eval → global scope
+      globalThis.g = window.__game;                              // bind onto global scope so indirect eval sees them
+      globalThis.state = document.documentElement.dataset.gameState;
+      return !!(0, eval)(expr);                                  // indirect eval → global scope (g/state + page globals)
     }, sc.check);
     await page.screenshot({ path: process.env.OUT + '/gallery/' + sc.name + '.png' });
     if (!ok || errors.length) { console.error('FAIL', sc.name, errors.join('|')); process.exit(1); }
