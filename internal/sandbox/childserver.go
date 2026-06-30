@@ -539,9 +539,13 @@ const childNameDescription = "Unique name for this child within the current sand
 
 const childImageDescription = "Container image: 'node', 'python', 'go', 'anaconda' (default), " +
 	"'browser' (Playwright + headless Chromium for rendering React/HTML UIs; the host builds it " +
-	"on first use, so the first call is slow; renders work at egress 'none'), or 'media' " +
+	"on first use, so the first call is slow; renders work at egress 'none'), 'media' " +
 	"(ffmpeg + ImageMagick + libvips + audio tooling for video/audio/image conversion; the host " +
-	"builds it on first use, so the first call is slow)."
+	"builds it on first use, so the first call is slow), 'twine' (Tweego + Twine story formats + " +
+	"Chromium for offline interactive-fiction build/playtest; the host builds it on first use, so " +
+	"the first call is slow), or 'webgamedev' (a warm Phaser + Vite + TypeScript template + " +
+	"Chromium for offline HTML5-game build/playtest; the host builds it on first use, so the first " +
+	"call is slow)."
 
 const childEgressDescription = "Outbound policy: 'package-managers' (default) or 'none'."
 

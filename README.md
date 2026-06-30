@@ -18,6 +18,8 @@ Ask your agent to run through demesne:
 - **One-off scripts** — execute a shell command in a fresh sandbox and collect output. [Example](examples/hello-script/)
 - **Headless React-widget rendering** — render and screenshot a React widget inside a sandbox via the demesne-built `browser` image (Playwright + Chromium + Node 22, works at `egress=none`). [How-to](docs/how-to/render-react-ui.md)
 - **Video / audio / image conversion** — transcode, convert, and manipulate media inside a sandbox via the demesne-built `media` image (ffmpeg + ImageMagick + libvips + audio tooling, works at `egress=none`). [How-to](docs/how-to/convert-media.md)
+- **Offline interactive-fiction build/playtest** — compile a Twine story and playtest it headlessly via the demesne-built `twine` image (Tweego + Twine story formats + Chromium, works at `egress=none`). [Reference](docs/reference/configuration.md#container-images)
+- **Offline HTML5-game build/playtest** — build and playtest a web game via the demesne-built `webgamedev` image (a warm Phaser + Vite + TypeScript template + Chromium, works at `egress=none`). [Reference](docs/reference/configuration.md#container-images)
 - **Long-running research with open internet** — spawn a research agent with unrestricted outbound access. [Reference](docs/reference/tools/sandbox_research.md)
 - **Delegated coding-agent tasks** — hand off a prompt to a sub-agent running inside a sandbox. [Example](examples/sandbox-agent-hello/)
 - **Persistent sessions** — create a sandbox, run multiple commands, upload/download files, then destroy it. [Example](examples/persistent-session/)
