@@ -64,6 +64,63 @@ Barriers still hold where a stage genuinely needs every prior result — a reduc
 | [`sandbox-bisect-hunt`](sandbox-bisect-hunt/) | Binary-search the commit / file / flag / version that introduced a regression, fresh sandbox per probe. |
 | [`sandbox-benchmark-runner`](sandbox-benchmark-runner/) | Sweep a parameter grid with deterministic `sandbox_script` runs, rank the configurations. |
 
+## The Founder's Playbook skills
+
+These skills implement the activities in Anthropic's *The Founder's Playbook: Building an AI-Native Startup* — one ready-to-invoke pipeline per activity (a few closely-related activities are merged), spanning the playbook's four stages: Idea, MVP, Launch, Scale. `FOUNDER-PLAYBOOK.md` at the repo root chains them in invocation order with each stage's exit criteria; `COVERAGE.md` maps every numbered playbook activity to its skill. Skills whose real-world deliverable touches interactively-authenticated services (email send, calendar writes, recurring schedules) are **hybrid**: the sandboxed pipeline produces structured drafts and the skill's Host-side finishing section says what to do with them using the host's own connected tools.
+
+**Idea stage** — validate the problem before building.
+
+| Skill | What it does |
+|-------|--------------|
+| [`sandbox-hypothesis-stress-test`](sandbox-hypothesis-stress-test/) | Sharpen a vague observation into a testable hypothesis, then adversarially hunt disconfirming evidence. |
+| [`sandbox-market-landscape`](sandbox-market-landscape/) | Tiered competitor map with per-tier threat cases + pressure-tested TAM/SAM/SOM + 2-year trend tailwind/headwind analysis. |
+| [`sandbox-competitor-complaint-mining`](sandbox-competitor-complaint-mining/) | Mine competitor customer reviews for top unresolved complaints; score the hypothesis against each. |
+| [`sandbox-interview-kit-design`](sandbox-interview-kit-design/) | Target profile + reachability map + per-persona interview questions, adversarially audited for leading framing. |
+| [`sandbox-outreach-pipeline`](sandbox-outreach-pipeline/) | Hybrid: prospect research, personalized outreach drafts, follow-up cadence, tracking sheet; host sends. |
+| [`sandbox-interview-synthesis`](sandbox-interview-synthesis/) | Per-interview debriefs + every-5-interviews confirmation-bias audit over a corpus of notes. |
+| [`sandbox-solution-concept-pressure-test`](sandbox-solution-concept-pressure-test/) | Develop the solution concept, attack it from four angles, isolate the 3 load-bearing assumptions. |
+| [`sandbox-prototype-sprint`](sandbox-prototype-sprint/) | Build the single-core-interaction prototype on a branch + a 5-person reaction-test kit. |
+
+**MVP stage** — build the smallest thing that generates real PMF evidence.
+
+| Skill | What it does |
+|-------|--------------|
+| [`sandbox-mvp-architecture-charter`](sandbox-mvp-architecture-charter/) | Pre-build architecture decisions with their WHY, as a CLAUDE.md-ready charter + session template/log. |
+| [`sandbox-mvp-scope-guardrail`](sandbox-mvp-scope-guardrail/) | Scope doc (does / deliberately does-not / amendment criteria); amendment mode pressure-tests new feature ideas. |
+| [`sandbox-prelaunch-security-review`](sandbox-prelaunch-security-review/) | Pre-launch audit on auth/session, data exposure, input validation, vulnerable deps; human-review flags. |
+| [`sandbox-metrics-framework`](sandbox-metrics-framework/) | Metrics that matter, benchmark targets, and explicit false-positive signatures — defined before launch. |
+| [`sandbox-feedback-loop-ops`](sandbox-feedback-loop-ops/) | Hybrid: recurring feedback intake → triage → weekly raw synthesis with a mandatory human-review gate. |
+| [`sandbox-pmf-diagnostic`](sandbox-pmf-diagnostic/) | Sean Ellis test + push-vs-pull founder-effort test with an adversarially-checked verdict. |
+| [`sandbox-pivot-diagnostic`](sandbox-pivot-diagnostic/) | Stalled-PMF diagnostic: segment divergence, positioning-vs-product, realism; adjust / pivot / return-to-idea. |
+
+**Launch stage** — repeatable growth, hardened product, founder out of every loop.
+
+| Skill | What it does |
+|-------|--------------|
+| [`sandbox-tech-debt-audit`](sandbox-tech-debt-audit/) | Tech-debt audit with sprint-sequenced remediation plan + architecture-decision backfill into CLAUDE.md. |
+| [`sandbox-compliance-review`](sandbox-compliance-review/) | Code-level review mapped to SOC 2 / GDPR / HIPAA controls; remediation sequence + buyer-facing controls workstream. |
+| [`sandbox-founder-load-audit`](sandbox-founder-load-audit/) | Founder operational-load inventory → automate / delegate / founder-only triage → workflow-logic designs. |
+| [`sandbox-product-ops-system`](sandbox-product-ops-system/) | Hybrid: sprint cadence, minimum spec template, bug-triage tree, weekly metrics brief; host wires the schedule. |
+
+**Scale stage** — systematic growth, enterprise readiness, a defensible moat.
+
+| Skill | What it does |
+|-------|--------------|
+| [`sandbox-bottleneck-stress-test`](sandbox-bottleneck-stress-test/) | Founder-bottleneck map + one-week-absence stress test; fix designs per failure point. |
+| [`sandbox-enterprise-procurement-pack`](sandbox-enterprise-procurement-pack/) | Hybrid: procurement doc pack (docs, playbooks, SLAs, questionnaire library) + drift-detection/observability plan. |
+| [`sandbox-enterprise-gap-analysis`](sandbox-enterprise-gap-analysis/) | Per named target account: what procurement demands vs what exists; sequenced gap-closure plan. |
+| [`sandbox-gtm-engine`](sandbox-gtm-engine/) | Per-audience GTM foundation (users, investors, enterprise buyers, analysts) + tactical execution layer designs. |
+| [`sandbox-domain-knowledge-codify`](sandbox-domain-knowledge-codify/) | Convert domain expertise into a searchable context library + codified, replay-verified workflow routines. |
+| [`sandbox-moat-test-suite`](sandbox-moat-test-suite/) | Turn observed vertical edge cases into a growing scenario-test suite that maps the moat. |
+| [`sandbox-data-flywheel-audit`](sandbox-data-flywheel-audit/) | Interaction-data audit, usage→improvement loop design, adversarially-tested one-page moat narrative. |
+| [`sandbox-lockin-audit`](sandbox-lockin-audit/) | Per-customer integration/switching-cost profiles → lock-in patterns → integration build backlog. |
+
+**Meta**
+
+| Skill | What it does |
+|-------|--------------|
+| [`sandbox-playbook-skill-forge`](sandbox-playbook-skill-forge/) | The pipeline that produced this family: turn any prescriptive playbook into a landed library of skills, one per activity, each design→critique→refine gated. |
+
 ## Adapting a skill
 
 Treat each `SKILL.md` as a template, not a fixed recipe. The frontmatter `description` is the trigger signal your agent matches against; the body is the contract the orchestrator follows. Tune the in-flight concurrency cap, egress modes, images, and quarantine policy to your task — the constraints each skill calls out are the parts to keep. The background-dispatch fan-out loop (above) is the one mechanism to leave intact: blocking children do not run concurrently.
