@@ -43,7 +43,7 @@ The skills are grouped into category folders. Each folder's own `README.md` carr
 | Category | What's in it |
 |----------|--------------|
 | [`build-and-land/`](build-and-land/README.md) | Land a substantial code change on a branch — feature work, migration sweeps, test backfill, quality passes against a deterministic gate. |
-| [`build-a-game/`](build-a-game/README.md) | Build a durable, playable game and deliver the editable project — coded real-time TypeScript games and branching Twine interactive fiction. |
+| [`creative-works/`](creative-works/README.md) | Build a durable, bespoke creative artifact to experience, not a codebase change — currently coded real-time TypeScript games and branching Twine interactive fiction. |
 | [`survey-and-map-reduce/`](survey-and-map-reduce/README.md) | Report-only surveys and map-reduce over a corpus or codebase — defect surveys, docs/appearance review, ETL into a structured store. |
 | [`explore-and-decide/`](explore-and-decide/README.md) | Multiple attempts or perspectives on one question — open-web research, tournament search, multi-role debate, decoupled swarm exploration. |
 | [`targeted-and-sequential/`](targeted-and-sequential/README.md) | Targeted, sequential pipelines — classify-and-route a batch, bisect a regression, sweep a benchmark parameter grid. |

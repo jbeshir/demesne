@@ -1,6 +1,8 @@
-# Build a game
+# Creative works
 
-Build a durable, playable game through a demesne pipeline and deliver the editable project plus a runnable build — a distinct deliverable from general feature work, so these live in their own folder. The orchestrator commits the project to a branch in `/out/repo`; the host lands it.
+Build a durable, bespoke creative artifact through a demesne pipeline and deliver the editable project plus a runnable or consumable build — a game to play today, and room for other creative deliverables (interactive narrative, generated media, and the like) as this family grows. The output here is something to *experience*, not a codebase change, which is why it lives apart from `build-and-land/`. The orchestrator commits the project to a branch in `/out/repo`; the host lands it.
+
+So far this covers playable games:
 
 | Skill | What it does |
 |-------|--------------|
