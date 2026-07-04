@@ -217,7 +217,7 @@ The internal consistency of the visual "layer cake" — how shadows, borders, ba
 
 8. **Radius-to-size proportionality.** Very large components (hero cards, full-screen modals) with very small radii (2–4px) can look pinched. Very small components (chips, badges) with large radii (8px+) look like pills or circles. Check proportionality: radius should scale loosely with component size.
 
-9. **Layering coherence.** When components overlap (popover over input, tooltip over content, drawer over page), their backgrounds, shadows, and radii should clearly signal the layer order. A flat white popover with no shadow over a flat white card is ambiguous — the reader cannot tell which is on top.
+9. **Layering coherence.** First verify the stacking order is actually correct: when components overlap (popover over input, tooltip over content, drawer over page, map/canvas overlay controls), is the element that should be on top **fully visible** — not partially or entirely hidden or clipped behind another floating layer? A floating element rendering underneath a sibling layer is a **critical** finding — a functional break, not a craft nicety — so flag it distinctly from the softer signal-clarity check below, and note in `suggested_fix` that the likely cause is a nested stacking context capping the element's z-index (an ancestor with its own `position`+`z-index`, a `transform`, `opacity < 1`, `filter`, or `will-change`), for which the fix is usually portaling the layer to a dedicated overlay root rather than raising its z-index number further. Only once correct stacking is confirmed, judge the softer signal: do backgrounds, shadows, and radii clearly *communicate* the layer order? A flat white popover with no shadow over a flat white card is ambiguous — the reader cannot tell which is on top.
 
 10. **Borders vs background fill as separators.** Prefer background colour differences over borders for separation where possible (fewer lines = cleaner). When borders are used, they should be light enough to be structural (guiding the eye) rather than decorative (demanding attention). A border at full brand colour creates a jarring visual weight that fights content.
 
@@ -448,6 +448,8 @@ Whether the same UI component, state, or pattern is visually identical (or corre
 
 Size-floor violations (Lens 1 criterion 1 — sub-12px persistent text) and contrast-floor violations (Lens 4 — below WCAG AA or APCA Lc 75) are **critical** regardless of whether the reviewer finds the text legible. The merge pass must not downgrade them on the grounds that the screenshot reads clearly — that judgement is exactly the one the reviewer-calibration note rules out.
 
+Layering violations (Lens 5 criterion 9 — a floating element fully or substantially hidden behind another layer) are likewise **critical**: the element is unusable, which is a functional break, not a polish judgment — do not let Lens 5's otherwise lower merge priority (see below) push this specific finding down the tier list.
+
 ### Overlap notes — what each agent must NOT re-flag
 
 To prevent merge-phase deduplication overload, each agent should exclude these already-owned dimensions:
@@ -471,7 +473,7 @@ To prevent merge-phase deduplication overload, each agent should exclude these a
 4. Lens 10 (Cross-Cell) — regression risk (missing dark-mode overrides often ship silently)
 5. Lens 2 (Spacing) — craft signal most visible to non-designers; easy to fix
 6. Lens 3 (Layout) — structural changes; higher design cost to fix
-7. Lens 5 (Depth/Elevation) — polish; lower functional impact
+7. Lens 5 (Depth/Elevation) — polish; lower functional impact (except criterion 9's layering-correctness findings, which are critical per the severity floors above and merge ahead of this tier)
 8. Lens 6 (Imagery/Iconography) — visual quality; variable effort to fix
 9. Lens 8 (Micro-typography) — fine craft; lower priority but high signal of attention to detail
 10. Lens 9 (Brand/Tone) — strategic framing; low urgency but high influence on perception
