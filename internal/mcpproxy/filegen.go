@@ -15,7 +15,11 @@ import (
 	proxymcp "github.com/jbeshir/demesne/internal/proxies/mcp"
 )
 
-const imageURLKey = "image_url"
+const (
+	imageURLKey = "image_url"
+	filesKey    = "files"
+	pathKey     = "path"
+)
 
 // parentKeyT is the unexported context key type for the parent job ID.
 type parentKeyT struct{}
@@ -214,6 +218,84 @@ func (imageGenAdapter) RewriteResult(result *mcp.CallToolResult, mapping map[str
 	}
 }
 
+// ---- assetsAdapter ----
+
+// assetsAdapter bridges the "assets" MCP server, whose file-producing tools
+// (get_icon/get_illustration/get_font) write asset files to their own output
+// directory and report them in a native structured result shaped
+// {"files":[{"path",...}],"count":N}. Unlike imageGenAdapter's file:// URLs,
+// the reported paths are plain absolute host paths. Like imageGenAdapter, the
+// server picks its own output location, so PrepareArgs is a no-op.
+type assetsAdapter struct{}
+
+func (assetsAdapter) Server() string { return serverAssets }
+
+func (assetsAdapter) Tools() []string {
+	return []string{toolGetIcon, toolGetIllustration, toolGetFont}
+}
+
+func (assetsAdapter) PrepareArgs(args map[string]any, _ string) map[string]any {
+	return args
+}
+
+func (assetsAdapter) ExtractHostPaths(result *mcp.CallToolResult) []string {
+	sc, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		return nil
+	}
+	files, ok := sc[filesKey].([]any)
+	if !ok {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	var paths []string
+	for _, f := range files {
+		entry, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		p, ok := entry[pathKey].(string)
+		if !ok || p == "" {
+			continue
+		}
+		if _, dup := seen[p]; !dup {
+			seen[p] = struct{}{}
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
+
+func (assetsAdapter) RewriteResult(result *mcp.CallToolResult, mapping map[string]string) {
+	if sc, ok := result.StructuredContent.(map[string]any); ok {
+		if files, ok := sc[filesKey].([]any); ok {
+			for _, f := range files {
+				entry, ok := f.(map[string]any)
+				if !ok {
+					continue
+				}
+				if p, ok := entry[pathKey].(string); ok {
+					if sandbox, ok := mapping[p]; ok {
+						entry[pathKey] = sandbox
+					}
+				}
+			}
+		}
+	}
+
+	for i, c := range result.Content {
+		tc, ok := c.(mcp.TextContent)
+		if !ok {
+			continue
+		}
+		for host, sandbox := range mapping {
+			tc.Text = strings.ReplaceAll(tc.Text, host, sandbox)
+		}
+		result.Content[i] = tc
+	}
+}
+
 // ---- registry ----
 
 type fileGenRegistry struct {
@@ -250,7 +332,7 @@ func (r *fileGenRegistry) AdapterFor(server, tool string) FileGenAdapter {
 	return nil
 }
 
-var defaultFileGenRegistry = newFileGenRegistry(&mermaidAdapter{}, &imageGenAdapter{})
+var defaultFileGenRegistry = newFileGenRegistry(&mermaidAdapter{}, &imageGenAdapter{}, &assetsAdapter{})
 
 // IsFileGenServer reports whether the given upstream is a known
 // file-generating server. Used by the agent-side wiring to gate
