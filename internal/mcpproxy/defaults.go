@@ -1,15 +1,19 @@
 package mcpproxy
 
 const (
-	serverAlignment = "alignment"
-	serverImageGen  = "image-gen-mcp"
-	serverMermaid   = "mermaid"
-	serverWorkflowy = "workflowy"
-	toolEditImage   = "edit_image"
-	toolGenerate    = "generate"
-	toolGenerateImg = "generate_image"
-	toolGetUser     = "get_user"
-	toolSearchNodes = "search_nodes"
+	serverAlignment     = "alignment"
+	serverAssets        = "assets"
+	serverImageGen      = "image-gen-mcp"
+	serverMermaid       = "mermaid"
+	serverWorkflowy     = "workflowy"
+	toolEditImage       = "edit_image"
+	toolGenerate        = "generate"
+	toolGenerateImg     = "generate_image"
+	toolGetFont         = "get_font"
+	toolGetIcon         = "get_icon"
+	toolGetIllustration = "get_illustration"
+	toolGetUser         = "get_user"
+	toolSearchNodes     = "search_nodes"
 )
 
 // defaultAllowlist maps server name → set of tool names that are
@@ -51,6 +55,15 @@ var defaultAllowlist = map[ServerName]map[ToolName]struct{}{
 		"modelStyling",
 		"notesInfo",
 		"review_stats",
+	),
+	serverAssets: setOf(
+		"list_asset_sources",
+		"search_icons",
+		toolGetIcon,
+		"search_illustrations",
+		toolGetIllustration,
+		"search_fonts",
+		toolGetFont,
 	),
 	"bunpro": setOf(
 		"get_decks",

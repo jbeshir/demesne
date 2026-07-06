@@ -13,11 +13,15 @@ import (
 )
 
 const (
-	textType       = "text"
-	imageDataAbc   = "abc"
-	imgFileURL     = "file:///tmp/img.png"
-	imgHostPath    = "/tmp/img.png"
-	imgSandboxPath = "/workspace/generated/img.png"
+	textType         = "text"
+	imageDataAbc     = "abc"
+	imgFileURL       = "file:///tmp/img.png"
+	imgHostPath      = "/tmp/img.png"
+	imgSandboxPath   = "/workspace/generated/img.png"
+	assetHostPath    = "/tmp/assets-mcp/icon.svg"
+	assetSandboxPath = "/workspace/generated/icon.svg"
+	assetPathA       = "/tmp/assets-mcp/a.svg"
+	countKey         = "count"
 )
 
 func TestParentFromHTTP_LiftsHeader(t *testing.T) {
@@ -43,6 +47,7 @@ func TestIsFileGenServer(t *testing.T) {
 	}{
 		{serverMermaid, true},
 		{serverImageGen, true},
+		{serverAssets, true},
 		{serverWorkflowy, false},
 		{"", false},
 	}
@@ -62,9 +67,14 @@ func TestFileGenAdapterFor(t *testing.T) {
 		{serverMermaid, toolGenerate, false},
 		{serverImageGen, toolGenerateImg, false},
 		{serverImageGen, toolEditImage, false},
+		{serverAssets, toolGetIcon, false},
+		{serverAssets, toolGetIllustration, false},
+		{serverAssets, toolGetFont, false},
 		{serverWorkflowy, toolSearchNodes, true},
 		{serverMermaid, toolEditImage, true},
 		{serverImageGen, toolGenerate, true},
+		{serverAssets, "search_icons", true},
+		{serverAssets, "list_asset_sources", true},
 		{"", "", true},
 	}
 	for _, tc := range cases {
@@ -250,4 +260,103 @@ func TestImageGenAdapter_RewriteResult(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, tc.Text, imgSandboxPath)
 	assert.NotContains(t, tc.Text, "file://")
+}
+
+func TestAssetsAdapter_ServerAndTools(t *testing.T) {
+	a := assetsAdapter{}
+	assert.Equal(t, serverAssets, a.Server())
+	assert.ElementsMatch(t, []string{toolGetIcon, toolGetIllustration, toolGetFont}, a.Tools())
+}
+
+func TestAssetsAdapter_PrepareArgs_NoOp(t *testing.T) {
+	a := assetsAdapter{}
+	in := map[string]any{"set": "lucide", "name": "camera"}
+	out := a.PrepareArgs(in, "/tmp/delivery")
+	assert.Equal(t, in, out)
+}
+
+func TestAssetsAdapter_ExtractHostPaths(t *testing.T) {
+	a := assetsAdapter{}
+
+	t.Run("single file", func(t *testing.T) {
+		result := &mcp.CallToolResult{
+			StructuredContent: map[string]any{
+				filesKey: []any{
+					map[string]any{pathKey: assetHostPath, "kind": "icon"},
+				},
+				countKey: 1,
+			},
+		}
+		got := a.ExtractHostPaths(result)
+		assert.Equal(t, []string{assetHostPath}, got)
+	})
+
+	t.Run("multiple files deduped", func(t *testing.T) {
+		result := &mcp.CallToolResult{
+			StructuredContent: map[string]any{
+				filesKey: []any{
+					map[string]any{pathKey: assetPathA},
+					map[string]any{pathKey: "/tmp/assets-mcp/b.woff2"},
+					map[string]any{pathKey: assetPathA},
+				},
+				countKey: 2,
+			},
+		}
+		got := a.ExtractHostPaths(result)
+		assert.Equal(t, []string{assetPathA, "/tmp/assets-mcp/b.woff2"}, got)
+	})
+
+	t.Run("no files", func(t *testing.T) {
+		result := &mcp.CallToolResult{
+			StructuredContent: map[string]any{filesKey: []any{}, countKey: 0},
+		}
+		got := a.ExtractHostPaths(result)
+		assert.Empty(t, got)
+	})
+
+	t.Run("structured content not a map", func(t *testing.T) {
+		result := &mcp.CallToolResult{StructuredContent: "just a string"}
+		got := a.ExtractHostPaths(result)
+		assert.Empty(t, got)
+	})
+
+	t.Run("no structured content", func(t *testing.T) {
+		result := &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: textType, Text: "Wrote icon to " + assetHostPath},
+			},
+		}
+		got := a.ExtractHostPaths(result)
+		assert.Empty(t, got)
+	})
+}
+
+func TestAssetsAdapter_RewriteResult(t *testing.T) {
+	a := assetsAdapter{}
+	sc := map[string]any{
+		filesKey: []any{
+			map[string]any{pathKey: assetHostPath, "kind": "icon"},
+		},
+		countKey: 1,
+	}
+	result := &mcp.CallToolResult{
+		StructuredContent: sc,
+		Content: []mcp.Content{
+			mcp.TextContent{Type: textType, Text: "Wrote icon to " + assetHostPath},
+		},
+	}
+	mapping := map[string]string{assetHostPath: assetSandboxPath}
+
+	a.RewriteResult(result, mapping)
+
+	files, ok := sc[filesKey].([]any)
+	require.True(t, ok)
+	entry, ok := files[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, assetSandboxPath, entry[pathKey])
+
+	tc, ok := result.Content[0].(mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, tc.Text, assetSandboxPath)
+	assert.NotContains(t, tc.Text, assetHostPath)
 }
