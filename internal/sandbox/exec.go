@@ -10,7 +10,7 @@ import (
 
 // renewDuration is how far forward each Exec call pushes the sandbox TTL.
 // Active sandboxes stay alive; idle ones expire after the original TTL.
-const renewDuration = 24 * time.Hour
+const renewDuration = 48 * time.Hour
 
 // Exec runs one command in an existing sandbox. The sandbox's TTL is
 // refreshed before the command runs (best-effort — a renew failure does

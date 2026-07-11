@@ -76,7 +76,7 @@ Returned as `structuredContent` against the declared output schema — see [Stru
 | `stdout` | string |
 | `stderr` | string |
 
-The sandbox TTL is refreshed by 24 hours before the command runs.
+The sandbox TTL is refreshed by 48 hours before the command runs.
 
 Stderr is captured separately from stdout (via the SDK's per-stream split) and returned as the `stderr` field, tail-bounded to the last 16 KiB. No on-disk file: `sandbox_exec` runs against the sandbox's persistent `/out` and would otherwise overwrite a log on every call.
 
