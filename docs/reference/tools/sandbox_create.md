@@ -75,7 +75,7 @@ Returned as `structuredContent` against the declared output schema — see [Stru
 | `sandbox_id` | string |
 | `output_dir` | string |
 
-Pass `sandbox_id` to `sandbox_exec`, `sandbox_upload`, `sandbox_download`, and `sandbox_destroy`. The sandbox TTL is 24 hours from creation, refreshed by each `sandbox_exec` call. Call `sandbox_destroy` to tear it down explicitly before the TTL expires.
+Pass `sandbox_id` to `sandbox_exec`, `sandbox_upload`, `sandbox_download`, and `sandbox_destroy`. The sandbox TTL is 48 hours from creation, refreshed by each `sandbox_exec` call. Call `sandbox_destroy` to tear it down explicitly before the TTL expires.
 
 ## Errors
 

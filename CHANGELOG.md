@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`webgamedev` sandbox image** (`internal/sandbox/webgamedevimage`, `demesne-webgamedev`): a demesne-built, lazily-built image baking a warm Phaser + Vite + TypeScript template (with `node_modules` pre-installed) at `/opt/game-template` onto the same Playwright/Chromium + Node base, so an HTML5 game can be built and headlessly playtested entirely at `egress=none`. Selectable as `image: "webgamedev"`. Shares the `browser` image's base layer, so podman caches it once across all three. Fast-moving versions (Tweego, Phaser, Vite, TypeScript, the Playwright tag) are build `ARG`s with pinned defaults that join the content-hash cache key.
 
 ### Changed
+- **Sandbox lifetime limits raised to 48h across the board**: one-shot `commandTimeout`/`oneShotSandboxTTLSeconds` (`sandbox_script`/`sandbox_agent`/`sandbox_research`) go from 12h to 48h, and persistent `persistentSandboxTTLSeconds`/`renewDuration` (`sandbox_create`/`sandbox_exec`) go from 24h to 48h, so both cap out at the same limit (`internal/sandbox/runner.go`, `internal/sandbox/exec.go`).
 
 ### Fixed
 

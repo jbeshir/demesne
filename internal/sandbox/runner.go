@@ -27,19 +27,19 @@ import (
 // commandTimeout caps how long a single sandbox command may run. Set
 // generously: long-running data-processing scripts are a legitimate use
 // case. The caller can still cancel via the request context.
-const commandTimeout = 12 * time.Hour
+const commandTimeout = 48 * time.Hour
 
 // oneShotSandboxTTLSeconds is the OpenSandbox-side TTL for sandboxes
 // created by RunScript / Agent / Research — paths that always
 // defer-Kill on return. Match commandTimeout so the server-side TTL
 // can't undercut the command timeout (the OpenSandbox SDK default of
 // 600s would).
-const oneShotSandboxTTLSeconds = int(12 * 60 * 60)
+const oneShotSandboxTTLSeconds = int(48 * 60 * 60)
 
 // persistentSandboxTTLSeconds is the initial TTL for sandbox_create
-// sandboxes. Matches the documented 24h, after which sandbox_exec's
-// Renew(24h) refreshes the window on every call.
-const persistentSandboxTTLSeconds = int(24 * 60 * 60)
+// sandboxes. Matches the documented 48h, after which sandbox_exec's
+// Renew(48h) refreshes the window on every call.
+const persistentSandboxTTLSeconds = int(48 * 60 * 60)
 
 const (
 	metadataDemesneJob  = "demesne.job"
