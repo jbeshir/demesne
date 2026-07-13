@@ -140,12 +140,13 @@ func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 				"'opus' (complex synthesis), 'sonnet' (default; general agentic work), "+
 				"or 'haiku' (lookup / cheap)")
 		case agentNameCodex:
-			clauses = append(clauses, "codex uses the gpt-5.x family")
+			clauses = append(clauses, "codex uses 'gpt-5.6-sol' (default), "+
+				"'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', or 'gpt-5.4-mini'")
 		}
 	}
 	desc := "Model for the agent. The provider is inferred automatically from the chosen model. " +
 		"When omitted, defaults to the default model of the credential-aware default provider " +
-		"(codex's gpt-5.5 when Codex credentials are configured, otherwise claude-code's sonnet). " +
+		"(codex's gpt-5.6-sol when Codex credentials are configured, otherwise claude-code's sonnet). " +
 		"Provider-specific: " + joinSemi(clauses) + "."
 	return mcp.WithString(paramModel, mcp.Description(desc), mcp.Enum(models...))
 }

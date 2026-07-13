@@ -52,7 +52,7 @@ func TestRunner_Integration_CodexAgent(t *testing.T) {
 	defer cancel()
 	res, err := runner.Agent(ctx, AgentRequest{
 		Prompt: "Reply with the single word PONG and nothing else.",
-		Model:  "gpt-5.5",
+		Model:  "gpt-5.6-sol",
 		Egress: EgressNone,
 	})
 	require.NoError(t, err)

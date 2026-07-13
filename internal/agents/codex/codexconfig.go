@@ -31,7 +31,7 @@ const codexConfigBasename = "config.toml"
 // operation because we are already inside demesne's sandbox isolation.
 //
 // wire_api="responses" and url-based [mcp_servers] schema are verified
-// against Codex rust-v0.134.0 (see repo docs).
+// against Codex rust-v0.144.3 (see repo docs).
 func writeCodexConfig(configDir string, servers []agents.MCPServerInfo) error {
 	var b strings.Builder
 

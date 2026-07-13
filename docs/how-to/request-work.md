@@ -24,6 +24,8 @@ Hand off a multi-step coding or analysis task to a containerised sub-agent with 
 
 > "Analyse the files in `/in/repo` and write a refactoring plan to `/out/plan.md`."
 
+When `model` is omitted, demesne uses Codex `gpt-5.6-sol` when Codex credentials are configured, otherwise Claude Code `sonnet`. Pass a model such as `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4-mini`, `fable`, `opus`, `sonnet`, or `haiku` to select a provider and model explicitly.
+
 See the [sandbox-agent-hello example](../../examples/sandbox-agent-hello/) for a minimal walkthrough.
 
 ## Persistent sessions

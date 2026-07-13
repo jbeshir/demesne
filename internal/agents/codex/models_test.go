@@ -30,8 +30,8 @@ func TestResolveModel_UnknownError(t *testing.T) {
 		"nonexistent-model",
 		" ",
 		"\t",
-		" gpt-5.5",
-		"gpt-5.5 ",
+		" gpt-5.6-sol",
+		"gpt-5.6-sol ",
 	}
 
 	for _, name := range tests {
@@ -55,10 +55,13 @@ func TestResolveModel_RejectsRemoved(t *testing.T) {
 }
 
 func TestModels_MatchCatalog(t *testing.T) {
-	assert.Len(t, Models, 2)
-	assert.Equal(t, ModelGPT55, Models[0])
-	assert.Equal(t, ModelGPT54Mini, Models[1])
-	assert.Equal(t, string(ModelGPT55), proxyopenai.Aliases()[0])
+	assert.Len(t, Models, 5)
+	assert.Equal(t, ModelGPT56Sol, Models[0])
+	assert.Equal(t, ModelGPT56Terra, Models[1])
+	assert.Equal(t, ModelGPT56Luna, Models[2])
+	assert.Equal(t, ModelGPT55, Models[3])
+	assert.Equal(t, ModelGPT54Mini, Models[4])
+	assert.Equal(t, string(ModelGPT56Sol), proxyopenai.Aliases()[0])
 }
 
 func TestAgent_Models(t *testing.T) {

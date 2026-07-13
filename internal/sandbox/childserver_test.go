@@ -248,6 +248,29 @@ func TestChildMCPServer_BackgroundParamPresent(t *testing.T) {
 	}
 }
 
+func TestChildMCPServer_ModelDescriptionIncludesCodex56(t *testing.T) {
+	r := NewRunner(Config{})
+	_, tools, _ := r.ChildMCPServer()
+
+	byName := make(map[string]mcp.Tool, len(tools))
+	for _, tl := range tools {
+		byName[tl.Name] = tl
+	}
+
+	for _, toolName := range []string{ToolSandboxAgent, ToolSandboxResearch} {
+		tl, ok := byName[toolName]
+		require.True(t, ok, "tool %q not in child catalogue", toolName)
+		prop, ok := tl.InputSchema.Properties[childParamModel].(map[string]any)
+		require.True(t, ok, "tool %q model property missing or wrong type", toolName)
+		desc, _ := prop["description"].(string)
+		assert.Contains(t, desc, "gpt-5.6-sol")
+		assert.Contains(t, desc, "gpt-5.6-terra")
+		assert.Contains(t, desc, "gpt-5.6-luna")
+		assert.Contains(t, desc, "gpt-5.5")
+		assert.Contains(t, desc, "gpt-5.4-mini")
+	}
+}
+
 func TestHandleChildScript_NoParentIdentity(t *testing.T) {
 	r := NewRunner(Config{})
 	req := mcp.CallToolRequest{}
