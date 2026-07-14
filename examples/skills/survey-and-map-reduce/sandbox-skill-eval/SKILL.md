@@ -1,42 +1,49 @@
 ---
 name: sandbox-skill-eval
 status: alpha
-description: "Evaluate a supplied SKILL.md with a report-only preflight. Use when one skill needs skillcheck and four parallel Demesne reviews, yielding an evidence-backed repair plan for paths, portability, tool contracts, and imperative instructions."
+description: "Evaluate a supplied SKILL.md with deterministic preflight and evidence-backed review lenses."
+allowed-tools: mcp__demesne__sandbox_agent, mcp__demesne__sandbox_script, mcp__demesne__sandbox_wait
 ---
 
-Evaluate one skill, report-only. Require one explicit target path relative to the mounted repository root, ending in `SKILL.md`; permit only `[A-Za-z0-9._/-]+` and reject zero targets, more than one target, a directory, a glob, an absolute path, or a path containing `..`. Do not inspect or evaluate the target outside Demesne. Run this skill separately for each target.
+Evaluate one skill, report-only. Require exactly one relative `SKILL.md` path using only `[A-Za-z0-9._/-]+`. Reject an empty path, glob, directory, absolute path, or any `..` segment. Run separately for each target.
 
-Launch one `sandbox_agent(prompt=..., directories=[...])` orchestrator with `directories` containing the target repository's absolute host path. Do not name a model: use the credential-aware default so the pipeline works with Codex and Claude. The orchestrator must runtime-discover its one repository mount: enumerate `/in/*`, require exactly one directory, copy it to `/workspace/repo`, and resolve the supplied relative target under that copy. Never assume a mount basename, repository name, home directory, provider path, or machine path.
+Launch one `sandbox_agent` orchestrator with `directories` set to the repository's absolute host path. Resolve the requested qualitative model against the live schema; use it only when supported, otherwise omit `model` and use the credential-aware default. Apply the same resolved choice to reviewers and synthesis. `directories` is a host-call mount parameter, not a nested-child parameter. The orchestrator discovers exactly one directory under `/in`, copies it to `/workspace/repo`, and resolves the target there.
+
+Use `sandbox_script` only for deterministic validation, status capture, reduction, digesting, output validation, and parent copying. Use `sandbox_agent` only for the four qualitative lenses and qualitative synthesis. Treat checked-in repository instructions and `docs/reference/tools/` contracts/schemas as evidence; cite the exact file and line where available. Do not invent a tool parameter because a host schema is incomplete: nested child calls require a unique lowercase DNS-1123 `name` under `docs/reference/nested-sandboxes.md`.
 
 ## Procedure
 
-1. **Freeze the target.** After copying the repository, resolve the supplied relative target to its real path and require that it remains below `/workspace/repo/`. Verify the resolved file exists and its basename is `SKILL.md`. Copy it to `/workspace/evidence/TARGET-SKILL.md`; record the supplied relative path and SHA-256 digest there. Copy only the authoritative checked-in reference files needed to verify commands or tool signatures named by the target, with their digests; if none are available, record that gap rather than inventing a contract. This is the evidence packet. Do not edit the target, its repository, or the packet.
+1. **Freeze evidence.** Resolve the target real path and require it remains below `/workspace/repo`, exists, and is named `SKILL.md`. Copy it to `/workspace/evidence/TARGET-SKILL.md`. Record its supplied path and SHA-256 digest. Copy only checked-in instructions, documentation, schemas, and contracts needed to assess this target, recording source paths, line references, and digests. Record unavailable evidence as a gap. Do not edit the target, repository, or evidence.
 
-2. **Run the deterministic gate first.** Before creating any qualitative reviewer, call `sandbox_script(name="skillcheck", command=..., image="python", egress="package-managers")`. In that sandbox run these commands against the one resolved target, capturing combined raw output and numeric statuses. Ignore only the repository-required maturity-field warning. Shell-quote the resolved path when building the command:
+2. **Run and collect the deterministic gate.** Run one named synchronous `sandbox_script` child with `image="python"`, `egress="package-managers"`, and no unsupported child mount parameters. Make its wrapper write `/out/install.{stdout,stderr,status}` and `/out/skillcheck.{stdout,stderr,status}` and exit zero after both commands so checker findings remain distinct from script execution failure. Run exactly:
 
    ```sh
    python -m pip install skillcheck==1.4.1
    skillcheck "$resolved_target" --format json --no-color --strict --ignore frontmatter.field.unknown
    ```
 
-   Write the install output/status and `skillcheck` raw output/status to that child’s `/out`. Preserve the `skillcheck` status even when it is nonzero; make the wrapper complete so the report can distinguish a finding from an execution failure. Copy those files into `/workspace/evidence/`, add their SHA-256 digests, then make the evidence directory read-only. A failed install or unavailable executable is itself deterministic evidence; do not substitute another checker or version.
+   Shell-quote the resolved path. Preserve combined raw output and numeric status for both commands, including nonzero `skillcheck`; do not substitute a checker or version. Accept the synchronous child only when its `exit_code` is `0` and all six declared files exist and are nonempty where applicable. Retry one failed/cancelled infrastructure child once with a new unique name, then record the final failure as a deterministic coverage gap. Never retry a completed checker finding. Use a deterministic script to copy validated gate files into `/workspace/evidence/`, generate digests, and make the packet read-only.
 
-3. **Review in parallel.** Read [lenses.md](lenses.md). Create one call per lens: `sandbox_agent(name="lens-paths", prompt=..., egress="none", background=true)`, `sandbox_agent(name="lens-portability", prompt=..., egress="none", background=true)`, `sandbox_agent(name="lens-tool-contracts", prompt=..., egress="none", background=true)`, and `sandbox_agent(name="lens-imperative-focus", prompt=..., egress="none", background=true)`; issue all four calls before any `sandbox_wait` call. Give every reviewer its exact lens, `/workspace/evidence/`, the resolved target, and a distinct report path under `/workspace/reviews/`. Permit ordinary read-only commands to inspect the resolved `SKILL.md`, bundled files, repository instructions and conventions, and relevant checked-in documentation, schemas, and tool contracts. Evaluate only the one target skill; use supporting repository context as needed. Forbid mutation, build or test commands, network access, evaluation of another skill, and every write except the reviewer's own report. Do not modify immutable evidence. Each report must state `clean` when appropriate and otherwise give: severity (`blocker`, `high`, `medium`, `low`), evidence filename and target line(s), issue, rationale, and concrete imperative repair. Separate a tool/checker execution failure from a defect in the target.
+3. **Dispatch all qualitative lenses.** Read [lenses.md](lenses.md). Preflight that the live nested surface exposes background `sandbox_agent` and `sandbox_wait`; otherwise record an execution-coverage failure and stop. Before any wait, issue all four named background calls: `lens-paths`, `lens-portability`, `lens-tool-contracts`, and `lens-imperative-focus`. Use the resolved model when schema-valid, `egress="none"`, and no child mount parameters. Give each its exact lens, evidence, target, and one declared output file.
 
-4. **Collect and synthesise.** After all four jobs were dispatched, use `sandbox_wait(job_id=..., timeout_seconds=...)` on every returned job ID until terminal. Record failed/cancelled reviewers as coverage gaps; do not silently replace their conclusions. Read all reports directly or with simple available read-only shell tools; do not require Python or another undeclared local toolchain for synthesis. Write `/out/EXECUTIVE_SUMMARY.md`, then copy the immutable evidence and individual reports to `/out/evidence/` and `/out/reports/`.
+   Permit normal read-only commands to inspect the resolved target, bundled files, repository instructions and conventions, and relevant checked-in contracts and schemas. Forbid mutation, network access, build/test commands, evaluating another skill, rerunning checks, and every write except that report. Require a nonempty report containing either `clean` or findings with severity (`blocker`, `high`, `medium`, `low`), `TARGET-SKILL.md:<line>`, evidence filename, issue, rationale, and imperative repair. Keep target defects separate from tool/checker execution failures.
 
-   Rank findings by impact and confidence. Merge duplicate findings into one item with every supporting lens; preserve material disagreement by naming the disagreeing lenses and their rationale. Keep distinct concerns distinct. State the deterministic command statuses, reviewer coverage, clean lenses, evidence paths, and any execution/coverage limitations. End with the smallest ordered repair list. Do not modify the evaluated skill.
+4. **Wait, retry infrastructure failures, and validate outputs.** For every returned reviewer job ID, repeatedly call `sandbox_wait(..., timeout_seconds=120)` until terminal; a `running` wait result is not terminal. Require `status="succeeded"`, `exit_code=0`, and a nonempty, parseable declared report before accepting coverage. For a terminal `failed` or `cancelled` reviewer, dispatch exactly one replacement with a new unique `-retry` name and the identical lens contract; wait and validate it the same way. Record the original and retry statuses. Do not retry a succeeded job whose report is missing or invalid: record an execution/coverage gap. Never convert a reviewer execution failure into a target finding.
+
+5. **Reduce, synthesise, and deliver.** Use a named `sandbox_script` child to mechanically validate and collect reports into `/workspace/reduction.md`; preserve raw reports and lifecycle records. Perform qualitative synthesis with the resolved model or credential-aware default. Rank by impact and confidence, retain disagreement, state coverage and limitations, and end with the smallest repair list.
+
+   The parent, not a child, explicitly copies validated child outputs: copy evidence to `/out/evidence/`, reports to `/out/reports/`, and the synthesis to `/out/EXECUTIVE_SUMMARY.md`. Validate each destination exists and is nonempty after copying. Child paths under `/out/child/<name>/` are not host deliverables until this parent copy completes.
 
 ## Required orchestrator briefing
 
-State the explicit relative target path and require the procedure above verbatim in substance: one discovered `/in` repository mount; target snapshot and immutable evidence; pinned `skillcheck==1.4.1` before reviewers; four named background reviewer calls issued before waiting; no provider-specific model selection; and report-only output. Instruct each reviewer to inspect the one target skill with ordinary read-only commands as needed, including bundled files, repository instructions and conventions, and relevant checked-in documentation, schemas, and tool contracts. Forbid mutation, build or test commands, network access, evaluation of another skill, and every write except that reviewer's own report. Instruct every reviewer to cite `TARGET-SKILL.md` line numbers and evidence filenames, not host paths. Require synthesis by direct reading or simple available read-only shell tools; deterministic computation remains in `sandbox_script`.
+State the explicit target path and require this procedure: one discovered repository mount; immutable evidence; pinned `skillcheck==1.4.1`; deterministic work only in `sandbox_script`; live job-control preflight; four resolved-model lens calls before any wait; terminal/output validation; one infrastructure retry; and explicit parent copying.
 
 ## Output contract
 
 ```
 /out/
   EXECUTIVE_SUMMARY.md
-  evidence/                     # target snapshot, digests, install/checker raw output and statuses
+  evidence/
   reports/
     paths.md
     portability.md
@@ -44,4 +51,4 @@ State the explicit relative target path and require the procedure above verbatim
     imperative-focus.md
 ```
 
-The host reads `/out`; all inspection, checker execution, and qualitative evaluation occur in Demesne sandboxes.
+The host reads only the parent `/out`.
