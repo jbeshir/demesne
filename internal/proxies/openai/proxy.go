@@ -25,6 +25,11 @@ const ChatGPTBase = "https://" + string(ChatGPTHost)
 // rewritten to this before forwarding.
 const chatgptResponsesPath = "/backend-api/codex/responses"
 
+// chatgptModelsPath is the path on the ChatGPT backend that serves the
+// Codex model catalog. The local sidecar exposes the same narrow path;
+// client_version and any other query parameters pass through unchanged.
+const chatgptModelsPath = "/backend-api/codex/models"
+
 // listenPort is the loopback port the proxy binds inside the per-sandbox
 // sidecar. The sidecar's network namespace is isolated, so the port is
 // purely internal and has no host-side surface.
@@ -66,6 +71,7 @@ const (
 
 	bearerPrefix  = "Bearer "
 	pathResponses = "/v1/responses"
+	pathModels    = chatgptModelsPath
 
 	originatorValue = "codex_cli_rs"
 	codexVersion    = "0.144.3"
@@ -73,11 +79,19 @@ const (
 )
 
 // allowedEndpoints is the explicit (method, path) allowlist the proxy
-// will forward. Only POST /v1/responses is permitted — the ChatGPT
-// Codex backend uses SSE over POST, not WebSockets.
+// will forward. POST /v1/responses carries the Codex Responses-wire-API
+// stream; GET /backend-api/codex/models is a narrow catalog fetch used
+// before launching Codex so the sandbox never needs OAuth tokens or broader
+// egress. FedRAMP/organization/project headers from the upstream protocol
+// are intentionally not implemented: nothing in the host's config or
+// credential plumbing (Config, TokenSet) carries those values, and inventing
+// new host env/file config for them is out of scope.
 var allowedEndpoints = map[string]map[string]struct{}{
 	http.MethodPost: {
 		pathResponses: {},
+	},
+	http.MethodGet: {
+		pathModels: {},
 	},
 }
 
@@ -143,9 +157,14 @@ func newProxyServer(
 			r.SetURL(target)
 			// Make the upstream see the right virtual host.
 			r.Out.Host = target.Host
-			// Rewrite the path: the client sends /v1/responses but the
-			// ChatGPT backend endpoint is /backend-api/codex/responses.
-			r.Out.URL.Path = chatgptResponsesPath
+			switch r.In.URL.Path {
+			case pathResponses:
+				// Rewrite the path: the client sends /v1/responses but the
+				// ChatGPT backend endpoint is /backend-api/codex/responses.
+				r.Out.URL.Path = chatgptResponsesPath
+			case pathModels:
+				r.Out.URL.Path = chatgptModelsPath
+			}
 			if tracker != nil {
 				// Force identity so the usage parser sees raw SSE bytes —
 				// the backend may otherwise respond with gzip, silently
@@ -159,6 +178,9 @@ func newProxyServer(
 	}
 	if tracker != nil {
 		rp.ModifyResponse = func(resp *http.Response) error {
+			if resp.Request == nil || resp.Request.URL == nil || resp.Request.URL.Path != chatgptResponsesPath {
+				return nil
+			}
 			xReqID := resp.Header.Get("x-request-id")
 			resp.Body = wrapResponseBody(resp.Body, resp.Header.Get("Content-Type"), xReqID, tracker)
 			return nil
@@ -176,11 +198,10 @@ func newProxyServer(
 }
 
 // gatingHandler wraps the reverse proxy with the endpoint allowlist and the
-// agent-token check. Only POST /v1/responses is permitted. On a valid request
-// the handler stamps accessToken onto Authorization, sets ChatGPT-Account-ID
-// when accountID is non-empty, and adds the originator/version/user-agent
-// headers before forwarding. The access token is used as-is; the handler
-// never refreshes it.
+// agent-token check. On a valid request the handler stamps accessToken onto
+// Authorization, sets ChatGPT-Account-ID when accountID is non-empty, and
+// adds the originator/version/user-agent headers before forwarding. The
+// access token is used as-is; the handler never refreshes it.
 func gatingHandler(next http.Handler, agentToken, accessToken, accountID string) http.Handler {
 	expectedAuth := bearerPrefix + agentToken
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -22,9 +22,58 @@ prompt=$2
 
 CODEX_HOME="$PWD/.codex"
 CODEX_CONFIG_PATH=${CODEX_CONFIG_PATH:-/in/.agent/config.toml}
+CODEX_MODEL_CATALOG_PATH="$CODEX_HOME/model-catalog.json"
 export CODEX_HOME
 mkdir -p "$CODEX_HOME"
 cp "$CODEX_CONFIG_PATH" "$CODEX_HOME/config.toml"
+# model_catalog_json must be a top-level key, so it has to land before the
+# first `[table]` header (`[model_providers.demesne]`) in the copied config —
+# a bare `key = value` appended after that header would be parsed as
+# belonging to that table instead. Prepending guarantees top-level placement
+# regardless of the file's internal structure.
+tmp_config=$(mktemp)
+{
+    printf 'model_catalog_json = "%s"\n' "$CODEX_MODEL_CATALOG_PATH"
+    cat "$CODEX_HOME/config.toml"
+} >"$tmp_config"
+mv "$tmp_config" "$CODEX_HOME/config.toml"
+
+fetch_model_catalog() {
+    if [ -z "${DEMESNE_OPENAI_AGENT_KEY:-}" ]; then
+        printf 'codex-retry: %s is required to fetch Codex model catalog\n' "DEMESNE_OPENAI_AGENT_KEY" >&2
+        return 1
+    fi
+
+    tmp_catalog=$(mktemp)
+    status=$(curl -sS \
+        -H "Authorization: Bearer $DEMESNE_OPENAI_AGENT_KEY" \
+        -H "version: 0.144.3" \
+        -H "User-Agent: codex_cli_rs/0.144.3 (demesne)" \
+        -o "$tmp_catalog" \
+        -w '%{http_code}' \
+        'http://127.0.0.1:8086/backend-api/codex/models?client_version=0.144.3') || {
+        rc=$?
+        rm -f "$tmp_catalog"
+        printf 'codex-retry: failed to fetch Codex model catalog from sidecar (curl exit %d)\n' "$rc" >&2
+        return 1
+    }
+    if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+        printf 'codex-retry: failed to fetch Codex model catalog from sidecar: HTTP %s\n' "$status" >&2
+        if [ -s "$tmp_catalog" ]; then
+            sed -n '1,5p' "$tmp_catalog" >&2
+        fi
+        rm -f "$tmp_catalog"
+        return 1
+    fi
+    if ! node -e 'const fs = require("fs"); const path = process.argv[1]; const body = JSON.parse(fs.readFileSync(path, "utf8")); if (!body || !Array.isArray(body.models) || body.models.length === 0) { throw new Error("expected non-empty models array"); }' "$tmp_catalog" 2>/dev/null; then
+        rm -f "$tmp_catalog"
+        printf 'codex-retry: sidecar returned unusable Codex model catalog JSON; expected object with non-empty models array\n' >&2
+        return 1
+    fi
+    mv "$tmp_catalog" "$CODEX_MODEL_CATALOG_PATH"
+}
+
+fetch_model_catalog || exit 1
 
 cap=$(mktemp)
 rc_file=$(mktemp)
