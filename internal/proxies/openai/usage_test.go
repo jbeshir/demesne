@@ -24,10 +24,10 @@ func TestTracker_AddAccumulates(t *testing.T) {
 	tc2.OutputTokens = 25
 	tc2.InputTokensDetails.CachedTokens = 30
 	tc2.OutputTokensDetails.ReasoningTokens = 5
-	tr.Add("gpt-5.5", tc1, "")
-	tr.Add("gpt-5.5", tc2, "")
+	tr.Add("gpt-5.6-sol", tc1, "")
+	tr.Add("gpt-5.6-sol", tc2, "")
 	snap := tr.snapshot()
-	model := snap.PerModel["gpt-5.5"]
+	model := snap.PerModel["gpt-5.6-sol"]
 	assert.Equal(t, int64(150), model.InputTokens)
 	assert.Equal(t, int64(225), model.OutputTokens)
 	assert.Equal(t, int64(80), model.CachedTokens)
@@ -41,13 +41,15 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 	var tc TokenCounts
 	tc.InputTokens = 100
 	tc.OutputTokens = 200
-	tr.Add("gpt-5.5", tc, "")
+	tc.InputTokensDetails.CachedTokens = 25
+	tr.Add("gpt-5.6-sol", tc, "")
 
 	data, err := os.ReadFile(path) //nolint:gosec // path is under t.TempDir()
 	require.NoError(t, err)
 	var snap Snapshot
 	require.NoError(t, json.Unmarshal(data, &snap))
-	assert.Equal(t, int64(100), snap.PerModel["gpt-5.5"].InputTokens)
+	assert.Equal(t, int64(100), snap.PerModel["gpt-5.6-sol"].InputTokens)
+	assert.Equal(t, int64(25), snap.PerModel["gpt-5.6-sol"].CachedTokens)
 
 	// .tmp must not survive the rename.
 	_, err = os.Stat(path + ".tmp")
@@ -55,13 +57,13 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 }
 
 // sseFixture is a realistic Responses API SSE stream with a
-// response.completed event carrying input, cached, output, and
-// reasoning token counts.
-const sseFixture = `data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.5"}}
+// response.completed event carrying observable input, cached-read, output,
+// and reasoning token counts.
+const sseFixture = `data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.6-sol"}}
 
 data: {"type":"response.output_text.delta","delta":"Hi"}
 
-data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.5","usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":1000},"output_tokens":345,"output_tokens_details":{"reasoning_tokens":40},"total_tokens":1545}}}
+data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":900},"output_tokens":345,"output_tokens_details":{"reasoning_tokens":40},"total_tokens":1545}}}
 
 data: [DONE]
 
@@ -76,13 +78,13 @@ func TestSSEInterceptor_ResponseCompleted(t *testing.T) {
 	require.NoError(t, w.Close())
 
 	snap := tr.snapshot()
-	require.Contains(t, snap.PerModel, "gpt-5.5", "tracker must record gpt-5.5 usage")
-	m := snap.PerModel["gpt-5.5"]
+	require.Contains(t, snap.PerModel, "gpt-5.6-sol", "tracker must record gpt-5.6-sol usage")
+	m := snap.PerModel["gpt-5.6-sol"]
 	assert.Equal(t, int64(1200), m.InputTokens)
-	assert.Equal(t, int64(1000), m.CachedTokens)
+	assert.Equal(t, int64(900), m.CachedTokens)
 	assert.Equal(t, int64(345), m.OutputTokens)
 	assert.Equal(t, int64(40), m.ReasoningTokens)
-	// Cost > 0: gpt-5.5 has indicative pricing.
+	// Cost > 0: gpt-5.6-sol has indicative pricing.
 	assert.Greater(t, float64(snap.CostUSD), 0.0, "cost must be non-zero for known model")
 }
 
@@ -97,7 +99,7 @@ func TestWrapResponseBody_DispatchesByContentType(t *testing.T) {
 		_, err := io.Copy(io.Discard, w)
 		require.NoError(t, err)
 		require.NoError(t, w.Close())
-		assert.Contains(t, tr.snapshot().PerModel, "gpt-5.5",
+		assert.Contains(t, tr.snapshot().PerModel, "gpt-5.6-sol",
 			"content-type %q must be parsed as SSE", ct)
 	}
 }
@@ -111,8 +113,8 @@ func TestSSEInterceptor_HandlesSplitReads(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 	snap2 := tr.snapshot()
-	require.Contains(t, snap2.PerModel, "gpt-5.5")
-	m := snap2.PerModel["gpt-5.5"]
+	require.Contains(t, snap2.PerModel, "gpt-5.6-sol")
+	m := snap2.PerModel["gpt-5.6-sol"]
 	assert.Equal(t, int64(1200), m.InputTokens)
 	assert.Equal(t, int64(345), m.OutputTokens)
 }
@@ -140,7 +142,7 @@ func TestSSEInterceptor_CompletedOverridesFallback(t *testing.T) {
 	// The response.completed values must win.
 	body := `data: {"type":"some.event","usage":{"input_tokens":999,"output_tokens":999}}
 
-data: {"type":"response.completed","response":{"model":"gpt-5.5","usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":1000},"output_tokens":345,"output_tokens_details":{"reasoning_tokens":40},"total_tokens":1545}}}
+data: {"type":"response.completed","response":{"model":"gpt-5.6-sol","usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":900},"output_tokens":345,"output_tokens_details":{"reasoning_tokens":40},"total_tokens":1545}}}
 
 data: [DONE]
 
@@ -152,8 +154,8 @@ data: [DONE]
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 	snap3 := tr.snapshot()
-	require.Contains(t, snap3.PerModel, "gpt-5.5")
-	m := snap3.PerModel["gpt-5.5"]
+	require.Contains(t, snap3.PerModel, "gpt-5.6-sol")
+	m := snap3.PerModel["gpt-5.6-sol"]
 	assert.Equal(t, int64(1200), m.InputTokens, "response.completed must override top-level usage")
 	assert.Equal(t, int64(345), m.OutputTokens)
 }
@@ -170,7 +172,7 @@ func TestSSEInterceptor_IgnoresGarbage(t *testing.T) {
 }
 
 func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
-	body := `{"id":"resp_1","model":"gpt-5.5","usage":{"input_tokens":13,"output_tokens":7,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0},"total_tokens":20}}`
+	body := `{"id":"resp_1","model":"gpt-5.6-sol","usage":{"input_tokens":13,"output_tokens":7,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0},"total_tokens":20}}`
 	tr := NewTracker("")
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
 	w := wrapResponseBody(r, "application/json", "", tr)
@@ -179,8 +181,8 @@ func TestJSONInterceptor_NonStreamingResponse(t *testing.T) {
 	require.NoError(t, w.Close())
 	assert.Equal(t, body, string(out), "non-streaming body must pass through unchanged")
 	snap4 := tr.snapshot()
-	require.Contains(t, snap4.PerModel, "gpt-5.5")
-	m := snap4.PerModel["gpt-5.5"]
+	require.Contains(t, snap4.PerModel, "gpt-5.6-sol")
+	m := snap4.PerModel["gpt-5.6-sol"]
 	assert.Equal(t, int64(13), m.InputTokens)
 	assert.Equal(t, int64(7), m.OutputTokens)
 }
@@ -214,7 +216,7 @@ func TestSSEInterceptor_CapturesResponseID(t *testing.T) {
 // appears in the SSE body the x-request-id header value is used.
 func TestSSEInterceptor_FallsBackToXRequestID(t *testing.T) {
 	// Stream with no id in the response object.
-	body := `data: {"type":"response.completed","response":{"model":"gpt-5.5","usage":{"input_tokens":10,"output_tokens":5}}}
+	body := `data: {"type":"response.completed","response":{"model":"gpt-5.6-sol","usage":{"input_tokens":10,"output_tokens":5}}}
 
 data: [DONE]
 
@@ -241,7 +243,7 @@ data: [DONE]
 // TestJSONInterceptor_CapturesBodyID confirms the top-level "id" field from
 // a non-streaming JSON response is written as the requestId in usage.jsonl.
 func TestJSONInterceptor_CapturesBodyID(t *testing.T) {
-	body := `{"id":"resp_json_1","model":"gpt-5.5","usage":{"input_tokens":13,"output_tokens":7}}`
+	body := `{"id":"resp_json_1","model":"gpt-5.6-sol","usage":{"input_tokens":13,"output_tokens":7}}`
 	dir := t.TempDir()
 	tr := NewTracker(filepath.Join(dir, "usage.json"))
 	r := &nopReadCloser{Reader: strings.NewReader(body)}
@@ -293,7 +295,7 @@ func TestJSONInterceptor_DropsOnParseError(t *testing.T) {
 // no usage field increments the no-usage-block dropped counter.
 func TestJSONInterceptor_DropsOnNoUsageBlock(t *testing.T) {
 	tr := NewTracker("")
-	r := &nopReadCloser{Reader: strings.NewReader(`{"model":"gpt-5.5"}`)}
+	r := &nopReadCloser{Reader: strings.NewReader(`{"model":"gpt-5.6-sol"}`)}
 	w := wrapResponseBody(r, "application/json", "", tr)
 	_, _ = io.ReadAll(w)
 	_ = w.Close()

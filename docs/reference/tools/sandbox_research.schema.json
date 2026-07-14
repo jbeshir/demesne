@@ -10,7 +10,7 @@
     },
     "model": {
       "type": "string",
-      "description": "Model for the agent; the provider is inferred from the model. claude-code uses 'fable' (most capable), 'opus', 'sonnet', or 'haiku'; codex uses 'gpt-5.5' or 'gpt-5.4-mini'. Defaults to the credential-aware provider's default model: codex/gpt-5.5 when Codex credentials are configured, otherwise claude-code/sonnet. The live MCP input schema constrains this to the union of the configured providers' models."
+      "description": "Model for the agent; the provider is inferred from the model. claude-code uses 'fable' (most capable), 'opus', 'sonnet', or 'haiku'; codex uses 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', or 'gpt-5.4-mini'. Defaults to the credential-aware provider's default model: codex/gpt-5.6-sol when Codex credentials are configured, otherwise claude-code/sonnet. The live MCP input schema constrains this to the union of the configured providers' models."
     },
     "preamble": {
       "type": "string",

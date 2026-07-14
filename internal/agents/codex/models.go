@@ -9,15 +9,18 @@ import (
 )
 
 // ModelName is an alias for agents.ModelName so callers in this package
-// can write ModelGPT55/ModelGPT54Mini/etc. without an extra import.
+// can write ModelGPT56Sol/ModelGPT55/etc. without an extra import.
 type ModelName = agents.ModelName
 
 // Model constants for Codex model IDs validated against the live Codex CLI
-// on ChatGPT-account billing. gpt-5.5-pro and gpt-5.4-nano are rejected by
-// the backend with "not supported when using Codex with a ChatGPT account".
+// on ChatGPT-account billing. Unsupported variants are rejected by the backend
+// with "not supported when using Codex with a ChatGPT account".
 const (
-	ModelGPT55     ModelName = "gpt-5.5"
-	ModelGPT54Mini ModelName = "gpt-5.4-mini"
+	ModelGPT56Sol   ModelName = "gpt-5.6-sol"
+	ModelGPT56Terra ModelName = "gpt-5.6-terra"
+	ModelGPT56Luna  ModelName = "gpt-5.6-luna"
+	ModelGPT55      ModelName = "gpt-5.5"
+	ModelGPT54Mini  ModelName = "gpt-5.4-mini"
 )
 
 // Models is the Codex model allowlist exposed via sandbox_agent's
@@ -34,7 +37,7 @@ var Models = func() []ModelName {
 
 // DefaultModel is the model used when the caller does not specify one.
 // Must equal the alias at index 0 of proxyopenai's modelCatalog.
-const DefaultModel ModelName = ModelGPT55
+const DefaultModel ModelName = ModelGPT56Sol
 
 // ErrUnknownModel is the sentinel wrapped by ResolveModel when the
 // requested model is not in the allowlist. Use errors.Is to distinguish

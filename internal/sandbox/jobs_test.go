@@ -223,6 +223,38 @@ func TestJobWaitUnknown(t *testing.T) {
 	assert.ErrorIs(t, err, ErrJobNotFound)
 }
 
+func TestJobWaitCancellationDoesNotCancelJob(t *testing.T) {
+	m, _ := makeTestManager(t)
+	release := make(chan struct{})
+	id := m.Start("", ToolSandboxScript, syncRun(release, JobOutcome{}, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := m.Wait(ctx, id, time.Second)
+	require.ErrorIs(t, err, context.Canceled)
+	status, err := m.Status(id)
+	require.NoError(t, err)
+	assert.Equal(t, JobStatusRunning, status.Status)
+	close(release)
+}
+
+func TestJobStartDoesNotInheritRequestCancellation(t *testing.T) {
+	m, _ := makeTestManager(t)
+	reached := make(chan struct{})
+	id := m.Start("", ToolSandboxScript, func(ctx context.Context, _ JobHooks) (JobOutcome, error) {
+		close(reached)
+		<-ctx.Done()
+		return JobOutcome{}, ctx.Err()
+	})
+	select {
+	case <-reached:
+	case <-time.After(time.Second):
+		t.Fatal("background job did not start")
+	}
+	status, err := m.Status(id)
+	require.NoError(t, err)
+	assert.Equal(t, JobStatusRunning, status.Status)
+}
+
 // TestJobTTLReap verifies that terminal jobs are deleted from the registry
 // once their finishedAt is older than jobTTL.
 func TestJobTTLReap(t *testing.T) {

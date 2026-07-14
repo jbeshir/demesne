@@ -18,6 +18,9 @@ import (
 const fakeCodex = `#!/bin/sh
 printf '%s\n' "$*" >>"$CODEX_CALLS_FILE"
 printf '%s\n' "$#" >>"$CODEX_ARGC_FILE"
+if [ -n "${CODEX_CONFIG_SNAPSHOT_FILE:-}" ]; then
+    cat "$CODEX_HOME/config.toml" >"$CODEX_CONFIG_SNAPSHOT_FILE"
+fi
 
 call_count=$(wc -l <"$CODEX_ARGC_FILE" 2>/dev/null || echo 0)
 
@@ -91,6 +94,51 @@ printf '%s\n' "$*" >>"$SLEEP_CALLS_FILE"
 exit 0
 `
 
+const fakeCurl = `#!/bin/sh
+out=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -o)
+            shift
+            out=$1
+            ;;
+    esac
+    shift
+done
+
+case "${CATALOG_SCENARIO:-success}" in
+    success)
+        printf '{"models":[{"slug":"gpt-test"}]}\n' >"$out"
+        printf '200'
+        ;;
+    http)
+        printf 'upstream denied catalog\n' >"$out"
+        printf '503'
+        ;;
+    invalid)
+        printf '{"models":[]}\n' >"$out"
+        printf '200'
+        ;;
+    curl-fail)
+        printf 'curl transport failed\n' >&2
+        exit 7
+        ;;
+    *)
+        printf 'unknown catalog scenario: %s\n' "${CATALOG_SCENARIO:-}" >&2
+        exit 2
+        ;;
+esac
+`
+
+const fakeNode = `#!/bin/sh
+path=$3
+grep -q '"models"[[:space:]]*:[[:space:]]*\[' "$path" || exit 1
+grep -q '"models"[[:space:]]*:[[:space:]]*\[\]' "$path" && exit 1
+exit 0
+`
+
+const scenarioSuccess = "success"
+
 type codexScriptResult struct {
 	stdout     string
 	stderr     string
@@ -98,6 +146,7 @@ type codexScriptResult struct {
 	callsLines []string
 	argc       []string
 	sleeps     []string
+	config     string
 }
 
 type codexWrapperOpts struct {
@@ -121,6 +170,8 @@ func runCodexWrapperOpts(t *testing.T, opts codexWrapperOpts) codexScriptResult 
 	binDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(fakeCodex), 0o755)) //nolint:gosec // test temp dir; fake codex binary must be executable
 	require.NoError(t, os.WriteFile(filepath.Join(binDir, "sleep"), []byte(fakeSleep), 0o755)) //nolint:gosec // test temp dir; fake sleep binary must be executable
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(fakeCurl), 0o755))   //nolint:gosec // test temp dir; fake curl binary must be executable
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "node"), []byte(fakeNode), 0o755))   //nolint:gosec // test temp dir; fake node binary must be executable
 
 	inDir := filepath.Join(t.TempDir(), ".agent")
 	require.NoError(t, os.MkdirAll(inDir, 0o700))
@@ -130,6 +181,7 @@ func runCodexWrapperOpts(t *testing.T, opts codexWrapperOpts) codexScriptResult 
 	callsFile := filepath.Join(recDir, "calls.txt")
 	argcFile := filepath.Join(recDir, "argc.txt")
 	sleepFile := filepath.Join(recDir, "sleeps.txt")
+	configSnapshotFile := filepath.Join(recDir, "config.toml")
 
 	newPath := fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH"))
 	env := append(os.Environ(),
@@ -137,7 +189,9 @@ func runCodexWrapperOpts(t *testing.T, opts codexWrapperOpts) codexScriptResult 
 		"CODEX_SCENARIO="+opts.scenario,
 		"CODEX_CALLS_FILE="+callsFile,
 		"CODEX_ARGC_FILE="+argcFile,
+		"CODEX_CONFIG_SNAPSHOT_FILE="+configSnapshotFile,
 		"CODEX_CONFIG_PATH="+filepath.Join(inDir, "config.toml"),
+		"DEMESNE_OPENAI_AGENT_KEY=agent-token-for-catalog",
 		"SLEEP_CALLS_FILE="+sleepFile,
 		"RETRY_RESET_BUFFER_SECS=0",
 		"RETRY_BACKOFF_BASE_SECS=1",
@@ -178,6 +232,7 @@ func runCodexWrapperOpts(t *testing.T, opts codexWrapperOpts) codexScriptResult 
 		callsLines: readCodexLines(t, callsFile),
 		argc:       readCodexLines(t, argcFile),
 		sleeps:     readCodexLines(t, sleepFile),
+		config:     readCodexFile(t, configSnapshotFile),
 	}
 }
 
@@ -194,9 +249,18 @@ func readCodexLines(t *testing.T, path string) []string {
 	return strings.Split(raw, "\n")
 }
 
+func readCodexFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // path is a test temp file
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
 func TestCodexWrapperScript_Success(t *testing.T) {
 	requireSh(t)
-	res := runCodexWrapper(t, "success")
+	res := runCodexWrapper(t, scenarioSuccess)
 
 	assert.Equal(t, 0, res.exitCode)
 	assert.Contains(t, res.stdout, `"text":"done"`)
@@ -204,7 +268,53 @@ func TestCodexWrapperScript_Success(t *testing.T) {
 	assert.Contains(t, res.callsLines[0], "exec --json -s danger-full-access --skip-git-repo-check -C ")
 	assert.Contains(t, res.callsLines[0], "-m gpt-test -- do work")
 	assert.NotContains(t, res.callsLines[0], "resume")
+	assert.Contains(t, res.config, `model_catalog_json = "`)
+	assert.Contains(t, res.config, `/.codex/model-catalog.json"`)
+	assert.NotContains(t, res.config, "agent-token-for-catalog")
 	assert.Empty(t, res.sleeps)
+}
+
+func TestCodexWrapperScript_CatalogHTTPFailureStopsBeforeCodex(t *testing.T) {
+	requireSh(t)
+	res := runCodexWrapperOpts(t, codexWrapperOpts{
+		scenario: scenarioSuccess,
+		extraEnv: []string{
+			"CATALOG_SCENARIO=http",
+		},
+	})
+
+	assert.Equal(t, 1, res.exitCode)
+	assert.Empty(t, res.callsLines)
+	assert.Contains(t, res.stderr, "failed to fetch Codex model catalog from sidecar: HTTP 503")
+	assert.Contains(t, res.stderr, "upstream denied catalog")
+}
+
+func TestCodexWrapperScript_CatalogInvalidJSONStopsBeforeCodex(t *testing.T) {
+	requireSh(t)
+	res := runCodexWrapperOpts(t, codexWrapperOpts{
+		scenario: scenarioSuccess,
+		extraEnv: []string{
+			"CATALOG_SCENARIO=invalid",
+		},
+	})
+
+	assert.Equal(t, 1, res.exitCode)
+	assert.Empty(t, res.callsLines)
+	assert.Contains(t, res.stderr, "unusable Codex model catalog JSON")
+}
+
+func TestCodexWrapperScript_CatalogTokenMissingStopsBeforeCodex(t *testing.T) {
+	requireSh(t)
+	res := runCodexWrapperOpts(t, codexWrapperOpts{
+		scenario: scenarioSuccess,
+		extraEnv: []string{
+			"DEMESNE_OPENAI_AGENT_KEY=",
+		},
+	})
+
+	assert.Equal(t, 1, res.exitCode)
+	assert.Empty(t, res.callsLines)
+	assert.Contains(t, res.stderr, "DEMESNE_OPENAI_AGENT_KEY is required")
 }
 
 func TestCodexWrapperScript_QuotaThenSuccess(t *testing.T) {

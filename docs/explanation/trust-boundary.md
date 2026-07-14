@@ -21,11 +21,14 @@ that joins OpenSandbox's egress-sidecar network namespace. The sidecar runs one 
 (OpenAI proxy on `127.0.0.1:8086` for codex; anthropic proxy on
 `127.0.0.1:8088` for claude-code) — plus a Go-module proxy (`127.0.0.1:8087`, in every sandbox) and, for agent sandboxes, MCP tunnel listeners (`127.0.0.1:8089+`). The proxy holds the real upstream OAuth token; the
 agent only ever sees a per-sandbox fake token (`demesne-agent-...`)
-that the proxy validates and swaps. The proxy parses the upstream API
-response for token usage and writes a `usage.json` to the
-sidecar-private results dir after every request (copied to `/out`
-after the run). Tracking is read-only — the `cost_usd` figure is
-indicative.
+that the proxy validates and swaps. For Codex, the wrapper first uses
+that same fake token to fetch the ChatGPT Codex model catalog through a
+narrow sidecar route and writes the JSON into its private `CODEX_HOME`;
+the host OAuth file and refresh token are never mounted into the
+sandbox. The proxy parses the upstream API response for token usage and
+writes a `usage.json` to the sidecar-private results dir after every
+request (copied to `/out` after the run). Tracking is read-only — the
+`cost_usd` figure is indicative.
 
 ```mermaid
 flowchart TD

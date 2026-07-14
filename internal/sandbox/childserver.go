@@ -580,8 +580,10 @@ Not for: deterministic verification or shell scripting — use sandbox_script
 
 Model: 'haiku' for lookup, 'sonnet' (default) for general agentic work,
 'opus' for complex synthesis, 'fable' for the hardest synthesis (most
-capable, above opus). Hand off via /workspace files referenced from the
-child's prompt; copy artefacts you want returned into your own /out.`
+capable, above opus); codex uses 'gpt-5.6-sol' (default), 'gpt-5.6-terra',
+'gpt-5.6-luna', 'gpt-5.5', or 'gpt-5.4-mini'. Hand off via /workspace files
+referenced from the child's prompt; copy artefacts you want returned into your
+own /out.`
 
 const childResearchDescription = `Spawn a long-running child research agent with open internet egress.
 
@@ -607,7 +609,9 @@ const childPreambleDescription = "Prose prepended to the child's context file. "
 
 const childModelDescription = "Model: 'fable' (most capable; hardest synthesis), " +
 	"'opus' (complex synthesis), 'sonnet' (default; general agentic work), " +
-	"'haiku' (lookup / cheap). The provider is inferred automatically from the chosen model."
+	"'haiku' (lookup / cheap); codex models are 'gpt-5.6-sol' (default), " +
+	"'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', and 'gpt-5.4-mini'. " +
+	"The provider is inferred automatically from the chosen model."
 
 const childCreateDescription = `Create a persistent child sandbox and return its handle.
 
@@ -620,7 +624,7 @@ const childDestroyDescription = "Destroy a child sandbox created by sandbox_crea
 
 const childBackgroundDescription = "When true, returns immediately with {name, job_id, status:\"running\"} " +
 	"instead of blocking; poll with sandbox_status / sandbox_wait, cancel with sandbox_cancel. " +
-	"Use when the run might exceed the client tool-call timeout."
+	"Use for concurrent fan-out, detachment, progress polling, or explicit job control."
 
 const childStatusDescription = `Get the current status of a background sandbox job.
 

@@ -51,6 +51,11 @@ test-cover: sidecar-binary
 test-integration: sidecar-binary .env
 	go tool godotenv -f .env go test -v -tags integration ./internal/sandbox/
 
+# Requires real OpenSandbox and Codex credentials; intentionally exceeds five minutes.
+.PHONY: test-long-sync-integration
+test-long-sync-integration: sidecar-binary .env
+	go tool godotenv -f .env go test -v -tags integration ./internal/sandbox/ -run TestRunner_Integration_CodexLongSynchronousMCP
+
 .PHONY: fmt
 fmt:
 	go fmt ./...

@@ -18,7 +18,7 @@ Quality here is *pursued*, not merely passed. Keep two things distinct:
 
 **Watch out (cross-cutting):**
 - **Every child's `/out` is isolated** at `/out/child/<name>` — `sandbox_script` *and* `sandbox_agent` alike. Never tell a child to write to `/out/...`; have children write artefacts (screenshots, reports, per-phase summaries) under the shared `/workspace`, and the orchestrator relays everything into its own `/out` at the end. `/workspace` is shared across the run but torn down on exit, so only what the orchestrator copies into `/out` survives.
-- **Launch every `sandbox_agent` child (write, improvement reviewer, fix) with `background: true` and poll with `sandbox_wait`.** A synchronous agent child that runs past ~300s trips the MCP idle timeout and aborts on the orchestrator side *while it keeps running* — mutating shared `/workspace` concurrently with later phases and racing them. Background + poll is the only safe way to run agent children.
+- **Launch every `sandbox_agent` child (write, improvement reviewer, fix) with `background: true` and poll with `sandbox_wait`.** Background dispatch is required here to control sequencing and avoid shared-`/workspace` races: wait for each child to reach a terminal state before the next phase reads or mutates its output.
 - **The playtest correctness check is non-negotiable:** a story with a dead link or an unreachable passage is broken, no matter how good the prose — never deliver a bundle whose playtest exited non-zero.
 
 ## Story format and tooling

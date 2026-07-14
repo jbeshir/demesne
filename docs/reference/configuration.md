@@ -29,7 +29,7 @@ The output root is always appended to the effective mount allowlist, so /out and
 - **Codex** (preferred default). Authenticate with `codex login` (the OpenAI Codex CLI); point demesne at the resulting `auth.json` via `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`). When this file exists, demesne uses Codex by default.
 - **Claude Code** (fallback default). Produce a long-lived token with `claude setup-token`; export it as `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN`. Used by default when Codex is not configured.
 
-When no model is specified, demesne picks Codex if its credentials are configured, otherwise Claude Code. Configuring both providers is fine — Codex is still preferred. Set neither and demesne errors with a Codex setup-path message.
+When no model is specified, demesne picks Codex if its credentials are configured, otherwise Claude Code. The Codex default model is `gpt-5.6-sol`; `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, and `gpt-5.4-mini` remain selectable. Configuring both providers is fine — Codex is still preferred. Set neither and demesne errors with a Codex setup-path message.
 
 `sandbox_agent` and `sandbox_research` advertise the `model` enum in their MCP input schema filtered to the union of the configured providers' models (codex-first; when neither is configured the enum is omitted and the tools error at call time).
 

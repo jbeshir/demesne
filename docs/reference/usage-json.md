@@ -11,7 +11,7 @@ The top-level object and each per-model entry share the following structure.
 | Field | JSON tag | Type | Units | Description |
 |-------|----------|------|-------|-------------|
 | Total cost | `cost_usd` | number | USD | Sum of `cost_usd` across all models seen in this run. Indicative — see Notes. |
-| Per-model breakdown | `per_model` | object | — | Map from model ID string to a `ModelReport` object. Keys are the Anthropic or OpenAI model identifiers as returned by the API (e.g. `"claude-sonnet-4-6"`, `"gpt-5.5"`). |
+| Per-model breakdown | `per_model` | object | — | Map from model ID string to a `ModelReport` object. Keys are the Anthropic or OpenAI model identifiers as returned by the API (e.g. `"claude-sonnet-4-6"`, `"gpt-5.6-sol"`). |
 
 ### Per-model entry — Anthropic provider (`ModelReport`)
 
@@ -25,7 +25,7 @@ The top-level object and each per-model entry share the following structure.
 
 ### Per-model entry — OpenAI/codex provider (`ModelReport`)
 
-The OpenAI `ModelReport` differs from the Anthropic one: it omits the two cache-write/read fields and adds `cached_tokens` and `reasoning_tokens` instead, matching the OpenAI Responses API usage shape.
+The OpenAI `ModelReport` differs from the Anthropic one: it reports `cached_tokens` and `reasoning_tokens`, matching the observable OpenAI Responses API usage shape.
 
 | Field | JSON tag | Type | Units | Description |
 |-------|----------|------|-------|-------------|
@@ -38,8 +38,9 @@ The OpenAI `ModelReport` differs from the Anthropic one: it omits the two cache-
 ## Notes
 
 - **`cost_usd` is indicative.** Demesne computes it from an embedded per-model pricing table and the token counts reported by the upstream API. For Claude Code OAuth, the user is billed against a Claude Console subscription rather than on a per-request basis, so the figure is useful for relative cost tracking but is not what is actually charged. The same caveat applies to the OpenAI/codex provider, where ChatGPT-OAuth is subscription-based.
+- OpenAI prompt-cache writes are billed at 1.25× the standard input rate, but current observed Responses usage payloads do not expose cache-write token counts. OpenAI/codex estimates therefore use only observable input, cached-read, output, and reasoning counts.
 - The Anthropic `usage.json` is written to `<output_dir>/usage.json` — the same directory returned as `output_dir` in the tool result. The sidecar writes it first to a private `sidecar-results/` directory and copies it to `/out` after the agent exits.
-- The OpenAI/codex case (when a codex model is used) emits the same top-level shape (`cost_usd` + `per_model`), but each `ModelReport` entry carries `cached_tokens` and `reasoning_tokens` instead of the Anthropic cache fields.
+- The OpenAI/codex case (when a codex model is used) emits the same top-level shape (`cost_usd` + `per_model`), but each `ModelReport` entry carries `cached_tokens` and `reasoning_tokens` instead of the Anthropic cache field names.
 - If the sidecar never observed a usage block (e.g., the agent exited before any API call completed), `usage.json` may not exist or may reflect only the requests that did complete.
 
 ## Example

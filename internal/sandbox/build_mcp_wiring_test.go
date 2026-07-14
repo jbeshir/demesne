@@ -9,6 +9,8 @@ import (
 )
 
 func TestBuildMCPWiring_ParentJobIDForFileGenServers(t *testing.T) {
+	// The demesne self-server uses the same streaming tunnel for Claude and
+	// Codex; ParentJobID lets either provider spawn descendants.
 	r := &Runner{cfg: Config{MCPServers: []string{
 		mcpproxy.DemesneServerName, "image-gen-mcp", "mermaid", "workflowy",
 	}}}

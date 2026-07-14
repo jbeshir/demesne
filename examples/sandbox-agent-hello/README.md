@@ -36,7 +36,7 @@ The tool returns the sub-agent's summary text. The `output_dir` on the host cont
 ```
 
 - `prompt` — the task text handed to the agent. The agent runs inside a fresh sandbox and can write artefacts to `/out`.
-- `model` — omitted here, so demesne uses its credential-aware default: Codex/gpt-5.5 when Codex credentials are configured, otherwise claude-code/sonnet. Pass a model to select the provider and model: `fable`, `opus`, `sonnet`, `haiku` (claude-code); `gpt-5.5`, `gpt-5.4-mini` (codex).
+- `model` — omitted here, so demesne uses its credential-aware default: Codex/gpt-5.6-sol when Codex credentials are configured, otherwise claude-code/sonnet. Pass a model to select the provider and model: `fable`, `opus`, `sonnet`, `haiku` (claude-code); `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4-mini` (codex).
 - `egress` — `package-managers` allows the agent to reach npm/PyPI/conda registries in addition to the vendor API proxy (Anthropic or OpenAI/Codex), which is always reachable. Use `none` to lock down all egress except the API proxy.
 
 **Note:** `egress: "open"` is not permitted for `sandbox_agent`. If you need unrestricted outbound access, use `sandbox_research` instead — but be aware that `sandbox_research` runs in a private workspace with no `/in` mounts. See [`../../docs/reference/nested-sandboxes.md`](../../docs/reference/nested-sandboxes.md) for the layout and conventions children follow.
