@@ -1,6 +1,6 @@
 # Evaluation lenses
 
-Give each reviewer the target snapshot and deterministic evidence packet. Cite `TARGET-SKILL.md:<line>` and an evidence filename. Do not re-run checks or widen scope.
+Give each reviewer the target snapshot and deterministic evidence packet. Permit ordinary read-only commands to inspect the one resolved target `SKILL.md`, bundled files, repository instructions and conventions, and relevant checked-in documentation, schemas, and tool contracts. Evaluate only that target skill; use supporting repository context as needed. Do not mutate files, run build or test commands, use network access, evaluate another skill, or write anything except the reviewer's own report. Cite `TARGET-SKILL.md:<line>` and an evidence filename. Do not re-run checks.
 
 ## paths
 
