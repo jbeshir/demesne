@@ -543,13 +543,13 @@ Egress is restricted by default. 'package-managers' allows npm/PyPI/conda
 registries; 'none' denies all outbound traffic.
 
 The returned sandbox_id is passed to sandbox_exec, sandbox_upload,
-sandbox_download, and sandbox_destroy. TTL is 24h, refreshed on each
+sandbox_download, and sandbox_destroy. TTL is 48h, refreshed on each
 sandbox_exec call. Use sandbox_destroy to tear it down explicitly.`
 
 const execToolDescription = `Run a shell command in an existing sandbox.
 
 Executed with /bin/sh -c. Working directory is /out. The sandbox's TTL is
-refreshed by 24h before the command runs.
+refreshed by 48h before the command runs.
 
 The result text contains the exit code and the captured stdout.`
 

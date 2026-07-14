@@ -624,7 +624,7 @@ const childDestroyDescription = "Destroy a child sandbox created by sandbox_crea
 
 const childBackgroundDescription = "When true, returns immediately with {name, job_id, status:\"running\"} " +
 	"instead of blocking; poll with sandbox_status / sandbox_wait, cancel with sandbox_cancel. " +
-	"Use when the run might exceed the client tool-call timeout."
+	"Use for concurrent fan-out, detachment, progress polling, or explicit job control."
 
 const childStatusDescription = `Get the current status of a background sandbox job.
 

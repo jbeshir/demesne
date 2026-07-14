@@ -23,10 +23,64 @@ import (
 )
 
 const (
-	codexMCPFixtureServer = "codex-mcp-fixture"
-	codexMCPFixtureTool   = "return_fixture_marker"
-	codexMCPFixtureMarker = "DEMESNE_CODEX_MCP_FIXTURE_RESULT_V1"
+	codexMCPFixtureServer     = "codex-mcp-fixture"
+	codexMCPFixtureTool       = "return_fixture_marker"
+	codexMCPFixtureMarker     = "DEMESNE_CODEX_MCP_FIXTURE_RESULT_V1"
+	codexLongMCPFixtureMarker = "DEMESNE_CODEX_LONG_MCP_FIXTURE_RESULT_V1"
 )
+
+// TestRunner_Integration_CodexLongSynchronousMCP is an opt-in proof that the
+// pinned Codex client permits a tunneled MCP call to run for up to Demesne's
+// 48-hour job lifetime, including past Codex's former 300-second default. Run
+// only with `make test-long-sync-integration`.
+func TestRunner_Integration_CodexLongSynchronousMCP(t *testing.T) {
+	authFile := os.Getenv("DEMESNE_CODEX_AUTH_FILE")
+	if authFile == "" {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		authFile = filepath.Join(home, ".codex", "auth.json")
+	}
+	require.FileExists(t, authFile)
+	runner := codexAgentIntegrationRunner(t, authFile)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+	defer cancel()
+	var calls atomic.Int32
+	var elapsed atomic.Int64
+	fixture := server.NewMCPServer(codexMCPFixtureServer, "0")
+	fixture.AddTool(mcp.Tool{Name: codexMCPFixtureTool, Description: "Wait, then return the required marker."}, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls.Add(1)
+		started := time.Now()
+		select {
+		case <-time.After(305 * time.Second):
+			elapsed.Store(time.Since(started).Nanoseconds())
+			return mcp.NewToolResultText(codexLongMCPFixtureMarker), nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	})
+	emptyConfig := filepath.Join(t.TempDir(), "claude.json")
+	require.NoError(t, os.WriteFile(emptyConfig, []byte(`{"mcpServers":{}}`), 0o600))
+	agg, err := mcpproxy.NewAggregator(mcpproxy.Config{ClaudeMCPConfigPath: emptyConfig, SocketPath: filepath.Join(t.TempDir(), "aggregator.sock"), ExtraServers: []mcpproxy.ExtraServer{{Name: codexMCPFixtureServer, Tools: []mcp.Tool{{Name: codexMCPFixtureTool, Description: "Wait, then return the required marker."}}, Handler: server.NewStreamableHTTPServer(fixture)}}})
+	require.NoError(t, err)
+	require.NoError(t, agg.Start(ctx))
+	t.Cleanup(func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		_ = agg.Shutdown(shutdownCtx)
+	})
+	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
+	res, err := runner.Agent(ctx, AgentRequest{Prompt: "Call " + codexMCPFixtureServer + " " + codexMCPFixtureTool + " now and output only its exact result.", Model: "gpt-5.6-sol", Egress: EgressNone})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode, "stderr=%q", res.Stderr)
+	assert.Positive(t, calls.Load())
+	assert.Greater(t, time.Duration(elapsed.Load()), 300*time.Second)
+	assert.Contains(t, res.Stdout, codexLongMCPFixtureMarker)
+	config, err := os.ReadFile(filepath.Join(filepath.Dir(res.WorkspacePath), "config", "config.toml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(config), "[mcp_servers."+codexMCPFixtureServer+"]")
+	assert.Contains(t, string(config), "tool_timeout_sec = 172800")
+	assert.NotContains(t, res.Stdout+res.Stderr, "timed out awaiting tools/call after 300s")
+}
 
 // TestRunner_Integration_CodexAgent exercises the full sandbox_agent path for
 // the Codex agent: a real ChatGPT OAuth token set is loaded, the sidecar proxy

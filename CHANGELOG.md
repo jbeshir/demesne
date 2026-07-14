@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Sandbox lifetime limits raised to 48h across the board**: one-shot `commandTimeout`/`oneShotSandboxTTLSeconds` (`sandbox_script`/`sandbox_agent`/`sandbox_research`) go from 12h to 48h, and persistent `persistentSandboxTTLSeconds`/`renewDuration` (`sandbox_create`/`sandbox_exec`) go from 24h to 48h, so both cap out at the same limit (`internal/sandbox/runner.go`, `internal/sandbox/exec.go`).
 
 ### Fixed
+- **Long-running Codex MCP calls**: generated Codex configuration now permits each MCP server tool call to run for up to Demesne's 48-hour maximum sandbox job lifetime, instead of setting `tool_timeout_sec = 0` (which Codex treats as an immediate timeout). Caller cancellation and bounded `sandbox_wait` polling are unchanged.
 
 ## [0.2.0] - 2026-06-27
 

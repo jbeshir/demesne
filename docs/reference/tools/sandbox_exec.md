@@ -14,7 +14,7 @@ Run a shell command in an existing sandbox.
 | Hint | Value | Rationale |
 |------|-------|-----------|
 | `readOnlyHint` | `false` | Executes arbitrary commands that can mutate the sandbox filesystem. |
-| `destructiveHint` | `true` | Can delete files inside the sandbox and mutate persistent sandbox state; the TTL is also refreshed by 24h before the command runs. |
+| `destructiveHint` | `true` | Can delete files inside the sandbox and mutate persistent sandbox state; the TTL is also refreshed by 48h before the command runs. |
 | `idempotentHint` | `false` | Running the same command twice can produce different results. |
 | `openWorldHint` | `true` | The sandbox retains the egress policy set at `sandbox_create` time; with `package-managers` it can reach registries on the open internet. |
 
