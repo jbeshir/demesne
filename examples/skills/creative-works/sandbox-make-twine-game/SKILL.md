@@ -1,88 +1,32 @@
 ---
 name: sandbox-make-twine-game
-status: alpha
-description: Build a playable branching interactive-fiction game (Twine / choose-your-own-adventure) from a concept through a demesne pipeline and deliver a durable bundle the recipient can play and keep editing. A slow-tier orchestrator runs research → plan the passage graph → write the Twee 3 source → compile to a self-contained HTML with Tweego → an authoritative offline playtest gate that walks the whole link graph (every choice resolves, no orphan or unreachable passages, every path reaches an ending) → an open-ended story-quality improvement cycle that iterates until improvements run dry, then a host-side delivery of the editable .twee source plus the published HTML. Apply when the user wants a text/narrative game, gamebook, or interactive story made for them. Triggers include "make me a choose-your-own-adventure about X", "build an interactive story", "a text adventure where the player decides Y", "a Twine game". Skip for coded real-time/arcade games (use sandbox-make-ts-game), a slide deck (use sandbox-make-slide-deck), and plain non-interactive prose (a chat box serves it).
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit, mcp__demesne__sandbox_agent, mcp__demesne__sandbox_research, mcp__demesne__sandbox_script
+description: Build, compile, playtest, review, and deliver a production-depth Twine interactive-fiction game from a concept or an existing mounted repository. Use for branching text and narrative games; use sandbox-make-ts-game for real-time coded games.
 ---
 
-Turn a concept into a finished, playable Twine interactive-fiction game and hand the recipient something they can both **play** (a self-contained `index.html` that opens offline and on a phone) and **keep editing** (the `.twee` source, importable into the Twine editor). A slow-tier orchestrator runs research → plan → write → compile → continuous correctness checks → an open-ended quality improvement cycle, copies the bundle to `/out`, and the host delivers it. The deliverable is a durable artifact bundle, not a repo branch.
+# Build a Twine game
 
-The output is *useful to the recipient*, not a demo of demesne: a real story they can publish (itch.io, Neocities, any static host) and a source they can grow. Foreground the story; keep the toolchain hidden.
+Own the complete workflow. Produce self-contained playable HTML, editable Twee source, reproducible graph/browser evidence, and a record of editorial decisions and risks.
 
-## The improvement cycle (not a gate)
+Read [resources/compile-playtest.md](resources/compile-playtest.md) before working and again before final validation. It owns source, fixture, compiler, graph, browser, report, and artifact contracts; do not improvise them.
 
-Quality here is *pursued*, not merely passed. Keep two things distinct:
+## Prepare and orchestrate
 
-- **Correctness invariants** — it compiles; no broken links; no orphan or unreachable passages; every path reaches an ending; no console errors. These are hard constraints: a violation means the artifact is *broken*, not merely unpolished. They must hold after every change — but holding them is the floor, never the finish line.
-- **Quality** — prose, choice design, branch richness, pacing, tone, presentation. Pursue it through an open-ended improvement cycle: each round actively hunts for the highest-value improvements and applies them. Do **not** ask "is this good enough?" and stop. End the loop on *diminishing returns* (a round that finds nothing worth doing, or two rounds with nothing materially new), or on a round budget reached as a safety stop — in which case deliver the outstanding-improvements backlog rather than calling it done. Stop because little is left worth improving, not because a minimum bar was cleared.
+1. Derive intake candidates from the generated Environment input list when present; otherwise inspect immediate `/in` entries excluding `/in/.agent` and `/in/previous-jobs`. Identify projects by repository/project markers, not raw entry count. Use the sole repository, or greenfield mode when a concept was supplied; fail on multiple repositories or a missing explicitly requested repository.
+2. `/workspace/repo` is the only project root. It must be absent or empty before staging; if it is nonempty, fail explicitly rather than choosing another root or altering unexplained contents. Copy an input repository completely, including `.git`, and record source, destination, HEAD, and initial status. Greenfield mode creates the resource's clean Twee 3 layout there.
+3. Use uniquely named children, reasoning agents for design/writing/review, and deterministic scripts for compile/graph/browser gates. Nested tools other than `sandbox_research` share `/in` and `/workspace`; research has neither and must return findings through its output. Omit `model` by default. Honor an explicit model only when it exactly matches a concrete value in the live child-tool description or known configured allowlist (currently `haiku`, `sonnet`, `opus`, `fable`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, or `gpt-5.4-mini`) and its provider is configured; unconstrained schema acceptance is insufficient.
+4. For a background call retain both `job_id` and child `name`; poll `sandbox_wait(..., timeout_seconds: 120)` while running and cancel obsolete dependents. Read full diagnostics at `/out/child/<name>/stderr.log` in the spawning parent (or `/in/previous-jobs/<name>/stderr.log` in a later sibling); treat returned `output_path`/`output_dir` as informational unless the live tool explicitly guarantees an in-sandbox path.
+5. Retry an infrastructure/tool failure exactly once under a fresh name. Treat a completed nonzero deterministic command or failing structured report as a product defect: preserve evidence, dispatch a fix, then recompile and retest under fresh names, for at most three fix/retest rounds per gate. On exhaustion write `/out/FAILURE.md`, cancel dependents, and stop.
+6. Copy selected child evidence to parent `/out`; child output is not surfaced automatically. Delivery must satisfy every applicable entry in the resource's final-delivery manifest, including the complete repository at `/out/repo`.
 
-**Watch out (cross-cutting):**
-- **Every child's `/out` is isolated** at `/out/child/<name>` — `sandbox_script` *and* `sandbox_agent` alike. Never tell a child to write to `/out/...`; have children write artefacts (screenshots, reports, per-phase summaries) under the shared `/workspace`, and the orchestrator relays everything into its own `/out` at the end. `/workspace` is shared across the run but torn down on exit, so only what the orchestrator copies into `/out` survives.
-- **Launch every `sandbox_agent` child (write, improvement reviewer, fix) with `background: true` and poll with `sandbox_wait`.** Background dispatch is required here to control sequencing and avoid shared-`/workspace` races: wait for each child to reach a terminal state before the next phase reads or mutates its output.
-- **The playtest correctness check is non-negotiable:** a story with a dead link or an unreachable passage is broken, no matter how good the prose — never deliver a bundle whose playtest exited non-zero.
+## Workflow
 
-## Story format and tooling
+1. **Intake and research.** Record input/concept, audience, boundaries, experience, workspace provenance, constraints, and sources in `WORKLOG.md`. Distinguish fact from invention.
+2. **Design the graph.** Have a fresh agent write `DESIGN.md` with premise, themes, voice, cast, player role, variables, format decision, boundaries, passage budget, endings, accessibility, state projection, and fixture policy. Write `PASSAGE-GRAPH.md` with every passage, choice, condition/effect, merge, and ending.
+3. **Plan.** Use Harlowe by default. Choose SugarCube only when a named, verified requirement is unsupported or materially impractical in the pinned Harlowe version; record the requirement and verified format versions in `DESIGN.md`. Plan source, ownership, macros, styling, media provenance, saves, and fixtures.
+4. **Vertical slice.** Implement a complete branch through a meaningful choice to at least two endings. Re-read the resource, then compile and run static graph and browser checks before expanding.
+5. **Expand.** Add dependency-ordered graph sections in bounded phases. After each, compile, validate, and traverse. Require complete planned reachability, resolvable choices, approved terminals, escapable cycles, ending paths, and no browser/console errors. Fix deterministic failures within the bounded loop.
+6. **Review and fix.** After checks pass, use an independent fresh-context reviewer for prose, agency, branch distinctness, state, pacing, accessibility, continuity, and presentation. Apply fixes separately and rerun all checks. Run at most three rounds; stop early only when no material improvement remains and record deferrals.
+7. **Final cohesion.** Independently play representative routes/endings and assess voice, payoff, branch equity, state continuity, pacing, endings, typography, mobile behavior, and graph balance. Apply worthwhile fixes and rerun complete validation within the same bounded rules.
+8. **Deliver.** Run the resource's exact clean commands and satisfy its final-delivery manifest. Write `/out/SUMMARY.md` with commands, captured tool/format/image versions, results, passage/ending counts, stop reason, backlog, and risks. Print `DONE` only after every manifest entry whose condition applies passes its stated gate.
 
-- **Compiler: Tweego**, baked into the `twine` image with the standard story formats on `TWEEGO_PATH` — so compile runs at `egress=none`. (The `twine` image is the Playwright base + Tweego + story formats; it shares the browser base with `webgamedev` but carries none of the TS toolchain.) Compile the source tree with `tweego -o /workspace/dist/index.html /workspace/story` (Tweego reads `:: StoryData` for the format; pin it there).
-- **Story format: Harlowe** by default (the Twine-editor default, friendliest for a non-coder to keep editing). Choose **SugarCube** only when the game needs saves, inventory, variables, or stats — say which in the plan and set it in `:: StoryData`.
-- **Pin a format version the image actually ships.** The `twine` image carries **Harlowe 3.3.9** and **SugarCube 2.37.3** (the current formats, overlaid onto Tweego's older bundled ones), plus Harlowe 1/2, SugarCube 1, Snowman, Chapbook. The `:: StoryData` `format-version` must be one the image has; pinning a version it doesn't ship fails the compile with `Story format ... is not available`. If unsure, run `tweego --list-formats` (or `ls $TWEEGO_PATH`) in the `twine` image and pin what's there.
-- **Source: Twee 3** (`.twee`) — one passage per `:: PassageName`, links as `[[choice->Target]]`. This is the editable master; it imports into the Twine desktop/web editor for visual editing.
-
-## Procedure
-
-1. **Host prep.** Derive a lowercase-hyphenated `<slug>` from the concept. Launch the orchestrator (slow tier) — no repo mount is needed; it authors everything under `/workspace` and delivers to `/out`.
-
-2. **Research** (`sandbox_research`, isolated, open egress) — only when the story leans on real material (a historical setting, a real place, a licensed world's tone). It returns setting/voice/factual notes to `/out/FINDINGS.md`. Pure fiction skips this step.
-
-3. **Plan the passage graph** — the orchestrator writes `/workspace/PLAN.md`: premise and tone, the cast, the **state graph** (key passages, the choices out of each, the branch/merge structure, and every ending), the story format + why, and the target length (passage count). A flat "10 linked scenes" is fine for a first game; note any variables/inventory if SugarCube.
-
-4. **Write the Twee source** — one medium-tier `sandbox_agent` (launched `background: true`, polled with `sandbox_wait`) writes `/workspace/story/story.twee`: a `:: StoryData` passage (format + IFID), a `:: StoryTitle`, and the passages with real branching per the plan. Distinct, meaningful choices; no choice that silently dead-ends; every branch reaches an ending. Optional styling via a `:: Story Stylesheet` passage and generated art via the image-gen MCP into `/workspace/story/`. It writes a per-phase summary under `/workspace/`; the orchestrator relays it into `/out/SUMMARY.md`.
-
-5. **Compile gate** — a `sandbox_script` child, `name=compile`, `image=twine`, `egress=none`. Run `tweego -o /workspace/dist/index.html /workspace/story`. It must exit 0 and produce a non-empty `index.html`. On failure (malformed Twee, unknown format) spawn a fix phase and recompile.
-
-6. **Playtest correctness check** — a `sandbox_script` child, `name=playtest`, `image=twine`, `egress=none`. Run the link-graph harness (below) over `/workspace/dist/index.html`. It must exit 0, write `playtest-ok`, `playtest-report.json`, and the start + each-ending screenshots under `/workspace/gallery/` (the orchestrator relays them into `/out/gallery/` — a child's own `/out` is isolated). A non-zero exit is a real defect — a broken link, an orphan or unreachable passage, or a path that never ends — so fix, recompile, and re-playtest until it holds. This is a correctness invariant that must stay true through every improvement round below — not the finish line.
-
-7. **Improvement cycle** — keep making the story better until it stops being worth it. Each round, a medium-tier `sandbox_agent` (launched `background: true`, polled with `sandbox_wait`) plays the current build and the report and proposes the **best available improvements** — coherence, choice quality, branch richness, pacing, tone, presentation, dead-end *feel* (choices technically valid but pointless) — ranked by value, as proposals, not a pass/fail verdict. The orchestrator applies the worthwhile ones, re-runs compile + the correctness check, and goes again. Continue until a round finds nothing worth doing or only trivial nits (diminishing returns), or a safety budget (≈5 rounds) is reached — on which, record what remains. Log each round's changes and the final outstanding-improvements backlog to `/out/IMPROVEMENTS.md`.
-
-8. **Deliver** — the orchestrator itself `cp`s the bundle to `/out` (see Output contract), writes `/out/README.txt` in plain language (what the game is, double-click `index.html` to play, import `story.twee` into Twine at twinery.org to edit), and `/out/CHANGES.md` (slug, story format, passage/ending counts, playtest summary, how many improvement rounds ran and whether the cycle stopped on diminishing returns or the budget, and any backlog). Print `DONE`.
-
-## The playtest harness (Playwright, the orchestrator writes it to `/workspace/playtest.cjs`)
-
-A published Twine story is a single HTML page that swaps passages in the DOM. The harness loads `file://…/index.html` (`--allow-file-access-from-files`), then does a graph crawl driven by the rendered links, not by reading the source:
-
-- From the start passage, record a stable id for the current passage and its choice links (the `<tw-link>` / `[data-passage]` anchors the active format renders). Harlowe does **not** render the passage *name* in the DOM, so derive the id from the runtime's current-passage state (or a hash of the rendered passage text), not a visible label.
-- Breadth-first: click each unvisited choice, wait for the passage to change, record the new passage and its links; back up and continue until the reachable graph is exhausted (cap total clicks to a sane bound, e.g. 2000).
-- **Fail (exit non-zero)** if any clicked choice changes nothing or errors (broken link), if the crawl reaches a non-ending passage with zero outgoing choices that the plan didn't mark as an ending (dead end), or if a console/page error fires. Write the set of reachable vs. planned passages to `playtest-report.json` so unreachable/orphan passages (in the source, never reached) surface as a diff.
-- Screenshot the start passage and each ending passage to `/workspace/gallery/` (the orchestrator relays them into `/out/gallery/`).
-
-Freeze `Date`/`Math.random` for stable shots. Keep it format-agnostic where possible (Harlowe and SugarCube render links slightly differently — select on the rendered anchor role, and branch on format only if needed).
-
-## Launching the orchestrator
-
-- No `directories:` mount required (greenfield authoring). Tier: **slow** orchestrator; **medium** write/review/fix phases; `compile`/`playtest` are `sandbox_script` (`image=twine`, `egress=none`).
-- Tell it explicitly: **do NOT compile or playtest yourself** — the agent image has no Tweego or browser; those are `sandbox_script` children on `image=twine`.
-- Brief it as a complete document: the concept and what a good version feels like; the story-format choice rule (Harlowe default, SugarCube for state); the Twee 3 conventions and the `:: StoryData` format pin; the eight steps with the child-naming rule; the playtest harness contract; and the output contract.
-
-## Host-side delivery
-
-There is no branch or PR — the bundle in `/out` is the deliverable, and the in-sandbox playtest is authoritative; the host does not recompile.
-
-1. Read `/out/CHANGES.md` and `/out/IMPROVEMENTS.md`; confirm `playtest-ok` is present (the correctness invariant held) and check why the improvement cycle stopped — diminishing returns is the goal; if it stopped on the budget, surface the backlog to the user.
-2. Surface the bundle: give the user the `<output_dir>` path, and offer to copy it somewhere convenient (`sandbox_download`, or a `cp` to a path they name). Show a screenshot or two from `/out/gallery/`.
-3. Tell them, in one line, how to **play** (open `index.html`) and how to **edit** (import `story.twee` at twinery.org or in the Twine app).
-
-## Output contract
-
-```
-/out/
-  story.twee          # the editable master — imports into the Twine editor
-  index.html          # the published, self-contained playable game (offline, mobile-ok)
-  gallery/            # start + each ending screenshot
-  playtest-report.json# reachable vs planned passages, choice count, any errors
-  FINDINGS.md         # research notes (only if step 2 ran)
-  PLAN.md             # premise, cast, state graph, endings, format choice
-  SUMMARY.md          # per write/fix phase
-  IMPROVEMENTS.md     # per-round changes + the remaining-opportunities backlog
-  README.txt          # plain-language: how to play, how to edit
-  CHANGES.md          # slug, format, passage/ending counts, playtest summary, improvement rounds + stop reason + backlog
-```
+Never accept self-review as independent review or describe an incomplete delivery as successful.
