@@ -10,5 +10,6 @@ Report-only (or a structured store) — fan a fixed set of lenses or detectors o
 | [`sandbox-appearance-review`](sandbox-appearance-review/) | Render a front-end into a screenshot matrix, fan out one visual-review lens per agent, merge into tiered appearance-improvement proposals. |
 | [`sandbox-corpus-map-reduce`](sandbox-corpus-map-reduce/) | Apply the same extraction/scoring op to every item in a corpus, then reduce to a ranked answer. |
 | [`sandbox-etl-document`](sandbox-etl-document/) | Parse → extract → classify → validate → load unstructured documents into a structured store, with a quarantine pile. |
+| [`sandbox-skill-eval`](sandbox-skill-eval/) | Run deterministic skillcheck, then parallel review lenses and synthesis for one supplied skill. |
 
 See the [top-level skills README](../README.md) for the shared frontmatter format, symlinking, and the concurrent fan-out loop.
