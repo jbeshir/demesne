@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["candidate_id", "contract_sha256", "round", "jobs"],
+  "properties": {
+    "candidate_id": {"type": "string", "minLength": 1},
+    "contract_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "round": {"enum": [1, 2]},
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["job_id", "gates", "propositions", "evidence_observables", "allowed_actions", "stop_rule", "model", "no_descendant_delegation"],
+        "properties": {
+          "job_id": {"type": "string", "minLength": 1},
+          "gates": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"enum": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"]}},
+          "propositions": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "minLength": 1}},
+          "evidence_observables": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "allowed_actions": {"type": "array", "items": {"type": "string"}},
+          "stop_rule": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "pattern": "^gpt-"},
+          "no_descendant_delegation": {"const": true}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "allOf": [
+    {"if":{"properties":{"round":{"const":1}}},"then":{"properties":{"jobs":{"maxItems":4}}}},
+    {"if":{"properties":{"round":{"const":2}}},"then":{"properties":{"jobs":{"maxItems":2}}}}
+  ],
+  "additionalProperties": true
+}

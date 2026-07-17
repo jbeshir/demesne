@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sandbox Problem Discovery"
+  short_description: "Discover and gate strong-builder problems"
+  default_prompt: "Use $sandbox-problem-discovery to discover diverse problems and produce evidence-gated finalist briefs."

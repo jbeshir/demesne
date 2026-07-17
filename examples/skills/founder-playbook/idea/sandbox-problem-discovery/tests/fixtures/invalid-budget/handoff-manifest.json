@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "contract_sha256": "1fbc3dbfdeb81a216224af7b0dfb08c47bafc09c8ba86432419ceb45db191bac",
+  "authorization_limits": [
+    "no outreach"
+  ],
+  "finalists": [
+    {
+      "candidate_id": "example",
+      "decision": "evidence-insufficient",
+      "report_path": "finalists/example/problem-report.md",
+      "report_sha256": "8bf26ad55cff4f5080349a94fd12f0b37824a9108e6584c9b155f0406ec430e4",
+      "evidence_vector": {
+        "G1": "A",
+        "G2": "A",
+        "G3": "C",
+        "G4": "C",
+        "G5": "A",
+        "G6": "C",
+        "G7": "C",
+        "G8": "C"
+      },
+      "hard_red_line_findings": [],
+      "targeted_jobs": {
+        "round_1": 5,
+        "round_2": 2
+      },
+      "unresolved_gaps": [
+        "G3"
+      ]
+    }
+  ]
+}
