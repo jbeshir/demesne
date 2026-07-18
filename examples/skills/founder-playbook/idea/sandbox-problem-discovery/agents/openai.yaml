@@ -1,4 +1,4 @@
 interface:
   display_name: "Sandbox Problem Discovery"
-  short_description: "Turn problem research into a clear human decision"
-  default_prompt: "Use $sandbox-problem-discovery to assess this idea, compare existing reports, and write one concise evidence-based Markdown report with the next research decision."
+  short_description: "Map an opportunity and choose what deserves testing"
+  default_prompt: "Use $sandbox-problem-discovery to explore this idea, compare existing reports, map the customer problem and opportunity, and write one concise evidence-based Markdown report identifying the strongest framing and next research."

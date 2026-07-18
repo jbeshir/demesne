@@ -1,11 +1,17 @@
 ---
 name: sandbox-problem-discovery
-description: Research and assess a customer problem or product idea, compare it with existing reports, and write a concise evidence-based Markdown report for a human reader. Use for founder problem discovery, opportunity research, early concept evaluation, competitor and substitute analysis, or deciding what customer research to do next.
+description: Explore and map a customer problem or product idea, compare it with existing reports, and write a concise evidence-based Markdown report for a human reader. Use for founder problem discovery, opportunity mapping, early concept research, competitor and substitute analysis, or deciding which customer/problem hypothesis deserves later testing. Do not use to validate or stress-test one already-defined hypothesis.
 ---
 
 # Sandbox Problem Discovery
 
 Produce a useful decision document, not an audit package. Scale the work to the decision: a narrow question may need a short desk review; an unfamiliar or consequential market may justify broad, parallel research. Use subagents or research jobs when independent evidence lanes can be investigated faster or more thoroughly in parallel. Keep each assignment focused, share enough context to make its findings comparable, and synthesize all accepted findings into one report.
+
+## Keep discovery distinct from hypothesis testing
+
+Use discovery to determine what opportunity is present: identify plausible customers and payers, understand their workflows and pain, map alternatives and demand, compare possible framings, and decide what appears promising enough to investigate next. Preserve competing interpretations until the evidence makes one more useful.
+
+Do not freeze one proposition in advance, organize every search around proving or disproving it, run an adversarial disconfirmation protocol, or claim that desk research validates a customer-problem hypothesis. If the input is already a precise falsifiable statement and the user wants to know whether it survives contrary evidence, use `sandbox-hypothesis-stress-test` instead. Discovery may recommend a specific hypothesis for that later step, but must not perform it implicitly.
 
 ## Start with what already exists
 
@@ -22,13 +28,13 @@ Choose evidence lanes that fit the question rather than following a fixed checkl
 
 Before writing, confirm that customer and workflow, competitors and substitutes, demand and willingness to pay, and acquisition channels have each been actively investigated. Use parallel lanes when two or more remain substantial. If a lane cannot be investigated, explain why under recommended next research rather than silently omitting it.
 
-Reconcile overlapping findings and investigate material conflicts before writing. Synthesize what the sources support and make bounded judgments where evidence is incomplete. State an important unknown once, plainly, where it affects the decision; never use uncertainty as a reason to avoid searching for an answer. Stop when additional desk research is unlikely to change the recommendation, then put questions that require interviews, experiments, or paid pilots into next research.
+Reconcile overlapping findings and investigate material conflicts before writing. Synthesize what the sources support and make bounded judgments where evidence is incomplete. State an important unknown once, plainly, where it affects the decision; never use uncertainty as a reason to avoid searching for an answer. Stop when additional desk research is unlikely to materially improve the opportunity map or choice of promising framing. Put questions that require disconfirmation, interviews, experiments, or paid pilots into next research.
 
 ## Write one canonical report
 
 Use a descriptive Markdown filename and a clear title. Cover:
 
-1. headline decision;
+1. headline decision about the opportunity, its strongest framing, and what deserves further investigation—not a claim that the hypothesis is validated;
 2. target audience;
 3. pain point and current workflow;
 4. concept being evaluated;
