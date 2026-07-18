@@ -1,1 +1,0 @@
-{"contract_version":"1.0.0","unit_of_analysis":"first-value-workflow","evidence_states":["A","B","C","D","E"],"gates":["G1","G2","G3","G4","G5","G6","G7","G8"],"hard_red_line_gates":["G1","G2","G3","G4","G5"],"targeted_job_limits":{"round_1":4,"round_2":2,"total":6},"retry_limit":1,"unknown_is_disconfirmation":false}

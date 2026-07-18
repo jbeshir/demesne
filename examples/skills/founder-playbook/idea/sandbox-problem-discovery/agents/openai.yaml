@@ -1,4 +1,4 @@
 interface:
   display_name: "Sandbox Problem Discovery"
-  short_description: "Discover, compare, and package founder problems"
-  default_prompt: "Use $sandbox-problem-discovery to discover diverse problems, compare them archive-wide, and produce an immutable evidence-gated bundle with one-brief downstream handoffs."
+  short_description: "Turn problem research into a clear human decision"
+  default_prompt: "Use $sandbox-problem-discovery to assess this idea, compare existing reports, and write one concise evidence-based Markdown report with the next research decision."

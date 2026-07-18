@@ -1,4 +1,0 @@
-{
-  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["schema_version","archive_mounted","inventory_digest","records"],"additionalProperties":false,
-  "properties":{"schema_version":{"const":"1.0.0"},"archive_mounted":{"type":"boolean"},"inventory_digest":{"type":"string","minLength":1},"records":{"type":"array","uniqueItems":true,"items":{"type":"object","required":["archive_candidate_id","record_type","status","source_path","source_sha256"],"additionalProperties":false,"properties":{"archive_candidate_id":{"type":"string","minLength":1},"record_type":{"enum":["candidate","track","opportunity"]},"status":{"enum":["active","inactive","rejected","superseded","archived"]},"source_path":{"type":"string","minLength":1},"source_sha256":{"type":"string","minLength":1}}}}}
-}

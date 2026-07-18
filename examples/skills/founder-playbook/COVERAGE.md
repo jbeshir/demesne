@@ -1,6 +1,6 @@
 # Founder's Playbook activity coverage
 
-`sandbox-problem-discovery` is the integrated pre-playbook discovery entry point: it owns broad founder problem discovery and hands selected standalone briefs to activity 1 without changing the original 29-activity mapping below.
+`sandbox-problem-discovery` is the pre-playbook discovery entry point: it turns proportionate, archive-aware research into one human-readable decision report and recommended next research without changing the original 29-activity mapping below.
 
 One row per numbered activity in *The Founder's Playbook: Building an AI-Native
 Startup* (29 activities across Idea / MVP / Launch / Scale), mapping each to the

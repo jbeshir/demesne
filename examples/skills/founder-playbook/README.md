@@ -29,7 +29,7 @@ Two ground rules carried through every skill:
 > the problem validation revealed, not the one you assumed; and you have enough
 > qualitative signal that committing to an MVP is reasoned, not an act of faith.
 
-1. **[`sandbox-problem-discovery`](idea/sandbox-problem-discovery/)** — discover independent problem territories, freeze and apply an evidence contract, close authorized finalist gaps within two bounded rounds, and emit standalone reports plus selected hypothesis briefs. It replaces generic `sandbox-product-research` for end-to-end founder discovery and stops before the next skill. If several briefs advance, mount exactly one named brief per downstream run as directed by the handoff manifest.
+1. **[`sandbox-problem-discovery`](idea/sandbox-problem-discovery/)** — investigate an audience, painful workflow, concept, competitors, demand, willingness to pay, channels, differentiation, and risks; compare prior reports and produce one concise human-readable decision report. Research effort scales with the question, and the skill stops with recommended next research rather than a generated audit package.
 2. **[`sandbox-hypothesis-stress-test`](idea/sandbox-hypothesis-stress-test/)** — take one selected brief, sharpen the observation into a
    testable hypothesis and collect the strongest case *against* it before talking
    to anyone. Output: `hypothesis.md` + counter-case + discovery test list.

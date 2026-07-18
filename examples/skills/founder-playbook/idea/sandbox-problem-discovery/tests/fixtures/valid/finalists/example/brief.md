@@ -1,3 +1,0 @@
-# Example
-
-Offline validator fixture.
