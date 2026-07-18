@@ -1,74 +1,69 @@
 ---
 name: sandbox-problem-discovery
-description: Discover diverse, evidence-grounded customer problems for a strong technical founder, evaluate first-value feasibility and commercial evidence against a frozen gate contract, close authorized evidence gaps through bounded sandbox research, and emit standalone finalist briefs plus a machine-checkable handoff. Use for broad problem discovery, opportunity exploration, finalist selection, or preparing inputs for a later hypothesis stress test; stop before solution building, outreach, payment, private-data acquisition, or downstream stress testing.
+description: Discover diverse, evidence-grounded customer problems for a strong technical founder, compare them against a mounted archive, evaluate feasibility and commercial evidence against a frozen gate contract, and emit standalone reports plus an immutable integration-ready bundle and machine-checkable one-brief handoff. Use for broad problem discovery, archive-aware opportunity exploration, finalist selection, or preparing inputs for a later hypothesis stress test; stop before solution building, repository integration without authorization, outreach, payment, private-data acquisition, or downstream stress testing.
 ---
 
 # Sandbox Problem Discovery
 
-Own discovery through evidence-aligned finalist selection. Do not build, market, contact buyers, spend money, obtain private data, give legal clearance, invoke another skill, or run the downstream hypothesis-stress-test workflow.
+Own discovery through evidence-aligned selection. Do not build, market, contact buyers, spend money, obtain private data, give legal clearance, integrate into a repository without authorization, invoke another skill, or run downstream stress testing.
 
-## Load the contract
+## Load the contracts
 
-Read [references/gate-contract-v1.md](references/gate-contract-v1.md) completely before planning or dispatch. Copy `assets/gate-contract-v1.json` into the run workspace as `gate-contract.json`, compute its SHA-256, and write the hash to `run-spec.json` before research. Never mutate or silently reinterpret the frozen contract. Validate artifacts with `node scripts/validate.mjs`.
+Read [references/gate-contract-v1.md](references/gate-contract-v1.md) and [references/archive-integration-reporting.md](references/archive-integration-reporting.md) completely. Copy `assets/gate-contract-v1.json` to the run as `gate-contract.json`, hash it into `run-spec.json` before research, and never mutate or reinterpret it. Validate with `node scripts/validate.mjs`.
 
 ## Apply the execution contract
 
-- Use native sandbox jobs only when they are available and authorized. Give every child an explicit concrete `gpt-*` Codex model; use `gpt-5.6-sol` by default. Never use tier labels or omit the model.
-- Put this exact constraint in every child prompt: `Do not delegate, spawn descendants, or invoke other agents. Work only on this assigned artifact.`
-- Give each child one bounded artifact contract. Do not delegate the end-to-end workflow.
-- Accept an artifact only when the job succeeded, exited zero, produced the required nonempty file, passed its schema, and had resolvable citations. Retry once only for provider/execution failure, nonzero exit, missing/empty output, malformed schema, or citation corruption. Treat a completed negative search as a valid unknown artifact, never as a retry reason.
-- Preserve raw artifacts, accepted job IDs, attempts, model names, hashes, and rejection reasons in `execution-ledger.jsonl`.
+- Use native sandbox jobs only when available and authorized. Give every child an explicit `gpt-*` model; default to `gpt-5.6-sol`.
+- Put this exact constraint in every child prompt: `Do not delegate, spawn descendants, or invoke other agents. Work only on this assigned artifact.` Give each child one bounded artifact.
+- Accept only a succeeded, zero-exit, nonempty, schema-valid artifact with resolvable citations. Retry once only for execution, artifact, schema, or citation failure. A completed negative search is valid unknown evidence.
+- Preserve raw artifacts, accepted job IDs, attempts, models, hashes, and rejection reasons in `execution-ledger.jsonl`.
 
 ## Run workflow A–K
 
-### A. Intake and authorization
+### A–B. Intake, authorization, and freeze
 
-Enumerate mounted inputs while excluding `previous-jobs`. Use `/out` as the canonical caller-visible run root; stage elsewhere only if the fully validated tree is atomically copied to `/out` and revalidated there. Copy every accepted input source needed by a claim into `/out/raw/` without changing its bytes, record its original path and SHA-256 in `run-spec.json`, and cite the delivered `raw/` path. Record the objective, founder profile, geography, time horizon, allowed evidence/actions, forbidden actions, and canonical output path in `run-spec.json`. Default missing authority to offline/public read-only research; mark outreach, payments, counsel, and private-data access unauthorized.
+Inventory mounted inputs excluding `previous-jobs`. Use `/out` as the canonical root. Copy cited inputs byte-for-byte to `raw/` and record original paths/hashes. Record objective, founder profile, geography, horizon, actions, canonical path, archive presence, integration authorization, and any discovered integration contract in `run-spec.json`. Default to public/offline read-only authority.
 
-### B. Freeze the decision system
-
-Freeze the copied contract and its SHA-256 before any proposal or research job. Use only its seven score dimensions, weights, direction, normalized threshold, required G6/G7/G8 A states, and no-E rule; copy those values into `run-spec.json` instead of restating or replacing them. Give an unsupported dimension 0 and the appropriate unknown state, never an optimistic inferred score. Apply the strong-builder prior without inventing positive evidence. Never let a score override a hard red line.
+Freeze the contract hash and its seven scores, weights, direction, threshold, required G6/G7/G8 A states, and no-E rule before proposals. Unsupported dimensions score 0. Never let score override a hard red line.
 
 ### C. Propose independent territories
 
-Create 6–8 territory jobs whose preambles differ in at least two named assumptions such as buyer type, pain cadence, workflow substrate, geography, or acquisition route. Require each to output schema-valid candidate records and claim citations. Keep territories independent; do not expose sibling proposals. Seek broad diversity rather than five generic research summaries.
+Create 6–8 independent territory jobs differing in at least two named assumptions. Require schema-valid candidates and claim citations. Do not expose sibling proposals.
 
-### D. Aggregate, challenge outliers, and reject explicitly
+### D. Compare archive, aggregate, and transition
 
-Run one non-researching aggregator only after accepted territory artifacts pass the barrier. Deduplicate by customer, triggering event, and first-value job. Scrutinize every score at least 20% above the valid-candidate median and every unique high-evidence outlier. Preserve all removals in `rejection-ledger.jsonl` with the frozen criterion, evidence state, and reason. Preserve diversity across customer, event, and route without lowering the threshold.
+Before ranking, write a typed inventory for every mounted archive record, including inactive records, with stable IDs, source hashes, statuses, and an inventory digest. Compare every candidate to every inventory record over all nine mechanism dimensions, mark every distance-minimizing neighbor, and link comparisons to that digest. Append sequence- and prior-digest-linked `keep`/`dedup`/`supersede` novelty decisions whose comparison reference and neighbor set resolve exactly; labels alone never establish novelty. Do not mutate archive state.
 
-### E. Select provisional finalists and research them
+Then aggregate. Deduplicate by mechanism, scrutinize every score at least 20% above the valid-candidate median and every unique high-evidence outlier, preserve removals in `rejection-ledger.jsonl`, and append a causal selection transition for every candidate.
 
-Select 2–4 finalists only from validated candidates. Apply the contract's narrow hard red lines first, then its scored threshold and evidence policy. A proven hard red line rejects; C/D/E may block selection but never becomes B. Retain promising unresolved candidates as `evidence-insufficient`, not disproven.
+### E. Select and investigate provisional finalists
 
-For each finalist, create `finalists/<id>/avenues/` and `finalists/<id>/index.json`. Research five bounded lanes: customer, market, competitor/alternatives/stagnation, technical/operations, and risk/procurement. These are internal lanes, not an invocation of `sandbox-product-research`. Assign gate ownership from the contract. Permit at most two optional lanes only when justified in `run-spec.json`. Require `finding.schema.json` records with exact propositions, attempts, sources, citations, evidence states, and missing propositions.
+Write each unordered pair once in the pairwise nine-dimension diversity matrix, using only the named dimensions and the declared adjacency threshold. Retaining adjacent finalists requires a waiver naming non-identical mechanism-delta dimensions plus resolving claim and citation evidence. Select 2–4 validated finalists. Apply narrow hard red lines, then frozen score/evidence policy. C/D/E may block but never becomes B.
 
-### F. Review gates independently
+Research customer, market, competitor, technical, and risk lanes for each finalist. Require findings with claim IDs, exact propositions, dated query/locator logs, named source classes and access limits, citations, bounded results, states, and remaining propositions. Link score/gate bases to claims and citations. Apply the competitive-stagnation anchors and six-part barrier decomposition in the archive/reporting reference; apply the strong-builder prior only to build complexity.
 
-### G. Close authorized gaps within bounds
+### F–G. Review before gaps, then close bounded gaps
 
-Give a fresh non-researching reviewer only the frozen contract and validated findings. Require exactly G1–G8 in `gate-review.json`. The reviewer may identify contradictions and E states but may not invent requirements, turn missing evidence into B, or acquire new evidence. Distinguish artifact coverage from gate-evidence coverage.
+Give a fresh non-researching reviewer only the frozen contract and validated findings. For initial, post-round-1, and final reviews, record the hash, independent-reviewer role, independence attestation, and acceptance timestamp in the execution ledger. Write and accept exactly G1–G8 in `reviews/initial.json` before planning or starting gaps. Derive round 1 from it and record its path/hash in the plan and each gap-job ledger entry. Target only decision-relevant C, D, or repairable E cells using one to three propositions, observables, allowed actions, and a stop rule; run at most four jobs.
 
-Create gap jobs only for C, D, or repairable E cells whose evidence is obtainable within authorization and could change the decision. Assign one to three related propositions, named observables, allowed sources/actions, and a stop rule. Run at most four jobs per finalist. Keep unauthorized outreach/payment/private-data/counsel gaps unresolved.
-
-Re-review validated round-1 findings. Run at most two additional jobs per finalist only for a newly exposed dependency or repairable E. Stop after two rounds and six targeted jobs per finalist total. Stop earlier on a decisive hard-red-line B, when remaining gaps are unauthorized, or when more evidence cannot change the decision. Recompile against the original hash; emit the eight-state vector and counts without unsupported transitions.
+Write/hash `reviews/post-round-1.json`; derive round 2 from it and record its path/hash. Use at most two more jobs for newly exposed dependencies or repairable E, then write `reviews/final.json`. Stop after two rounds/six jobs, a decisive hard-red-line B, unauthorized gaps, or when evidence cannot change the decision. Never turn bounded search into universal absence.
 
 ### H. Recompile the frozen contract
 
-Reconcile every status transition against accepted evidence and the original contract hash. Do not introduce a new criterion, mutate a threshold, or convert a budget/authorization limit into negative product evidence. Make the final decision unchangeable after the second review round.
+Reconcile every state and selection transition against accepted evidence and the original hash. Do not add criteria or convert authorization/budget limits into negative evidence. Make the final decision unchangeable after final review.
 
-### I. Write standalone problem reports
+### I. Write standalone reports
 
-Write `finalists/<id>/problem-report.md` for every finalist, including its decision; topic; actors and current workflow; pain magnitude and recurrence; investigation and attempt log; claim ledger; competitors, alternatives, stagnation, and whitespace; technical/operational constraints; risks; unknowns; decision logic; source provenance; and optional depth clearly separated from required evidence. Make each report understandable without sibling artifacts.
+Write `reports/<id>.md` for every meaningfully investigated candidate, retaining negative searches, competitors, claim-linked reasoning, transition history, and reconsideration evidence. Write `reports/<id>.attestation.json` with resolving finding IDs, transition IDs, and citations for each required section. Also write a richer standalone `finalists/<id>/problem-report.md`; its attestation additionally covers decision, actors/workflow, pain/cadence, attempts, claims, alternatives/stagnation, constraints, risks, unknowns, decision logic, provenance, and separately labeled optional depth.
 
-### J. Write compatible selected briefs
+### J. Preserve selected hypothesis handoff
 
-For each `advance` decision, write `selected/<id>/hypothesis-brief.md` using `assets/finalist-brief.md`. Include a falsifiable customer-problem hypothesis and enough standalone context for the existing `sandbox-hypothesis-stress-test` input selector. In the manifest, set `next_skill` and require the host to mount exactly one named brief per downstream run; multiple advancing briefs are separate invocations, never one ambiguous mount. Reference that skill only as the intended next consumer. Do not reproduce its four avenues, call it, spawn it, or perform its work.
+Only for reevaluated `advance` decisions, write `selected/<id>/hypothesis-brief.md` from `assets/finalist-brief.md`. Set `next_skill: sandbox-hypothesis-stress-test` and `mount_one_brief_per_run: true`. Each advancing brief is a separate downstream invocation. Do not call or reproduce that skill.
 
-### K. Validate and hand off
+### K. Package, validate, and hand off
 
-Write `handoff-manifest.json` using its schema. Include `next_skill: sandbox-hypothesis-stress-test`, `mount_one_brief_per_run: true`, the contract hash, all finalist decisions, report paths and hashes, selected brief paths and hashes where applicable, eight evidence states, hard-red-line findings, unresolved gaps, job counts, and authorization limits. Run the validator against the complete top-level `/out` tree. Deliver only after schema validation, hash reconciliation, exact G1–G8 review coverage, 4+2 budget enforcement, citation-bearing A/B cells, report existence, and selected-brief existence checks pass. On failure, place defects and invalid artifacts under `/out/failures/quarantine/`, write `/out/FAILURE.md`, and do not claim a valid handoff.
+Write repository-neutral `catalog.json`, the existing `handoff-manifest.json`, then immutable `bundle-manifest.json`. Model stable track/alias inputs as typed external identities and reject any value colliding with any fresh run candidate ID. Never claim integration without explicit authorization, a real hash-verified contract file, and an integration completion ledger whose completed actions and output hashes resolve. Validate the full `/out` tree and hashes. On failure quarantine defects, write `FAILURE.md`, and claim neither valid bundle nor handoff.
 
-## Required run outputs
+## Required outputs
 
-Produce `raw/` provenance inputs, `run-spec.json`, frozen `gate-contract.json` plus hash, `territories/`, `aggregate/` with ranking and outliers, `execution-ledger.jsonl`, `candidates.jsonl`, `rejection-ledger.jsonl`, `finalists/` indexes/avenues/reviews/gap-plans/attempts/problem reports, `selected/` hypothesis briefs, `handoff-manifest.json`, `REPORT.md`, `SUMMARY.md`, and `failures/quarantine/`. Report artifact coverage separately from gate-state counts.
+Produce `raw/`, `run-spec.json`, `gate-contract.json`, `territories/`, `archive/` inventory/comparisons/novelty decisions, `aggregate/` ranking/outliers/diversity matrix, `execution-ledger.jsonl`, `candidates.jsonl`, `rejection-ledger.jsonl`, `selection-transitions.jsonl`, `reports/`, `finalists/` indexes/avenues/reviews/gap-plans/attempts/problem reports, `selected/` briefs, `catalog.json`, `handoff-manifest.json`, `bundle-manifest.json`, `REPORT.md`, `SUMMARY.md`, and `failures/quarantine/`. Report artifact coverage separately from gate-state counts.

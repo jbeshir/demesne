@@ -1,4 +1,4 @@
 interface:
   display_name: "Sandbox Problem Discovery"
-  short_description: "Discover and gate strong-builder problems"
-  default_prompt: "Use $sandbox-problem-discovery to discover diverse problems and produce evidence-gated finalist briefs."
+  short_description: "Discover, compare, and package founder problems"
+  default_prompt: "Use $sandbox-problem-discovery to discover diverse problems, compare them archive-wide, and produce an immutable evidence-gated bundle with one-brief downstream handoffs."

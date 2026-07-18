@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["dimensions", "adjacency_threshold", "pairs"],
+  "properties": {
+    "dimensions": {"type": "array", "minItems": 9, "maxItems": 9, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "adjacency_threshold": {"type": "integer", "minimum": 0, "maximum": 9},
+    "pairs": {"type": "array", "items": {"type": "object", "required": ["candidate_a", "candidate_b", "identical_dimensions", "adjacent", "disposition"], "properties": {
+      "candidate_a": {"type": "string", "minLength": 1}, "candidate_b": {"type": "string", "minLength": 1},
+      "identical_dimensions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+      "adjacent": {"type": "boolean"}, "disposition": {"enum": ["retain", "collapse", "waiver"]}, "waiver_reason": {"type": "string", "minLength": 1},
+      "mechanism_delta_dimensions":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1}},"evidence_claim_ids":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1}},"evidence_citations":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1}}
+    }} }
+  }
+}

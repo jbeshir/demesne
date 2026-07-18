@@ -1,11 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["candidate_id", "contract_sha256", "round", "jobs"],
+  "required": ["candidate_id", "contract_sha256", "round", "source_review_path", "source_review_sha256", "jobs"],
   "properties": {
     "candidate_id": {"type": "string", "minLength": 1},
     "contract_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "round": {"enum": [1, 2]},
+    "source_review_path": {"type": "string", "minLength": 1},
+    "source_review_sha256": {"type": "string", "minLength": 1},
     "jobs": {
       "type": "array",
       "items": {

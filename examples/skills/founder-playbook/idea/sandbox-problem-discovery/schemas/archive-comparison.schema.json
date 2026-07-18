@@ -1,0 +1,4 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["archive_mounted","dimensions","comparisons"],
+  "properties":{"archive_mounted":{"type":"boolean"},"dimensions":{"type":"array","minItems":9,"maxItems":9,"uniqueItems":true,"items":{"type":"string","minLength":1}},"comparisons":{"type":"array","items":{"type":"object","required":["candidate_id","comparison_id","inventory_digest","neighbors","dimension_results"],"properties":{"candidate_id":{"type":"string","minLength":1},"comparison_id":{"type":"string","minLength":1},"inventory_digest":{"type":"string","minLength":1},"neighbors":{"type":"array","items":{"type":"object","required":["archive_candidate_id","distance","is_nearest","dimension_results"],"properties":{"archive_candidate_id":{"type":"string","minLength":1},"distance":{"type":"integer","minimum":0},"is_nearest":{"type":"boolean"},"dimension_results":{"type":"object"}}}},"dimension_results":{"type":"object"}}}}}
+}
