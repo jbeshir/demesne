@@ -20,6 +20,8 @@ Clarify the audience, payer, recurring workflow, pain, current workaround, and c
 
 Choose evidence lanes that fit the question rather than following a fixed checklist. Typical lanes include customer pain and workflow, market or behavioural demand, competitors and substitutes, pricing and willingness to pay, acquisition channels, and technical or regulatory constraints. Investigate the lanes actively using current public sources and any relevant mounted material. For a broad idea, assign independent lanes or genuinely different customer hypotheses in parallel; for a narrow idea, combine related lanes. Ask researchers to return concrete findings, sources, contradictions, and searches that found no useful evidence—not compliance artifacts.
 
+Before writing, confirm that customer and workflow, competitors and substitutes, demand and willingness to pay, and acquisition channels have each been actively investigated. Use parallel lanes when two or more remain substantial. If a lane cannot be investigated, explain why under recommended next research rather than silently omitting it.
+
 Reconcile overlapping findings and investigate material conflicts before writing. Synthesize what the sources support and make bounded judgments where evidence is incomplete. State an important unknown once, plainly, where it affects the decision; never use uncertainty as a reason to avoid searching for an answer. Stop when additional desk research is unlikely to change the recommendation, then put questions that require interviews, experiments, or paid pilots into next research.
 
 ## Write one canonical report
