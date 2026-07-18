@@ -30,7 +30,7 @@ Append one contemporaneous transition to `selection-transitions.jsonl` whenever 
 
 ## Evidence effort and anchors
 
-For C or D findings, record a claim ID, exact proposition, dated attempt log entries (date, query or action, locator, result), named source classes, access limits, bounded result, and the remaining proposition. Link score and gate bases to claim IDs and citations. Describe limited search as limited; never claim universal absence.
+For C or D findings, record a claim ID, exact proposition, structured `evidence_basis`, bounded result, and the remaining proposition. C and investigative D use `investigative-result` with dated attempt log entries, named source classes, access limits, and resolving citations. A truly uninvestigated or history-unknown D instead uses `attempt-history-record` or `absence-of-attempt-record` and cites that retained structured record; it must not invent a market source. Link score and gate bases to existing finding claim IDs and citations. Describe limited search as limited; never claim universal absence.
 
 Score competitive stagnation/whitespace with these complete ranges: unknown = exactly 0; absence-only search = 0–1; named alternatives with an evidenced exact-job mismatch = 2–3; longitudinal or repeated evidence that the exact job remains unresolved = 4–5. Every nonzero score requires linked claims and resolving citations.
 

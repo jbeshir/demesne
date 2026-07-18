@@ -40,7 +40,7 @@ Then aggregate. Deduplicate by mechanism, scrutinize every score at least 20% ab
 
 Write each unordered pair once in the pairwise nine-dimension diversity matrix, using only the named dimensions and the declared adjacency threshold. Retaining adjacent finalists requires a waiver naming non-identical mechanism-delta dimensions plus resolving claim and citation evidence. Select 2–4 validated finalists. Apply narrow hard red lines, then frozen score/evidence policy. C/D/E may block but never becomes B.
 
-Research customer, market, competitor, technical, and risk lanes for each finalist. Require findings with claim IDs, exact propositions, dated query/locator logs, named source classes and access limits, citations, bounded results, states, and remaining propositions. Link score/gate bases to claims and citations. Apply the competitive-stagnation anchors and six-part barrier decomposition in the archive/reporting reference; apply the strong-builder prior only to build complexity.
+Research customer, market, competitor, technical, and risk lanes for each finalist. Require findings with globally unique claim IDs, exact propositions, structured investigative or attempt/history bases, dated query/locator logs where investigation occurred, named source classes and access limits, resolving citations, bounded results, states, and remaining propositions. Link score/gate bases and all downstream claims to accepted finding claim IDs and their citations. Apply the competitive-stagnation anchors and six-part barrier decomposition in the archive/reporting reference; apply the strong-builder prior only to build complexity.
 
 ### F–G. Review before gaps, then close bounded gaps
 
