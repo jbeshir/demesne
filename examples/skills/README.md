@@ -47,7 +47,7 @@ The skills are grouped into category folders. Each folder's own `README.md` carr
 | [`survey-and-map-reduce/`](survey-and-map-reduce/README.md) | Report-only surveys and map-reduce over a corpus or codebase — defect surveys, docs/appearance review, ETL into a structured store. |
 | [`explore-and-decide/`](explore-and-decide/README.md) | Multiple attempts or perspectives on one question — open-web research, tournament search, multi-role debate, decoupled swarm exploration. |
 | [`targeted-and-sequential/`](targeted-and-sequential/README.md) | Targeted, sequential pipelines — classify-and-route a batch, bisect a regression, sweep a benchmark parameter grid. |
-| [`founder-playbook/`](founder-playbook/README.md) | The 28-skill family implementing Anthropic's *Founder's Playbook*, staged Idea → MVP → Launch → Scale, plus a `meta/` skill-forge. See its [`README.md`](founder-playbook/README.md) for stage-by-stage chaining and [`COVERAGE.md`](founder-playbook/COVERAGE.md) for the activity map. |
+| [`founder-playbook/`](founder-playbook/README.md) | The founder skill family, including pre-playbook problem discovery, the 29 playbook activities staged Idea → MVP → Launch → Scale, and a `meta/` skill-forge. See its [`README.md`](founder-playbook/README.md) for chaining and [`COVERAGE.md`](founder-playbook/COVERAGE.md) for the activity map. |
 
 ## Adapting a skill
 

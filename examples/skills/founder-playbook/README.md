@@ -29,28 +29,29 @@ Two ground rules carried through every skill:
 > the problem validation revealed, not the one you assumed; and you have enough
 > qualitative signal that committing to an MVP is reasoned, not an act of faith.
 
-1. **[`sandbox-hypothesis-stress-test`](idea/sandbox-hypothesis-stress-test/)** — turn the vague observation into a
+1. **[`sandbox-problem-discovery`](idea/sandbox-problem-discovery/)** — investigate an audience, painful workflow, concept, competitors, demand, willingness to pay, channels, differentiation, and risks; compare prior reports and produce one concise human-readable decision report. Research effort scales with the question, and the skill stops with recommended next research rather than a generated audit package.
+2. **[`sandbox-hypothesis-stress-test`](idea/sandbox-hypothesis-stress-test/)** — take one selected brief, sharpen the observation into a
    testable hypothesis and collect the strongest case *against* it before talking
    to anyone. Output: `hypothesis.md` + counter-case + discovery test list.
-2. **[`sandbox-market-landscape`](idea/sandbox-market-landscape/)** — tiered competitor map with per-tier threat
+3. **[`sandbox-market-landscape`](idea/sandbox-market-landscape/)** — tiered competitor map with per-tier threat
    cases, pressure-tested TAM/SAM/SOM, buyer landscape, and three 2-year trends
    judged tailwind/headwind for this hypothesis.
-3. **[`sandbox-competitor-complaint-mining`](idea/sandbox-competitor-complaint-mining/)** — what competitors' own customers say
+4. **[`sandbox-competitor-complaint-mining`](idea/sandbox-competitor-complaint-mining/)** — what competitors' own customers say
    is still broken, scored against your hypothesis. If your hypothesis addresses a
    top unresolved complaint, that's problem-solution-fit signal.
-4. **[`sandbox-interview-kit-design`](idea/sandbox-interview-kit-design/)** — target profile, reachability map, and
+5. **[`sandbox-interview-kit-design`](idea/sandbox-interview-kit-design/)** — target profile, reachability map, and
    per-persona question sets audited against leading/socially-desirable framing.
    Takes the stress-tested hypothesis as input.
-5. **[`sandbox-outreach-pipeline`](idea/sandbox-outreach-pipeline/)** *(hybrid)* — prospect list with verified-vs-
+6. **[`sandbox-outreach-pipeline`](idea/sandbox-outreach-pipeline/)** *(hybrid)* — prospect list with verified-vs-
    guessed contact flags, per-prospect personalized drafts, day-7 follow-up
    cadence, tracking sheet. You review every draft; the host session sends.
-6. **[`sandbox-interview-synthesis`](idea/sandbox-interview-synthesis/)** — after interviews accumulate: per-interview
+7. **[`sandbox-interview-synthesis`](idea/sandbox-interview-synthesis/)** — after interviews accumulate: per-interview
    debriefs (confirmed / challenged / surprised) and the every-5-interviews
    supporting-vs-challenging audit with a confirmation-bias flag.
-7. **[`sandbox-solution-concept-pressure-test`](idea/sandbox-solution-concept-pressure-test/)** — once validation holds, develop
+8. **[`sandbox-solution-concept-pressure-test`](idea/sandbox-solution-concept-pressure-test/)** — once validation holds, develop
    the concept and attack it from four angles; isolate the three load-bearing
    assumptions, each with a cheap test and a failure blast-radius.
-8. **[`sandbox-prototype-sprint`](idea/sandbox-prototype-sprint/)** — build only the single core interaction, plus a
+9. **[`sandbox-prototype-sprint`](idea/sandbox-prototype-sprint/)** — build only the single core interaction, plus a
    five-person reaction-test kit. The prototype is a conversation prop, not
    evidence; the completed reaction sheets feed back into
    `sandbox-interview-synthesis`.
