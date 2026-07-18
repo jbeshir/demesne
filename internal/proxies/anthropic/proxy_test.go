@@ -238,7 +238,7 @@ func TestProxyTracksUsageFromSSE(t *testing.T) {
 		w.Header().Set("Content-Type", contentTypeEventStream)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`event: message_start
-data: {"type":"message_start","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":1000,"output_tokens":1}}}
+data: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":1000,"output_tokens":1}}}
 
 event: message_delta
 data: {"type":"message_delta","delta":{},"usage":{"output_tokens":2000}}

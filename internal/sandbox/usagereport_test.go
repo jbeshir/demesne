@@ -84,12 +84,12 @@ func buildUsageReportTestTree(t *testing.T) string {
 	writeJSONFile(t, childDir, "usage.json", map[string]any{
 		testFieldCostUSD: 0.03,
 		"per_model": map[string]any{
-			"claude-sonnet-4-6": map[string]any{testFieldCostUSD: 0.03},
+			"claude-sonnet-5": map[string]any{testFieldCostUSD: 0.03},
 		},
 	})
 	// Child: usage.jsonl — req-3 (sonnet, unnamed attribution)
 	writeTextFile(t, childDir, "usage.jsonl",
-		`{"requestId":"req-3","ts":"","model":"claude-sonnet-4-6","input":300,"output":100,"cache_creation":10,"cache_read":0}`+"\n",
+		`{"requestId":"req-3","ts":"","model":"claude-sonnet-5","input":300,"output":100,"cache_creation":10,"cache_read":0}`+"\n",
 	)
 	// Child: attribution.jsonl — req-3 has empty agent → "(unnamed)"
 	writeTextFile(t, childDir, "attribution.jsonl",
@@ -133,7 +133,7 @@ func TestUsageReport_AggregatesCorrectly(t *testing.T) {
 	assert.InDelta(t, 0.04, haiku.CostUSD, 1e-9, "haiku cost from usage.json")
 
 	sonnet := rep.ByModel[sonnetIdx]
-	assert.Equal(t, "claude-sonnet-4-6", sonnet.Model)
+	assert.Equal(t, "claude-sonnet-5", sonnet.Model)
 	assert.Equal(t, int64(300), sonnet.Input)
 	assert.Equal(t, int64(100), sonnet.Output)
 	assert.Equal(t, int64(10), sonnet.CacheCreation)

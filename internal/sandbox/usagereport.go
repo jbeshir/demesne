@@ -30,7 +30,7 @@ type DroppedCounts struct {
 
 // ModelUsage is the per-model token and cost breakdown in a UsageReport.
 type ModelUsage struct {
-	// Model is the model ID as reported in usage.jsonl (e.g. "claude-sonnet-4-6").
+	// Model is the model ID as reported in usage.jsonl (e.g. "claude-sonnet-5").
 	Model string
 	TokenTotals
 	// CostUSD is the vendor-reported cost taken from usage.json (authoritative).

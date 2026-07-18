@@ -8,7 +8,7 @@ import (
 )
 
 func TestLookupPricing_Sonnet_ExactPrices(t *testing.T) {
-	p, ok := LookupPricing("claude-sonnet-4-6")
+	p, ok := LookupPricing("claude-sonnet-5")
 	require.True(t, ok)
 	assert.InDelta(t, 3.0, float64(p.InputPerMTok), 1e-9)
 	assert.InDelta(t, 15.0, float64(p.OutputPerMTok), 1e-9)
@@ -50,7 +50,7 @@ func TestLookupPricing_PrefixMatchDatedID(t *testing.T) {
 	require.True(t, ok)
 	assert.InDelta(t, 5.0, float64(p.InputPerMTok), 1e-9)
 
-	p2, ok2 := LookupPricing("claude-sonnet-4-6-20260101")
+	p2, ok2 := LookupPricing("claude-sonnet-5-20260101")
 	require.True(t, ok2)
 	assert.InDelta(t, 3.0, float64(p2.InputPerMTok), 1e-9)
 
@@ -65,7 +65,7 @@ func TestLookupPricing_RemovedFallbacks(t *testing.T) {
 		"claude-opus-4-7",          // old explicit entry — removed
 		"claude-opus-4-7-20251201", // dated form of the old entry — removed
 		"claude-opus-4-anything",   // loose claude-opus-4 fallback — removed
-		"claude-sonnet-4-3",        // does not prefix-match claude-sonnet-4-6 — removed
+		"claude-sonnet-4-3",        // does not prefix-match claude-sonnet-5 — removed
 		"claude-haiku-4-3",         // does not prefix-match claude-haiku-4-5 — removed
 		"claude-opus-3",            // older series — never had an entry
 	}
@@ -82,7 +82,7 @@ func TestLookupPricing_Unknown(t *testing.T) {
 
 func TestCostUSD_SonnetMath(t *testing.T) {
 	// 1M input + 1M output on sonnet @ $3 / $15 per MTok = $18.
-	c := CostUSD("claude-sonnet-4-6", TokenCounts{
+	c := CostUSD("claude-sonnet-5", TokenCounts{
 		InputTokens:  1_000_000,
 		OutputTokens: 1_000_000,
 	})
@@ -118,7 +118,7 @@ func TestCostUSD_HaikuMath(t *testing.T) {
 
 func TestCostUSD_SonnetCacheTokens(t *testing.T) {
 	// 1M cache write + 1M cache read on sonnet @ $3.75 / $0.30 per MTok = $4.05.
-	c := CostUSD("claude-sonnet-4-6", TokenCounts{
+	c := CostUSD("claude-sonnet-5", TokenCounts{
 		CacheCreationInputTokens: 1_000_000,
 		CacheReadInputTokens:     1_000_000,
 	})

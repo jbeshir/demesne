@@ -203,7 +203,7 @@ func TestBuildUsageSummary_NoUsage(t *testing.T) {
 func TestBuildUsageSummary_CacheReadPct(t *testing.T) {
 	out := t.TempDir()
 	perModel := map[string]TokenTotals{
-		"claude-sonnet-4-6": {
+		"claude-sonnet-5": {
 			Input:         200,
 			Output:        50,
 			CacheCreation: 100,
