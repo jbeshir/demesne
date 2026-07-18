@@ -3,6 +3,7 @@ package codex
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jbeshir/demesne/internal/agents"
@@ -49,6 +50,7 @@ func TestWriteCodexConfig_WithServer(t *testing.T) {
 	dir := t.TempDir()
 	servers := []agents.MCPServerInfo{
 		{Name: "testserver", URL: "http://127.0.0.1:9000/mcp"},
+		{Name: "demesne", URL: "http://127.0.0.1:9001/mcp"},
 	}
 	require.NoError(t, writeCodexConfig(dir, servers))
 
@@ -58,4 +60,6 @@ func TestWriteCodexConfig_WithServer(t *testing.T) {
 
 	assert.Contains(t, content, "[mcp_servers.testserver]")
 	assert.Contains(t, content, `url = "http://127.0.0.1:9000/mcp"`)
+	assert.Contains(t, content, "[mcp_servers.demesne]")
+	assert.Equal(t, 2, strings.Count(content, "tool_timeout_sec = 172800"))
 }

@@ -11,8 +11,11 @@ import (
 // Model alias literals used in the schema-shape tests; pulled out so
 // goconst doesn't flag the repetition.
 const (
-	modelGPT55     = "gpt-5.5"
-	modelGPT54Mini = "gpt-5.4-mini"
+	modelGPT56Sol   = "gpt-5.6-sol"
+	modelGPT56Terra = "gpt-5.6-terra"
+	modelGPT56Luna  = "gpt-5.6-luna"
+	modelGPT55      = "gpt-5.5"
+	modelGPT54Mini  = "gpt-5.4-mini"
 )
 
 // toolEnumStrings reads a registered tool's property enum from the mcp
@@ -71,17 +74,17 @@ func TestModelEnumReflectsAvailability(t *testing.T) {
 		{
 			name: "both configured codex-first",
 			available: []sandbox.AgentOption{
-				{Name: agentNameCodex, Models: []string{modelGPT55, modelGPT54Mini}},
+				{Name: agentNameCodex, Models: []string{modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, modelGPT54Mini}},
 				{Name: agentNameClaudeCode, Models: []string{"sonnet", "opus", "fable", "haiku"}},
 			},
-			wantModelEnum:  []string{modelGPT55, modelGPT54Mini, "sonnet", "opus", "fable", "haiku"},
-			modelDescCheck: []string{"claude-code uses", "codex uses the gpt-5.x family", "inferred"},
+			wantModelEnum:  []string{modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, modelGPT54Mini, "sonnet", "opus", "fable", "haiku"},
+			modelDescCheck: []string{"claude-code uses", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini", "inferred"},
 		},
 		{
 			name:              "only codex configured single-value enum",
-			available:         []sandbox.AgentOption{{Name: agentNameCodex, Models: []string{modelGPT55, modelGPT54Mini}}},
-			wantModelEnum:     []string{modelGPT55, modelGPT54Mini},
-			modelDescCheck:    []string{"codex uses the gpt-5.x family"},
+			available:         []sandbox.AgentOption{{Name: agentNameCodex, Models: []string{modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, modelGPT54Mini}}},
+			wantModelEnum:     []string{modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, modelGPT54Mini},
+			modelDescCheck:    []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini"},
 			modelDescNotCheck: []string{"claude-code uses"},
 		},
 		{

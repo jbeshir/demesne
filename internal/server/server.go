@@ -140,12 +140,13 @@ func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 				"'opus' (complex synthesis), 'sonnet' (default; general agentic work), "+
 				"or 'haiku' (lookup / cheap)")
 		case agentNameCodex:
-			clauses = append(clauses, "codex uses the gpt-5.x family")
+			clauses = append(clauses, "codex uses 'gpt-5.6-sol' (default), "+
+				"'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', or 'gpt-5.4-mini'")
 		}
 	}
 	desc := "Model for the agent. The provider is inferred automatically from the chosen model. " +
 		"When omitted, defaults to the default model of the credential-aware default provider " +
-		"(codex's gpt-5.5 when Codex credentials are configured, otherwise claude-code's sonnet). " +
+		"(codex's gpt-5.6-sol when Codex credentials are configured, otherwise claude-code's sonnet). " +
 		"Provider-specific: " + joinSemi(clauses) + "."
 	return mcp.WithString(paramModel, mcp.Description(desc), mcp.Enum(models...))
 }
@@ -506,7 +507,11 @@ const imageParamDescription = "Container image. One of: 'node' (node:22), " +
 	"(demesne-built; Playwright JS + Chromium/Firefox/WebKit + Node, " +
 	"headless rendering at egress=none, built lazily on first use), " +
 	"'media' (demesne-built; ffmpeg + ImageMagick + libvips + audio tooling " +
-	"for video/audio/image conversion, built lazily on first use)."
+	"for video/audio/image conversion, built lazily on first use), " +
+	"'twine' (demesne-built; Tweego + Twine story formats + Chromium for " +
+	"offline interactive-fiction build/playtest, built lazily on first use), " +
+	"'webgamedev' (demesne-built; warm Phaser + Vite + TypeScript template + " +
+	"Chromium for offline HTML5-game build/playtest, built lazily on first use)."
 
 const egressParamDescription = "Outbound network policy. 'package-managers' (default) allows " +
 	"npm, PyPI, and conda registries; 'none' denies all egress."
@@ -538,13 +543,13 @@ Egress is restricted by default. 'package-managers' allows npm/PyPI/conda
 registries; 'none' denies all outbound traffic.
 
 The returned sandbox_id is passed to sandbox_exec, sandbox_upload,
-sandbox_download, and sandbox_destroy. TTL is 24h, refreshed on each
+sandbox_download, and sandbox_destroy. TTL is 48h, refreshed on each
 sandbox_exec call. Use sandbox_destroy to tear it down explicitly.`
 
 const execToolDescription = `Run a shell command in an existing sandbox.
 
 Executed with /bin/sh -c. Working directory is /out. The sandbox's TTL is
-refreshed by 24h before the command runs.
+refreshed by 48h before the command runs.
 
 The result text contains the exit code and the captured stdout.`
 

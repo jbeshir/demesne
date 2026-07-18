@@ -29,13 +29,13 @@ The output root is always appended to the effective mount allowlist, so /out and
 - **Codex** (preferred default). Authenticate with `codex login` (the OpenAI Codex CLI); point demesne at the resulting `auth.json` via `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`). When this file exists, demesne uses Codex by default.
 - **Claude Code** (fallback default). Produce a long-lived token with `claude setup-token`; export it as `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN`. Used by default when Codex is not configured.
 
-When no model is specified, demesne picks Codex if its credentials are configured, otherwise Claude Code. Configuring both providers is fine — Codex is still preferred. Set neither and demesne errors with a Codex setup-path message.
+When no model is specified, demesne picks Codex if its credentials are configured, otherwise Claude Code. The Codex default model is `gpt-5.6-sol`; `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, and `gpt-5.4-mini` remain selectable. Configuring both providers is fine — Codex is still preferred. Set neither and demesne errors with a Codex setup-path message.
 
 `sandbox_agent` and `sandbox_research` advertise the `model` enum in their MCP input schema filtered to the union of the configured providers' models (codex-first; when neither is configured the enum is omitted and the tools error at call time).
 
 ## Container images
 
-`sandbox_script`, `sandbox_create`, and `sandbox_exec` accept an `image` parameter naming one of the four allowlisted images (`internal/sandbox/images.go`):
+`sandbox_script`, `sandbox_create`, and `sandbox_exec` accept an `image` parameter naming one of the eight allowlisted images (`internal/sandbox/images.go`):
 
 | Name | Container image |
 |------|-----------------|
@@ -45,7 +45,9 @@ When no model is specified, demesne picks Codex if its credentials are configure
 | `anaconda` | `continuumio/anaconda3:latest` (default) |
 | `browser` | demesne-built from an embedded Dockerfile, like the agent images (Playwright + Chromium/Firefox/WebKit + Node); rendering works at `egress=none` |
 | `media` | demesne-built from an embedded Dockerfile, like the agent images (ffmpeg + ImageMagick + libvips + audio tooling for video/audio/image conversion) |
+| `twine` | demesne-built from an embedded Dockerfile, like the agent images (Tweego + Twine story formats + Chromium); offline interactive-fiction build/playtest works at `egress=none` |
+| `webgamedev` | demesne-built from an embedded Dockerfile, like the agent images (a warm Phaser + Vite + TypeScript template + Chromium); offline HTML5-game build/playtest works at `egress=none` |
 
 `sandbox_agent` and `sandbox_research` use the agent provider's own image, built locally from an embedded Dockerfile (`demesne-claude-code:<hash>` for the claude-code provider; `demesne-codex:<hash>` for the codex provider).
 
-Like the agent images, `browser` and `media` are each built once on the host from a fixed embedded Dockerfile and cached (`demesne-browser:<hash>` and `demesne-media:<hash>`) — agents select the image but don't configure or trigger its build. Because sandboxes are always created host-side, the cached images are equally available to nested in-sandbox callers, which is what lets in-sandbox pipelines (for example, end-to-end React development) render their own React content in a `browser` sandbox.
+Like the agent images, `browser`, `media`, `twine`, and `webgamedev` are each built once on the host from a fixed embedded Dockerfile and cached (`demesne-browser:<hash>`, `demesne-media:<hash>`, `demesne-twine:<hash>`, and `demesne-webgamedev:<hash>`) — agents select the image but don't configure or trigger its build. Because sandboxes are always created host-side, the cached images are equally available to nested in-sandbox callers, which is what lets in-sandbox pipelines (for example, end-to-end React development) render their own React content in a `browser` sandbox. The `twine` and `webgamedev` images share the `browser` image's Playwright/Chromium base layer, so podman caches it once across all three.

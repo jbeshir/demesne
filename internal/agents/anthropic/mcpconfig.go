@@ -15,6 +15,8 @@ import (
 // claude command references it via --mcp-config.
 const mcpConfigBasename = ".demesne-mcp.json"
 
+const mcpServerTypeHTTP = "http"
+
 // mcpConfigPath is the in-sandbox absolute path of the MCP config
 // file (under the read-only config-dir mount).
 const mcpConfigPath = agents.AgentConfigDir + "/" + mcpConfigBasename
@@ -38,7 +40,7 @@ type mcpHTTPServer struct {
 func writeMCPConfig(configDir string, servers []agents.MCPServerInfo) error {
 	cfg := mcpConfigFile{MCPServers: make(map[string]mcpHTTPServer, len(servers))}
 	for _, s := range servers {
-		cfg.MCPServers[s.Name] = mcpHTTPServer{Type: "http", URL: s.URL}
+		cfg.MCPServers[s.Name] = mcpHTTPServer{Type: mcpServerTypeHTTP, URL: s.URL}
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {

@@ -50,7 +50,7 @@ func TestLookupPricing_PrefixMatchDatedID(t *testing.T) {
 	require.True(t, ok)
 	assert.InDelta(t, 5.0, float64(p.InputPerMTok), 1e-9)
 
-	p2, ok2 := LookupPricing("claude-sonnet-5-20260615")
+	p2, ok2 := LookupPricing("claude-sonnet-5-20260101")
 	require.True(t, ok2)
 	assert.InDelta(t, 3.0, float64(p2.InputPerMTok), 1e-9)
 

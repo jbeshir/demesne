@@ -1,0 +1,32 @@
+---
+name: sandbox-make-ts-game
+description: Build, verify, review, and deliver a production-depth TypeScript browser game from a concept or an existing mounted repository. Use for real-time games with input, motion, and state; use sandbox-make-twine-game for branching narrative games.
+---
+
+# Build a TypeScript game
+
+Own the complete workflow. Produce a playable offline build, editable source, reproducible evidence, and a concise record of decisions and risks.
+
+Read [resources/playtest.md](resources/playtest.md) before working and again before final validation. It owns the scenario, harness, command, report, and artifact contracts; do not improvise them.
+
+## Prepare and orchestrate
+
+1. Derive intake candidates from the generated Environment input list when present; otherwise inspect immediate `/in` entries excluding `/in/.agent` and `/in/previous-jobs`. Identify projects by repository/project markers, not raw entry count. Use the sole repository, or greenfield mode when a concept was supplied; fail on multiple repositories or a missing explicitly requested repository.
+2. `/workspace/repo` is the only project root. It must be absent or empty before staging; if it is nonempty, fail explicitly rather than choosing another root or altering unexplained contents. Copy an input repository completely, including `.git`, and record source, destination, HEAD, and initial status. For greenfield work, copy `/opt/game-template` using `sandbox_script` with `image: "webgamedev"` (the template exists only there), or create the resource's lockfile-backed equivalent if unavailable.
+3. Use uniquely named children, reasoning agents for design/editing/review, and deterministic scripts for restore/build/playtest gates. Nested tools other than `sandbox_research` share `/in` and `/workspace`; research has neither and must return findings through its output. Omit `model` by default. Honor an explicit model only when it exactly matches a concrete value in the live child-tool description or known configured allowlist (currently `haiku`, `sonnet`, `opus`, `fable`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, or `gpt-5.4-mini`) and its provider is configured; unconstrained schema acceptance is insufficient.
+4. For a background call retain both `job_id` and child `name`; poll `sandbox_wait(..., timeout_seconds: 120)` while running and cancel obsolete dependents. Read full diagnostics at `/out/child/<name>/stderr.log` in the spawning parent (or `/in/previous-jobs/<name>/stderr.log` in a later sibling); treat returned `output_path`/`output_dir` as informational unless the live tool explicitly guarantees an in-sandbox path.
+5. Retry an infrastructure/tool failure exactly once under a fresh name. Treat a completed nonzero deterministic command or failing structured report as a product defect: preserve evidence, dispatch a fix, then rebuild and retest under fresh names, for at most three fix/retest rounds per gate. On exhaustion write `/out/FAILURE.md`, cancel dependents, and stop.
+6. Copy selected child evidence to parent `/out`; child output is not surfaced automatically. Delivery must satisfy every applicable entry in the resource's final-delivery manifest, including the complete repository at `/out/repo`.
+
+## Workflow
+
+1. **Intake and research.** Record input/concept, requested experience, workspace provenance, constraints, and sources in `WORKLOG.md`. Research genre, mechanics, accessibility, scope, and assets only when evidence is needed.
+2. **Design.** Have a fresh agent write `DESIGN.md` covering experience, loop, controls, touch behavior, states, progression, systems, audiovisual direction, accessibility, architecture, persistence, tuning, scope, and acceptance criteria. Define deterministic hooks without replacing real input paths.
+3. **Plan.** Write `PLAN.md` with vertical slices, code/assets, state/API changes, and scenarios. Check scene architecture, ownership, data flow, input, rendering, audio, persistence, and testing. Keep one writer at a time on coupled code.
+4. **Prepare validation.** Restore only lockfile-pinned dependencies. Create the canonical scenarios and deterministic harness before the first slice; grow coverage without changing the schema.
+5. **Implement slices.** For each slice, edit, build in `webgamedev`, and run the full browser suite separately. Fix deterministic failures using the bounded loop above. Do not advance until all prior and new scenarios pass without browser/console errors.
+6. **Review and fix.** After checks pass, use an independent fresh-context reviewer for play feel, feedback, accessibility, integration, architecture, and future risk. Apply material fixes separately, rebuild, and replaytest. Run at most three review/fix rounds; stop early only when no material improvement remains and record deferrals.
+7. **Final cohesion.** Independently review the assembled game for cross-system behavior, pacing, balance, consistency, controls, onboarding, endings, and regressions. Apply worthwhile fixes and rerun complete validation within the same bounded rules.
+8. **Deliver.** Run the resource's exact clean build/playtest and satisfy its final-delivery manifest. Write `/out/SUMMARY.md` with commands, tool versions, results, review stop reason, backlog, and risks. Print `DONE` only after every manifest entry whose condition applies passes its stated gate.
+
+Never accept self-review as independent review or describe an incomplete delivery as successful.

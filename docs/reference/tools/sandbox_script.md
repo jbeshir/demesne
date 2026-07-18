@@ -7,7 +7,7 @@ Run a single shell command in a fresh sandbox and return its stdout and stderr.
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `command` | string | yes | — | Shell command to run inside the sandbox. Executed with `/bin/sh -c`. Working directory is `/out`. |
-| `image` | string | no | `anaconda` | Container image. One of: `node` (node:22), `python` (python:3.12), `go` (golang:1), `anaconda` (continuumio/anaconda3:latest, default), `browser` (demesne-built; Playwright JS + Chromium/Firefox/WebKit + Node, headless rendering at egress=none, built lazily on first use), `media` (demesne-built; ffmpeg + ImageMagick + libvips + audio tooling for video/audio/image conversion, built lazily on first use). |
+| `image` | string | no | `anaconda` | Container image. One of: `node` (node:22), `python` (python:3.12), `go` (golang:1), `anaconda` (continuumio/anaconda3:latest, default), `browser` (demesne-built; Playwright JS + Chromium/Firefox/WebKit + Node, headless rendering at egress=none, built lazily on first use), `media` (demesne-built; ffmpeg + ImageMagick + libvips + audio tooling for video/audio/image conversion, built lazily on first use), `twine` (demesne-built; Tweego + Twine story formats + Chromium for offline interactive-fiction build/playtest, built lazily on first use), `webgamedev` (demesne-built; warm Phaser + Vite + TypeScript template + Chromium for offline HTML5-game build/playtest, built lazily on first use). |
 | `egress` | string | no | `package-managers` | Outbound network policy. `package-managers` allows npm, PyPI, and conda registries; `none` denies all egress. |
 | `files` | array of strings | no | — | Host file paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
 | `directories` | array of strings | no | — | Host directory paths to mount read-only into `/in/<basename>`. Each path must be absolute and inside `DEMESNE_ALLOWED_PATHS`. The live MCP input schema's description for this parameter is populated at registration time with the configured `DEMESNE_ALLOWED_PATHS` roots (or a no-host-inputs warning when none are configured). |
@@ -15,7 +15,7 @@ Run a single shell command in a fresh sandbox and return its stdout and stderr.
 
 ## Async usage
 
-Pass `background: true` to start a long-running command without blocking the MCP tool-call. The response is `{job_id, status: "running"}`. Poll the job with `sandbox_status` or block (up to 120s per call) with `sandbox_wait`. Cancel the job and its descendant subtree with `sandbox_cancel`. Use this when the command might exceed the ~240s client tool-call timeout.
+Synchronous commands may run to completion (subject to the explicit 48h runtime limit) and remain cancellable. Pass `background: true` for concurrent work, detachment, status/progress polling, or deliberate job control. The response is `{job_id, status: "running"}`; poll it with `sandbox_status` or block (up to 120s per call) with `sandbox_wait`, and cancel its descendant subtree with `sandbox_cancel`.
 
 ## Annotations
 
@@ -101,7 +101,7 @@ Files written: `stdout.log` (full stdout) and `stderr.log` (full stderr). The MC
 
 | Error | When it occurs |
 |-------|----------------|
-| `image "<name>" is not in the allowlist (node, python, anaconda, go, browser, media)` | `image` parameter names an unknown container image. |
+| `image "<name>" is not in the allowlist (node, python, anaconda, go, browser, media, twine, webgamedev)` | `image` parameter names an unknown container image. |
 | `egress mode "<mode>" is not in the allowlist (none, package-managers, open)` | `egress` parameter is not one of the three valid modes. |
 | `mount path must be absolute: <path>` | A path in `files` or `directories` is relative. |
 | `mount path <path> is not within DEMESNE_ALLOWED_PATHS` | A path in `files` or `directories` is outside every configured `DEMESNE_ALLOWED_PATHS` entry. |

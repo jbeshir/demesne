@@ -14,7 +14,7 @@ Run a shell command in an existing sandbox.
 | Hint | Value | Rationale |
 |------|-------|-----------|
 | `readOnlyHint` | `false` | Executes arbitrary commands that can mutate the sandbox filesystem. |
-| `destructiveHint` | `true` | Can delete files inside the sandbox and mutate persistent sandbox state; the TTL is also refreshed by 24h before the command runs. |
+| `destructiveHint` | `true` | Can delete files inside the sandbox and mutate persistent sandbox state; the TTL is also refreshed by 48h before the command runs. |
 | `idempotentHint` | `false` | Running the same command twice can produce different results. |
 | `openWorldHint` | `true` | The sandbox retains the egress policy set at `sandbox_create` time; with `package-managers` it can reach registries on the open internet. |
 
@@ -76,7 +76,7 @@ Returned as `structuredContent` against the declared output schema — see [Stru
 | `stdout` | string |
 | `stderr` | string |
 
-The sandbox TTL is refreshed by 24 hours before the command runs.
+The sandbox TTL is refreshed by 48 hours before the command runs.
 
 Stderr is captured separately from stdout (via the SDK's per-stream split) and returned as the `stderr` field, tail-bounded to the last 16 KiB. No on-disk file: `sandbox_exec` runs against the sandbox's persistent `/out` and would otherwise overwrite a log on every call.
 

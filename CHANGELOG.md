@@ -8,10 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **GPT-5.6 Codex models**: added explicit support and indicative pricing for `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`; Codex now defaults to `gpt-5.6-sol` when Codex credentials are configured.
+- **`twine` sandbox image** (`internal/sandbox/twineimage`, `demesne-twine`): a demesne-built, lazily-built image layering the Tweego interactive-fiction compiler and the bundled Twine story formats (Harlowe, SugarCube, …) onto the browser image's Playwright/Chromium + Node base, so a Twine story can be compiled and headlessly playtested entirely at `egress=none`. Selectable as `image: "twine"` on `sandbox_script`/`sandbox_create`/`sandbox_exec` and the in-sandbox child surfaces.
+- **`webgamedev` sandbox image** (`internal/sandbox/webgamedevimage`, `demesne-webgamedev`): a demesne-built, lazily-built image baking a warm Phaser + Vite + TypeScript template (with `node_modules` pre-installed) at `/opt/game-template` onto the same Playwright/Chromium + Node base, so an HTML5 game can be built and headlessly playtested entirely at `egress=none`. Selectable as `image: "webgamedev"`. Shares the `browser` image's base layer, so podman caches it once across all three. Fast-moving versions (Tweego, Phaser, Vite, TypeScript, the Playwright tag) are build `ARG`s with pinned defaults that join the content-hash cache key.
 
 ### Changed
+- **Sandbox lifetime limits raised to 48h across the board**: one-shot `commandTimeout`/`oneShotSandboxTTLSeconds` (`sandbox_script`/`sandbox_agent`/`sandbox_research`) go from 12h to 48h, and persistent `persistentSandboxTTLSeconds`/`renewDuration` (`sandbox_create`/`sandbox_exec`) go from 24h to 48h, so both cap out at the same limit (`internal/sandbox/runner.go`, `internal/sandbox/exec.go`).
 
 ### Fixed
+- **Long-running Codex MCP calls**: generated Codex configuration now permits each MCP server tool call to run for up to Demesne's 48-hour maximum sandbox job lifetime, instead of setting `tool_timeout_sec = 0` (which Codex treats as an immediate timeout). Caller cancellation and bounded `sandbox_wait` polling are unchanged.
 
 ## [0.2.0] - 2026-06-27
 

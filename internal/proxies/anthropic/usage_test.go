@@ -45,7 +45,7 @@ func TestTracker_WritesUsageJSONAtomically(t *testing.T) {
 func TestSSEInterceptor_AccumulatesFromStartAndDelta(t *testing.T) {
 	body := strings.Join([]string{
 		`event: message_start`,
-		`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-5-20260615","usage":{"input_tokens":42,"output_tokens":1,"cache_creation_input_tokens":7,"cache_read_input_tokens":3}}}`,
+		`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-5-20260101","usage":{"input_tokens":42,"output_tokens":1,"cache_creation_input_tokens":7,"cache_read_input_tokens":3}}}`,
 		``,
 		`event: content_block_delta`,
 		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}`,
@@ -65,7 +65,7 @@ func TestSSEInterceptor_AccumulatesFromStartAndDelta(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	m := tr.snapshot().PerModel["claude-sonnet-5-20260615"]
+	m := tr.snapshot().PerModel["claude-sonnet-5-20260101"]
 	assert.Equal(t, int64(42), m.InputTokens)
 	assert.Equal(t, int64(99), m.OutputTokens, "message_delta output supersedes message_start")
 	assert.Equal(t, int64(7), m.CacheCreationInputTokens)
