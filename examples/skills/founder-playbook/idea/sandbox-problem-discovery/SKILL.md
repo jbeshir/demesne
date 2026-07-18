@@ -5,7 +5,7 @@ description: Research and assess a customer problem or product idea, compare it 
 
 # Sandbox Problem Discovery
 
-Produce a useful decision document, not an audit package. Scale the work to the decision: a narrow question may need a short desk review; an unfamiliar or consequential market may justify broader research. Work directly unless bounded parallel research would clearly help. Never require agents or fan-out.
+Produce a useful decision document, not an audit package. Scale the work to the decision: a narrow question may need a short desk review; an unfamiliar or consequential market may justify broad, parallel research. Use subagents or research jobs when independent evidence lanes can be investigated faster or more thoroughly in parallel. Keep each assignment focused, share enough context to make its findings comparable, and synthesize all accepted findings into one report.
 
 ## Start with what already exists
 
@@ -18,7 +18,9 @@ Clarify the audience, payer, recurring workflow, pain, current workaround, and c
 - observable demand, such as recurring behaviour, adoption, searches, reviews, or paid adjacent products;
 - exact willingness to pay for this concept, which requires stronger evidence such as purchases, renewals, paid pilots, or buyer commitments.
 
-Synthesize only what the available sources support. State an important unknown once, plainly, where it affects the decision. Do not repeat caveats in every section. Stop when more desk research is unlikely to change the recommendation; put the remaining questions into next research.
+Choose evidence lanes that fit the question rather than following a fixed checklist. Typical lanes include customer pain and workflow, market or behavioural demand, competitors and substitutes, pricing and willingness to pay, acquisition channels, and technical or regulatory constraints. Investigate the lanes actively using current public sources and any relevant mounted material. For a broad idea, assign independent lanes or genuinely different customer hypotheses in parallel; for a narrow idea, combine related lanes. Ask researchers to return concrete findings, sources, contradictions, and searches that found no useful evidence—not compliance artifacts.
+
+Reconcile overlapping findings and investigate material conflicts before writing. Synthesize what the sources support and make bounded judgments where evidence is incomplete. State an important unknown once, plainly, where it affects the decision; never use uncertainty as a reason to avoid searching for an answer. Stop when additional desk research is unlikely to change the recommendation, then put questions that require interviews, experiments, or paid pilots into next research.
 
 ## Write one canonical report
 
