@@ -30,11 +30,15 @@ func TestGenerateContext(t *testing.T) {
 		notWant        []string
 	}{
 		{
-			name:    "no preamble no inputs",
-			prompt:  promptDefault,
-			egress:  egress.None,
-			want:    []string{wantEnv, "No caller-supplied inputs", wantTask, promptDefault, "Flush partial findings to `/out`"},
-			notWant: []string{"/in/notes", inDataMount},
+			name:   "no preamble no inputs",
+			prompt: promptDefault,
+			egress: egress.None,
+			want:   []string{wantEnv, "No caller-supplied inputs", wantTask, promptDefault, "Flush partial findings to `/out`"},
+			notWant: []string{
+				"/in/notes", inDataMount,
+				"## Engineering changes",
+				"variadic optional parameters",
+			},
 		},
 		{
 			name:     "preamble only",

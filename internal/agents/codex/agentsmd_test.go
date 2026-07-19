@@ -37,6 +37,9 @@ func TestGenerateContext(t *testing.T) {
 				wantEnv, "No caller-supplied inputs", wantTask, promptDefault,
 				"restricted to the OpenAI API",
 				"Flush partial findings to `/out`",
+				"## Engineering changes",
+				"For internal packages, prefer clean, explicit migrations and update all callers",
+				"variadic optional parameters, nil/default shims, alternate constructors, or deprecated wrappers",
 			},
 			// The egress sentence must name OpenAI, not Anthropic (this is
 			// the Codex provider, mirrored from claude-code).
