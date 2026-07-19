@@ -220,9 +220,9 @@ func (imageGenAdapter) RewriteResult(result *mcp.CallToolResult, mapping map[str
 
 // ---- assetsAdapter ----
 
-// assetsAdapter bridges the "assets" MCP server, whose file-producing tools
-// (get_icon/get_illustration/get_font) write asset files to their own output
-// directory and report them in a native structured result shaped
+// assetsAdapter bridges the "assets" MCP server, whose file-producing get_*
+// tools write asset files to their own output directory and report them in a
+// native structured result shaped
 // {"files":[{"path",...}],"count":N}. Unlike imageGenAdapter's file:// URLs,
 // the reported paths are plain absolute host paths. Like imageGenAdapter, the
 // server picks its own output location, so PrepareArgs is a no-op.
@@ -231,7 +231,17 @@ type assetsAdapter struct{}
 func (assetsAdapter) Server() string { return serverAssets }
 
 func (assetsAdapter) Tools() []string {
-	return []string{toolGetIcon, toolGetIllustration, toolGetFont}
+	return []string{
+		toolGetIcon,
+		toolGetIllustration,
+		toolGetFont,
+		toolGetPhoto,
+		toolGetTexture,
+		toolGetModel,
+		toolGetAudio,
+		toolGetSprite,
+		toolGetPack,
+	}
 }
 
 func (assetsAdapter) PrepareArgs(args map[string]any, _ string) map[string]any {
@@ -239,29 +249,40 @@ func (assetsAdapter) PrepareArgs(args map[string]any, _ string) map[string]any {
 }
 
 func (assetsAdapter) ExtractHostPaths(result *mcp.CallToolResult) []string {
-	sc, ok := result.StructuredContent.(map[string]any)
-	if !ok {
-		return nil
-	}
-	files, ok := sc[filesKey].([]any)
-	if !ok {
-		return nil
-	}
-
 	seen := map[string]struct{}{}
 	var paths []string
-	for _, f := range files {
-		entry, ok := f.(map[string]any)
+	addManifest := func(manifest map[string]any) {
+		files, ok := manifest[filesKey].([]any)
+		if !ok {
+			return
+		}
+		for _, f := range files {
+			entry, ok := f.(map[string]any)
+			if !ok {
+				continue
+			}
+			p, ok := entry[pathKey].(string)
+			if !ok || p == "" {
+				continue
+			}
+			if _, dup := seen[p]; !dup {
+				seen[p] = struct{}{}
+				paths = append(paths, p)
+			}
+		}
+	}
+
+	if sc, ok := result.StructuredContent.(map[string]any); ok {
+		addManifest(sc)
+	}
+	for _, c := range result.Content {
+		tc, ok := c.(mcp.TextContent)
 		if !ok {
 			continue
 		}
-		p, ok := entry[pathKey].(string)
-		if !ok || p == "" {
-			continue
-		}
-		if _, dup := seen[p]; !dup {
-			seen[p] = struct{}{}
-			paths = append(paths, p)
+		var manifest map[string]any
+		if json.Unmarshal([]byte(tc.Text), &manifest) == nil {
+			addManifest(manifest)
 		}
 	}
 	return paths
