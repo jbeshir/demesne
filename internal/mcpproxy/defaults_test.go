@@ -67,32 +67,28 @@ func TestDefaultAllowlist_MermaidPins(t *testing.T) {
 	assert.False(t, ok, "mermaid: render_inline must not be in default allowlist")
 }
 
-// TestDefaultAllowlist_AssetsPins is a regression ratchet: it pins all seven
-// read-only assets tools as present and hypothetical mutating/privileged names
-// as absent. Every assets tool only reads embedded data and writes into a local
-// output dir, so all seven are safe to expose by default.
-func TestDefaultAllowlist_AssetsPins(t *testing.T) {
-	as := defaultAllowlist[serverAssets]
-
-	// Must be present (all read-only: search/list and the file-producing gets).
-	for _, tool := range []ToolName{
+func TestDefaultAllowlist_AssetsExact(t *testing.T) {
+	want := setOf(
 		"list_asset_sources",
 		"search_icons",
-		"get_icon",
+		toolGetIcon,
 		"search_illustrations",
-		"get_illustration",
+		toolGetIllustration,
 		"search_fonts",
-		"get_font",
-	} {
-		_, ok := as[tool]
-		assert.True(t, ok, "assets: %s should be in default allowlist", tool)
-	}
-
-	// Must be absent (mutating/privileged operations — guard against future addition).
-	_, ok := as["delete_asset"]
-	assert.False(t, ok, "assets: delete_asset must not be in default allowlist")
-	_, ok = as["set_output_dir"]
-	assert.False(t, ok, "assets: set_output_dir must not be in default allowlist")
+		toolGetFont,
+		"search_photos",
+		toolGetPhoto,
+		"search_textures",
+		toolGetTexture,
+		"search_models",
+		toolGetModel,
+		"search_audio",
+		toolGetAudio,
+		"search_sprites",
+		toolGetSprite,
+		toolGetPack,
+	)
+	assert.Equal(t, want, defaultAllowlist[serverAssets])
 }
 
 // TestDefaultAllowlist_AnkiPins pins read-only anki query tools as present

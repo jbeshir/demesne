@@ -2,6 +2,7 @@ package mcpproxy
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -70,6 +71,12 @@ func TestFileGenAdapterFor(t *testing.T) {
 		{serverAssets, toolGetIcon, false},
 		{serverAssets, toolGetIllustration, false},
 		{serverAssets, toolGetFont, false},
+		{serverAssets, toolGetPhoto, false},
+		{serverAssets, toolGetTexture, false},
+		{serverAssets, toolGetModel, false},
+		{serverAssets, toolGetAudio, false},
+		{serverAssets, toolGetSprite, false},
+		{serverAssets, toolGetPack, false},
 		{serverWorkflowy, toolSearchNodes, true},
 		{serverMermaid, toolEditImage, true},
 		{serverImageGen, toolGenerate, true},
@@ -86,6 +93,27 @@ func TestFileGenAdapterFor(t *testing.T) {
 				assert.NotNil(t, a)
 			}
 		})
+	}
+}
+
+func TestFileGenAdapterFor_AssetsExact(t *testing.T) {
+	want := map[string]struct{}{
+		toolGetIcon: {}, toolGetIllustration: {}, toolGetFont: {},
+		toolGetPhoto: {}, toolGetTexture: {}, toolGetModel: {},
+		toolGetAudio: {}, toolGetSprite: {}, toolGetPack: {},
+	}
+	got := make(map[string]struct{})
+	for tool := range defaultFileGenRegistry.adapters[serverAssets] {
+		got[tool] = struct{}{}
+	}
+	assert.Equal(t, want, got)
+
+	for _, tool := range []string{
+		"list_asset_sources", "search_icons", "search_illustrations", "search_fonts",
+		"search_photos", "search_textures", "search_models", "search_audio", "search_sprites",
+		"get_video", "delete_asset",
+	} {
+		assert.Nil(t, FileGenAdapterFor(serverAssets, tool), tool)
 	}
 }
 
@@ -265,7 +293,11 @@ func TestImageGenAdapter_RewriteResult(t *testing.T) {
 func TestAssetsAdapter_ServerAndTools(t *testing.T) {
 	a := assetsAdapter{}
 	assert.Equal(t, serverAssets, a.Server())
-	assert.ElementsMatch(t, []string{toolGetIcon, toolGetIllustration, toolGetFont}, a.Tools())
+	assert.ElementsMatch(t, []string{
+		toolGetIcon, toolGetIllustration, toolGetFont, toolGetPhoto,
+		toolGetTexture, toolGetModel, toolGetAudio, toolGetSprite, toolGetPack,
+	}, a.Tools())
+	assert.Len(t, a.Tools(), 9)
 }
 
 func TestAssetsAdapter_PrepareArgs_NoOp(t *testing.T) {
@@ -320,14 +352,31 @@ func TestAssetsAdapter_ExtractHostPaths(t *testing.T) {
 		assert.Empty(t, got)
 	})
 
-	t.Run("no structured content", func(t *testing.T) {
+	t.Run("JSON text manifest", func(t *testing.T) {
 		result := &mcp.CallToolResult{
 			Content: []mcp.Content{
-				mcp.TextContent{Type: textType, Text: "Wrote icon to " + assetHostPath},
+				mcp.TextContent{Type: textType, Text: `{"files":[{"path":"` + assetHostPath + `","kind":"icon"}],"count":1}`},
 			},
 		}
 		got := a.ExtractHostPaths(result)
-		assert.Empty(t, got)
+		assert.Equal(t, []string{assetHostPath}, got)
+	})
+
+	t.Run("structured and JSON text manifests deduped", func(t *testing.T) {
+		result := &mcp.CallToolResult{
+			StructuredContent: map[string]any{filesKey: []any{map[string]any{pathKey: assetHostPath}}},
+			Content: []mcp.Content{
+				mcp.TextContent{Type: textType, Text: `{"files":[{"path":"` + assetHostPath + `"},{"path":"` + assetPathA + `"}]}`},
+			},
+		}
+		assert.Equal(t, []string{assetHostPath, assetPathA}, a.ExtractHostPaths(result))
+	})
+
+	t.Run("non-manifest text ignored", func(t *testing.T) {
+		result := &mcp.CallToolResult{Content: []mcp.Content{
+			mcp.TextContent{Type: textType, Text: "Wrote icon to " + assetHostPath},
+		}}
+		assert.Empty(t, a.ExtractHostPaths(result))
 	})
 }
 
@@ -342,7 +391,7 @@ func TestAssetsAdapter_RewriteResult(t *testing.T) {
 	result := &mcp.CallToolResult{
 		StructuredContent: sc,
 		Content: []mcp.Content{
-			mcp.TextContent{Type: textType, Text: "Wrote icon to " + assetHostPath},
+			mcp.TextContent{Type: textType, Text: `{"files":[{"path":"` + assetHostPath + `","kind":"icon"}],"count":1}`},
 		},
 	}
 	mapping := map[string]string{assetHostPath: assetSandboxPath}
@@ -359,4 +408,12 @@ func TestAssetsAdapter_RewriteResult(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, tc.Text, assetSandboxPath)
 	assert.NotContains(t, tc.Text, assetHostPath)
+
+	var textManifest map[string]any
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &textManifest))
+	textFiles, ok := textManifest[filesKey].([]any)
+	require.True(t, ok)
+	textEntry, ok := textFiles[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, assetSandboxPath, textEntry[pathKey])
 }

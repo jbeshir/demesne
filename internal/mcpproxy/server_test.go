@@ -29,6 +29,12 @@ const (
 	stubGreetURI         = "mem://greet"
 	stubGreetPromptName  = "greet-prompt"
 	stubPromptArgSubject = "subject"
+	testMCPServersKey    = "mcpServers"
+	testTypeKey          = "type"
+	testTransportStdio   = "stdio"
+	testCommandKey       = "command"
+	testEnvKey           = "env"
+	testClientName       = "test"
 )
 
 // TestMain lets this test binary double as a stub stdio MCP server
@@ -42,8 +48,33 @@ func TestMain(m *testing.M) {
 	case os.Getenv("DEMESNE_TEST_STUB_IMAGEGEN") == "1":
 		runImagegenStub()
 		return
+	case os.Getenv("DEMESNE_TEST_STUB_ASSETS") == "1":
+		runAssetsStub()
+		return
 	}
 	os.Exit(m.Run())
+}
+
+// runAssetsStub serves every assets file-producing tool. The requested shape
+// lets one compact handler test exercise both forms emitted by manifest tools.
+func runAssetsStub() {
+	srv := server.NewMCPServer("stub-assets", "0")
+	for _, name := range (assetsAdapter{}).Tools() {
+		toolName := name
+		srv.AddTool(mcp.Tool{Name: toolName}, func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			hostPath := "/host/assets/" + toolName + ".asset"
+			manifest := map[string]any{
+				filesKey: []any{map[string]any{pathKey: hostPath}},
+				countKey: 1,
+			}
+			if req.GetString("shape", "") == textType {
+				data, _ := json.Marshal(manifest)
+				return mcp.NewToolResultText(string(data)), nil
+			}
+			return &mcp.CallToolResult{StructuredContent: manifest}, nil
+		})
+	}
+	_ = server.ServeStdio(srv)
 }
 
 // stubCompleter returns fixed completion values for any prompt or
@@ -69,7 +100,7 @@ func runImagegenStub() {
 		Description: "generate image stub",
 	}, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return &mcp.CallToolResult{
-			Content:           []mcp.Content{mcp.TextContent{Type: "text", Text: `{"image_url":"file:///tmp/fake/img.png"}`}},
+			Content:           []mcp.Content{mcp.TextContent{Type: textType, Text: `{"image_url":"file:///tmp/fake/img.png"}`}},
 			StructuredContent: map[string]any{imageURLKey: imageGenStubURL},
 		}, nil
 	})
@@ -131,7 +162,7 @@ func runStubServer() {
 			Messages: []mcp.PromptMessage{
 				{
 					Role:    mcp.RoleUser,
-					Content: mcp.TextContent{Type: "text", Text: "hello " + subject},
+					Content: mcp.TextContent{Type: textType, Text: "hello " + subject},
 				},
 			},
 		}, nil
@@ -156,11 +187,11 @@ func writeStubConfig(t *testing.T) string {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cfg := map[string]any{
-		"mcpServers": map[string]any{
+		testMCPServersKey: map[string]any{
 			serverWorkflowy: map[string]any{
-				"type":    "stdio",
-				"command": self,
-				"env":     map[string]string{"DEMESNE_TEST_STUB_MCP": "1"},
+				testTypeKey:    testTransportStdio,
+				testCommandKey: self,
+				testEnvKey:     map[string]string{"DEMESNE_TEST_STUB_MCP": "1"},
 			},
 		},
 	}
@@ -194,7 +225,7 @@ func connectToUpstream(t *testing.T, ctx context.Context, socketPath string) *cl
 	t.Cleanup(func() { _ = httpClient.Close() })
 	require.NoError(t, httpClient.Start(ctx))
 	initReq := mcp.InitializeRequest{}
-	initReq.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "0"}
+	initReq.Params.ClientInfo = mcp.Implementation{Name: testClientName, Version: "0"}
 	_, err = httpClient.Initialize(ctx, initReq)
 	require.NoError(t, err)
 	return httpClient
@@ -510,11 +541,11 @@ func writeImagegenStubConfig(t *testing.T) (string, string) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	cfg := map[string]any{
-		"mcpServers": map[string]any{
+		testMCPServersKey: map[string]any{
 			serverImageGen: map[string]any{
-				"type":    "stdio",
-				"command": self,
-				"env":     map[string]string{"DEMESNE_TEST_STUB_IMAGEGEN": "1"},
+				testTypeKey:    testTransportStdio,
+				testCommandKey: self,
+				testEnvKey:     map[string]string{"DEMESNE_TEST_STUB_IMAGEGEN": "1"},
 			},
 		},
 	}
@@ -542,7 +573,7 @@ func connectToImagegenUpstream(t *testing.T, ctx context.Context, httpClient *ht
 	t.Cleanup(func() { _ = mcpClient.Close() })
 	require.NoError(t, mcpClient.Start(ctx))
 	initReq := mcp.InitializeRequest{}
-	initReq.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "0"}
+	initReq.Params.ClientInfo = mcp.Implementation{Name: testClientName, Version: "0"}
 	_, err = mcpClient.Initialize(ctx, initReq)
 	require.NoError(t, err)
 	return mcpClient
@@ -573,6 +604,7 @@ type fakeDeliverer struct {
 	deliveryDirCalls atomic.Int32
 	deliverCalls     atomic.Int32
 	lastJobID        string
+	deliveredPaths   [][]string
 }
 
 func (f *fakeDeliverer) DeliveryDir(parent string) (string, string, error) {
@@ -581,9 +613,99 @@ func (f *fakeDeliverer) DeliveryDir(parent string) (string, string, error) {
 	return f.hostDir, f.sbDir, f.err
 }
 
-func (f *fakeDeliverer) Deliver(_ string, _ []string) (map[string]string, error) {
+func (f *fakeDeliverer) Deliver(_ string, paths []string) (map[string]string, error) {
 	f.deliverCalls.Add(1)
+	f.deliveredPaths = append(f.deliveredPaths, append([]string(nil), paths...))
 	return f.mapping, f.deliverErr
+}
+
+func TestAggregator_AssetsFileProducersDeliverAndRewrite(t *testing.T) {
+	self, err := os.Executable()
+	require.NoError(t, err)
+	tools := (assetsAdapter{}).Tools()
+	cfg := map[string]any{testMCPServersKey: map[string]any{
+		serverAssets: map[string]any{
+			testTypeKey: testTransportStdio, testCommandKey: self,
+			testEnvKey: map[string]string{"DEMESNE_TEST_STUB_ASSETS": "1"},
+		},
+	}}
+	cfgData, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	cfgPath := filepath.Join(t.TempDir(), testClaudeJSON)
+	require.NoError(t, os.WriteFile(cfgPath, cfgData, 0o600))
+	allowData, err := json.Marshal(map[string][]string{serverAssets: tools})
+	require.NoError(t, err)
+	allowPath := filepath.Join(t.TempDir(), "allowlist.json")
+	require.NoError(t, os.WriteFile(allowPath, allowData, 0o600))
+
+	mapping := make(map[string]string, len(tools))
+	for _, tool := range tools {
+		mapping["/host/assets/"+tool+".asset"] = fakeSandboxDir + "/" + tool + ".asset"
+	}
+	fd := &fakeDeliverer{hostDir: fakeHostDir, sbDir: fakeSandboxDir, mapping: mapping}
+	socketPath := filepath.Join(t.TempDir(), testAggSock)
+	agg, err := NewAggregator(Config{
+		ClaudeMCPConfigPath: cfgPath, AllowlistFilePath: allowPath,
+		SocketPath: socketPath, FileDeliverer: fd,
+	})
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, agg.Start(ctx))
+	defer func() { _ = agg.Shutdown(context.Background()) }()
+
+	httpClient := &http.Client{Transport: &headerSettingTransport{
+		base:    dialUnix(socketPath).Transport,
+		headers: map[string]string{proxymcp.ParentHeader: "assets-parent"},
+	}}
+	mcpClient, err := client.NewStreamableHttpClient(
+		"http://demesne-mcp/assets/mcp", transport.WithHTTPBasicClient(httpClient),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mcpClient.Close() })
+	require.NoError(t, mcpClient.Start(ctx))
+	initReq := mcp.InitializeRequest{}
+	initReq.Params.ClientInfo = mcp.Implementation{Name: testClientName, Version: "0"}
+	_, err = mcpClient.Initialize(ctx, initReq)
+	require.NoError(t, err)
+
+	for _, tool := range tools {
+		for _, shape := range []string{"structured", textType} {
+			t.Run(tool+"/"+shape, func(t *testing.T) {
+				hostPath := "/host/assets/" + tool + ".asset"
+				sandboxPath := fakeSandboxDir + "/" + tool + ".asset"
+				before := len(fd.deliveredPaths)
+				req := mcp.CallToolRequest{}
+				req.Params.Name = tool
+				req.Params.Arguments = map[string]any{"shape": shape}
+				result, callErr := mcpClient.CallTool(ctx, req)
+				require.NoError(t, callErr)
+				require.False(t, result.IsError)
+				require.Len(t, fd.deliveredPaths, before+1)
+				assert.Equal(t, []string{hostPath}, fd.deliveredPaths[before])
+
+				if shape == "structured" {
+					manifest, ok := result.StructuredContent.(map[string]any)
+					require.True(t, ok)
+					files, ok := manifest[filesKey].([]any)
+					require.True(t, ok)
+					entry, ok := files[0].(map[string]any)
+					require.True(t, ok)
+					assert.Equal(t, sandboxPath, entry[pathKey])
+					assert.NotEqual(t, hostPath, entry[pathKey])
+					return
+				}
+
+				require.Len(t, result.Content, 1)
+				textResult, ok := result.Content[0].(mcp.TextContent)
+				require.True(t, ok)
+				assert.Contains(t, textResult.Text, sandboxPath)
+				assert.NotContains(t, textResult.Text, hostPath)
+			})
+		}
+	}
+	const expectedDeliverCalls int32 = 18
+	assert.Equal(t, expectedDeliverCalls, fd.deliverCalls.Load())
 }
 
 func TestAggregator_FileGenPassthrough_NoParent(t *testing.T) {

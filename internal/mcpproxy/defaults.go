@@ -12,6 +12,12 @@ const (
 	toolGetFont         = "get_font"
 	toolGetIcon         = "get_icon"
 	toolGetIllustration = "get_illustration"
+	toolGetPhoto        = "get_photo"
+	toolGetTexture      = "get_texture"
+	toolGetModel        = "get_model"
+	toolGetAudio        = "get_audio"
+	toolGetSprite       = "get_sprite"
+	toolGetPack         = "get_pack"
 	toolGetUser         = "get_user"
 	toolSearchNodes     = "search_nodes"
 )
@@ -64,6 +70,17 @@ var defaultAllowlist = map[ServerName]map[ToolName]struct{}{
 		toolGetIllustration,
 		"search_fonts",
 		toolGetFont,
+		"search_photos",
+		toolGetPhoto,
+		"search_textures",
+		toolGetTexture,
+		"search_models",
+		toolGetModel,
+		"search_audio",
+		toolGetAudio,
+		"search_sprites",
+		toolGetSprite,
+		toolGetPack,
 	),
 	"bunpro": setOf(
 		"get_decks",
