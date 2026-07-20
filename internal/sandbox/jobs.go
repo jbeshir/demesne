@@ -90,6 +90,11 @@ type JobOutcome struct {
 	TotalUsageUSD float64
 }
 
+// TerminalNotifier is called once after a background job wins its transition
+// to a terminal state. Delivery is advisory: implementations must return
+// promptly and handle their own errors without changing job state.
+type TerminalNotifier func(JobID, JobStatus)
+
 // StatusResult is the response shape for JobManager.Status.
 type StatusResult struct {
 	// JobID is the public handle for the job.
@@ -146,6 +151,7 @@ type job struct {
 	done      chan struct{} // closed exactly once when the goroutine exits
 	startedAt time.Time
 	parent    JobID
+	notify    TerminalNotifier
 
 	// mu protects all mutable fields below.
 	mu          sync.Mutex
@@ -241,6 +247,7 @@ func (m *JobManager) Start(
 	parent JobID,
 	tool string,
 	run func(ctx context.Context, h JobHooks) (JobOutcome, error),
+	notify TerminalNotifier,
 ) JobID {
 	id := JobID("job-" + uuid.NewString())
 	jobCtx, jobCancel := context.WithCancel(m.rootCtx)
@@ -254,6 +261,7 @@ func (m *JobManager) Start(
 		done:           make(chan struct{}),
 		startedAt:      m.now(),
 		parent:         parent,
+		notify:         notify,
 	}
 
 	// Register BEFORE launching the goroutine so an early Cancel finds the job.
@@ -285,6 +293,9 @@ func (m *JobManager) Start(
 					j.mu.Lock()
 					j.finishedAt = m.now()
 					j.mu.Unlock()
+					if j.notify != nil {
+						j.notify(j.id, JobStatusFailed)
+					}
 				}
 			}
 		}()
@@ -300,6 +311,9 @@ func (m *JobManager) Start(
 			j.outcome = outcome
 			j.finishedAt = m.now()
 			j.mu.Unlock()
+			if j.notify != nil {
+				j.notify(j.id, jobStateToStatus(newState))
+			}
 		}
 	}()
 
@@ -476,6 +490,9 @@ func (m *JobManager) cancelSubtree(id JobID) {
 	j.mu.Unlock()
 
 	j.cancel()
+	if j.notify != nil {
+		j.notify(j.id, JobStatusCancelled)
+	}
 }
 
 // reapLoop is the background TTL reaper goroutine. It ticks every

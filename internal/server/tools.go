@@ -41,7 +41,7 @@ func (s *Server) handleSandboxScript(
 		Directories: directories,
 	}
 	if request.GetBool(paramBackground, false) {
-		jobID := s.runner.StartScript(req)
+		jobID := s.runner.StartScript(req, s.terminalNotifier(ctx))
 		return formatJobStarted(jobID), nil
 	}
 	res, err := s.runner.RunScript(ctx, req)
@@ -223,7 +223,7 @@ func (s *Server) handleSandboxAgent(
 		SuccessCriteria: successCriteria,
 	}
 	if request.GetBool(paramBackground, false) {
-		jobID := s.runner.StartAgent(agentReq)
+		jobID := s.runner.StartAgent(agentReq, s.terminalNotifier(ctx))
 		return formatJobStarted(jobID), nil
 	}
 	res, err := s.runner.Agent(ctx, agentReq)
@@ -260,7 +260,7 @@ func (s *Server) handleSandboxResearch(
 		SuccessCriteria: successCriteria,
 	}
 	if request.GetBool(paramBackground, false) {
-		jobID := s.runner.StartResearch(researchReq)
+		jobID := s.runner.StartResearch(researchReq, s.terminalNotifier(ctx))
 		return formatJobStarted(jobID), nil
 	}
 	res, err := s.runner.Research(ctx, researchReq)

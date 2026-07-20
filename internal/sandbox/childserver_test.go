@@ -3,10 +3,15 @@ package sandbox
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -147,6 +152,104 @@ func TestChildMCPServer_Catalogue(t *testing.T) {
 	assert.False(t, got["sandbox_download"])
 }
 
+func newNestedTestClient(t *testing.T, handler http.Handler) *client.Client {
+	t.Helper()
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+
+	c, err := client.NewStreamableHttpClient(httpServer.URL, transport.WithContinuousListening())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+	require.NoError(t, c.Start(t.Context()))
+	return c
+}
+
+func initializeNestedTestClient(t *testing.T, c *client.Client) *mcp.InitializeResult {
+	t.Helper()
+	request := mcp.InitializeRequest{}
+	request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	request.Params.ClientInfo = mcp.Implementation{Name: "nested-test", Version: "1"}
+	result, err := c.Initialize(t.Context(), request)
+	require.NoError(t, err)
+	return result
+}
+
+func TestChildMCPServer_AdvertisesLoggingCapability(t *testing.T) {
+	r := NewRunner(Config{})
+	_, _, handler := r.ChildMCPServer()
+	c := newNestedTestClient(t, handler)
+
+	result := initializeNestedTestClient(t, c)
+	require.NotNil(t, result.Capabilities.Logging)
+}
+
+func TestChildTerminalNotifier_PostCallStandardsFramedExactlyOnce(t *testing.T) {
+	mcpServer := server.NewMCPServer("nested-notifier-test", "1",
+		server.WithToolCapabilities(false), server.WithLogging())
+	notifierReady := make(chan TerminalNotifier, 1)
+	mcpServer.AddTool(mcp.NewTool("start_background"), func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		notifierReady <- childTerminalNotifier(ctx)
+		return mcp.NewToolResultText("running"), nil
+	})
+	c := newNestedTestClient(t, server.NewStreamableHTTPServer(mcpServer))
+	notifications := make(chan mcp.JSONRPCNotification, 2)
+	c.OnNotification(func(notification mcp.JSONRPCNotification) { notifications <- notification })
+	initializeNestedTestClient(t, c)
+	setLevel := mcp.SetLevelRequest{}
+	setLevel.Params.Level = mcp.LoggingLevelInfo
+	require.NoError(t, c.SetLevel(t.Context(), setLevel))
+
+	call := mcp.CallToolRequest{}
+	call.Params.Name = "start_background"
+	_, err := c.CallTool(t.Context(), call)
+	require.NoError(t, err)
+	notify := <-notifierReady // The tools/call response has completed before terminal delivery.
+	require.NotNil(t, notify)
+	notify("job-nested", JobStatusSucceeded)
+
+	select {
+	case notification := <-notifications:
+		assert.Equal(t, mcp.JSONRPC_VERSION, notification.JSONRPC)
+		assert.Equal(t, "notifications/message", notification.Method)
+		assert.Equal(t, string(mcp.LoggingLevelInfo), notification.Params.AdditionalFields["level"])
+		data, ok := notification.Params.AdditionalFields["data"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "job-nested", data["job_id"])
+		assert.Equal(t, string(JobStatusSucceeded), data["status"])
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for nested terminal notification")
+	}
+	select {
+	case duplicate := <-notifications:
+		t.Fatalf("unexpected duplicate notification: %#v", duplicate)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestChildTerminalNotifier_DisconnectedDeliveryIsNonFatal(t *testing.T) {
+	mcpServer := server.NewMCPServer("nested-disconnect-test", "1",
+		server.WithToolCapabilities(false), server.WithLogging())
+	notifierReady := make(chan TerminalNotifier, 1)
+	mcpServer.AddTool(mcp.NewTool("start_background"), func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		notifierReady <- childTerminalNotifier(ctx)
+		return mcp.NewToolResultText("running"), nil
+	})
+	httpServer := httptest.NewServer(server.NewStreamableHTTPServer(mcpServer))
+	c, err := client.NewStreamableHttpClient(httpServer.URL)
+	require.NoError(t, err)
+	require.NoError(t, c.Start(t.Context()))
+	initializeNestedTestClient(t, c)
+	call := mcp.CallToolRequest{}
+	call.Params.Name = "start_background"
+	_, err = c.CallTool(t.Context(), call)
+	require.NoError(t, err)
+	notify := <-notifierReady
+	require.NoError(t, c.Close())
+	httpServer.Close()
+
+	assert.NotPanics(t, func() { notify("job-disconnected", JobStatusFailed) })
+}
+
 func TestParentFor(t *testing.T) {
 	r := NewRunner(Config{})
 	parent := &spawnContext{usedNames: map[string]bool{}}
@@ -243,8 +346,15 @@ func TestChildMCPServer_BackgroundParamPresent(t *testing.T) {
 	for _, toolName := range []string{ToolSandboxScript, ToolSandboxAgent, ToolSandboxResearch} {
 		tl, ok := byName[toolName]
 		require.True(t, ok, "tool %q not in child catalogue", toolName)
-		_, hasBg := tl.InputSchema.Properties[childParamBackground]
-		assert.True(t, hasBg, "tool %q must expose %q property", toolName, childParamBackground)
+		background, hasBg := tl.InputSchema.Properties[childParamBackground].(map[string]any)
+		require.True(t, hasBg, "tool %q must expose %q property", toolName, childParamBackground)
+		description, _ := background["description"].(string)
+		for _, contract := range []string{
+			"automatically", "no separate opt-in", "advisory", "does not guarantee client display",
+			"wake-up", "model-context injection", "poll with sandbox_status / sandbox_wait",
+		} {
+			assert.Contains(t, description, contract, "tool %q background contract", toolName)
+		}
 	}
 }
 

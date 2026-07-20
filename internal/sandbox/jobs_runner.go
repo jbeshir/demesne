@@ -7,7 +7,7 @@ import (
 
 // startScriptJob registers a background script job with the JobManager.
 // parent is the owning background job, or "" for a root job.
-func (r *Runner) startScriptJob(req ScriptRequest, child *childSpawn, parent JobID) JobID {
+func (r *Runner) startScriptJob(req ScriptRequest, child *childSpawn, parent JobID, notify TerminalNotifier) JobID {
 	run := func(ctx context.Context, h JobHooks) (JobOutcome, error) {
 		res, err := r.runScript(ctx, req, child, h)
 		if err != nil {
@@ -19,14 +19,14 @@ func (r *Runner) startScriptJob(req ScriptRequest, child *childSpawn, parent Job
 			ExitCode:   res.ExitCode,
 		}, nil
 	}
-	return r.jobs.Start(parent, ToolSandboxScript, run)
+	return r.jobs.Start(parent, ToolSandboxScript, run, notify)
 }
 
 // startAgentJob registers a background agent job with the JobManager.
 // The closure captures spec and overwrites the hook fields from the
 // JobHooks the manager supplies at run time. parent is the owning
 // background job, or "" for a root job.
-func (r *Runner) startAgentJob(spec internalAgentSpec, parent JobID) JobID {
+func (r *Runner) startAgentJob(spec internalAgentSpec, parent JobID, notify TerminalNotifier) JobID {
 	run := func(ctx context.Context, h JobHooks) (JobOutcome, error) {
 		s := spec
 		s.onOutputReady = h.OnOutputReady
@@ -43,19 +43,19 @@ func (r *Runner) startAgentJob(spec internalAgentSpec, parent JobID) JobID {
 			TotalUsageUSD: res.TotalUsageUSD,
 		}, nil
 	}
-	return r.jobs.Start(parent, spec.tool, run)
+	return r.jobs.Start(parent, spec.tool, run, notify)
 }
 
 // StartScript starts a sandbox_script run in the background and returns
 // its public JobID handle immediately. Use Status/Wait to poll and
 // Cancel to abort.
-func (r *Runner) StartScript(req ScriptRequest) JobID {
-	return r.startScriptJob(req, nil, "")
+func (r *Runner) StartScript(req ScriptRequest, notify TerminalNotifier) JobID {
+	return r.startScriptJob(req, nil, "", notify)
 }
 
 // StartAgent starts a sandbox_agent run in the background and returns
 // its public JobID handle immediately.
-func (r *Runner) StartAgent(req AgentRequest) JobID {
+func (r *Runner) StartAgent(req AgentRequest, notify TerminalNotifier) JobID {
 	spec := internalAgentSpec{
 		model:           req.Model,
 		prompt:          req.Prompt,
@@ -68,12 +68,12 @@ func (r *Runner) StartAgent(req AgentRequest) JobID {
 		outputFormat:    req.OutputFormat,
 		successCriteria: req.SuccessCriteria,
 	}
-	return r.startAgentJob(spec, "")
+	return r.startAgentJob(spec, "", notify)
 }
 
 // StartResearch starts a sandbox_research run in the background and
 // returns its public JobID handle immediately.
-func (r *Runner) StartResearch(req ResearchRequest) JobID {
+func (r *Runner) StartResearch(req ResearchRequest, notify TerminalNotifier) JobID {
 	spec := internalAgentSpec{
 		model:           req.Model,
 		prompt:          req.Prompt,
@@ -84,7 +84,7 @@ func (r *Runner) StartResearch(req ResearchRequest) JobID {
 		outputFormat:    req.OutputFormat,
 		successCriteria: req.SuccessCriteria,
 	}
-	return r.startAgentJob(spec, "")
+	return r.startAgentJob(spec, "", notify)
 }
 
 // Status returns the current observable state of a background job.

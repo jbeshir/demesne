@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -50,9 +52,9 @@ type Runner interface {
 	Destroy(ctx context.Context, req sandbox.DestroyRequest) error
 	Agent(ctx context.Context, req sandbox.AgentRequest) (sandbox.AgentResult, error)
 	Research(ctx context.Context, req sandbox.ResearchRequest) (sandbox.AgentResult, error)
-	StartScript(req sandbox.ScriptRequest) sandbox.JobID
-	StartAgent(req sandbox.AgentRequest) sandbox.JobID
-	StartResearch(req sandbox.ResearchRequest) sandbox.JobID
+	StartScript(req sandbox.ScriptRequest, notify sandbox.TerminalNotifier) sandbox.JobID
+	StartAgent(req sandbox.AgentRequest, notify sandbox.TerminalNotifier) sandbox.JobID
+	StartResearch(req sandbox.ResearchRequest, notify sandbox.TerminalNotifier) sandbox.JobID
 	Status(req sandbox.StatusRequest) (sandbox.StatusResult, error)
 	Wait(ctx context.Context, req sandbox.WaitRequest) (sandbox.WaitResult, error)
 	Cancel(ctx context.Context, req sandbox.CancelRequest) (sandbox.CancelResult, error)
@@ -98,12 +100,30 @@ func NewServer(runner Runner) *Server {
 // in-flight tool-call workers via workerWg.Wait() before returning — so deferred
 // killSandbox / sidecar.Remove calls in the runner complete cleanly.
 func (s *Server) RunContext(ctx context.Context) error {
+	return s.serve(ctx, os.Stdin, os.Stdout)
+}
+
+func (s *Server) serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	stdioSrv := server.NewStdioServer(s.mcpServer)
-	return stdioSrv.Listen(ctx, os.Stdin, os.Stdout)
+	return stdioSrv.Listen(ctx, in, out)
 }
 
 // Run starts the MCP server with stdio transport.
 func (s *Server) Run() error { return s.RunContext(context.Background()) }
+
+func (s *Server) terminalNotifier(ctx context.Context) sandbox.TerminalNotifier {
+	ctx = context.WithoutCancel(ctx)
+	return func(jobID sandbox.JobID, status sandbox.JobStatus) {
+		n := mcp.NewLoggingMessageNotification(mcp.LoggingLevelInfo, "demesne.background-job", map[string]any{
+			"job_id":  string(jobID),
+			"status":  string(status),
+			"message": "background job reached a terminal state; use sandbox_status or sandbox_wait for the result",
+		})
+		if err := s.mcpServer.SendLogMessageToClient(ctx, n); err != nil {
+			log.Printf("demesne: background job %s notification: %v", jobID, err)
+		}
+	}
+}
 
 func stringArrayItems() map[string]any { return map[string]any{"type": "string"} }
 
@@ -233,7 +253,8 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithBoolean(paramBackground,
 			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
-				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"instead of blocking and automatically attempts one advisory terminal MCP logging notification; "+
+				"client display or wake is not guaranteed, so poll with sandbox_status / sandbox_wait; "+
 				"cancel with sandbox_cancel."),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -385,7 +406,8 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithBoolean(paramBackground,
 			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
-				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"instead of blocking and automatically attempts one advisory terminal MCP logging notification; "+
+				"client display or wake is not guaranteed, so poll with sandbox_status / sandbox_wait; "+
 				"cancel with sandbox_cancel."),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -428,7 +450,8 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithBoolean(paramBackground,
 			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
-				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"instead of blocking and automatically attempts one advisory terminal MCP logging notification; "+
+				"client display or wake is not guaranteed, so poll with sandbox_status / sandbox_wait; "+
 				"cancel with sandbox_cancel."),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),

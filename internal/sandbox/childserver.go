@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -45,6 +46,11 @@ const (
 // jsonItemType is the "type" key used in JSON Schema item descriptors.
 const jsonItemType = "type"
 
+const notificationMessageField = "message"
+
+const childTerminalMessage = "background job reached a terminal state; " +
+	"use sandbox_status or sandbox_wait for the result"
+
 // keepAlive holds the nested MCP connection open while a child runs. A
 // child-spawning handler blocks for the child's whole lifecycle and
 // sends nothing over MCP (the child's output streams to /out, a host
@@ -67,9 +73,9 @@ func keepAlive(ctx context.Context) func() {
 			select {
 			case <-ticker.C:
 				_ = srv.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
-					"progressToken": keepaliveProgressID,
-					"progress":      0,
-					"message":       "demesne: child sandbox still running",
+					"progressToken":          keepaliveProgressID,
+					"progress":               0,
+					notificationMessageField: "demesne: child sandbox still running",
 				})
 			case <-done:
 				return
@@ -79,6 +85,29 @@ func keepAlive(ctx context.Context) func() {
 		}
 	}()
 	return func() { close(done) }
+}
+
+func childTerminalNotifier(ctx context.Context) TerminalNotifier {
+	srv := server.ServerFromContext(ctx)
+	if srv == nil {
+		return nil
+	}
+	ctx = context.WithoutCancel(ctx)
+	return func(jobID JobID, status JobStatus) {
+		notification := mcp.NewLoggingMessageNotification(
+			mcp.LoggingLevelInfo,
+			"demesne.background-job",
+			map[string]any{
+				"job_id":                 string(jobID),
+				"status":                 string(status),
+				notificationMessageField: childTerminalMessage,
+			},
+		)
+		err := srv.SendLogMessageToClient(ctx, notification)
+		if err != nil {
+			log.Printf("demesne: child background job %s notification: %v", jobID, err)
+		}
+	}
 }
 
 // parentKey carries the calling sandbox's jobID (from the trusted
@@ -103,7 +132,10 @@ func parentFromRequest(ctx context.Context, req *http.Request) context.Context {
 // the context via WithHTTPContextFunc. Returned for the aggregator's
 // ExtraServers and the runner's MCP wiring.
 func (r *Runner) ChildMCPServer() (string, []mcp.Tool, http.Handler) {
-	srv := server.NewMCPServer(mcpproxy.DemesneServerName, "0", server.WithToolCapabilities(false))
+	srv := server.NewMCPServer(mcpproxy.DemesneServerName, "0",
+		server.WithToolCapabilities(false),
+		server.WithLogging(),
+	)
 	var catalogue []mcp.Tool
 	add := func(tool mcp.Tool, h server.ToolHandlerFunc) {
 		srv.AddTool(tool, h)
@@ -238,7 +270,7 @@ func (r *Runner) handleChildScript(ctx context.Context, req mcp.CallToolRequest)
 	}
 	child := &childSpawn{name: name, parent: parent}
 	if req.GetBool(childParamBackground, false) {
-		jobID := r.startScriptJob(scriptReq, child, parent.bgJobID)
+		jobID := r.startScriptJob(scriptReq, child, parent.bgJobID, childTerminalNotifier(ctx))
 		return mcp.NewToolResultText(fmt.Sprintf(
 			"name: %s\njob_id: %s\nstatus: running", name, jobID,
 		)), nil
@@ -283,7 +315,7 @@ func (r *Runner) handleChildAgent(ctx context.Context, req mcp.CallToolRequest) 
 		successCriteria: sc,
 	}
 	if req.GetBool(childParamBackground, false) {
-		jobID := r.startAgentJob(spec, parent.bgJobID)
+		jobID := r.startAgentJob(spec, parent.bgJobID, childTerminalNotifier(ctx))
 		return mcp.NewToolResultText(fmt.Sprintf(
 			"name: %s\njob_id: %s\nstatus: running", name, jobID,
 		)), nil
@@ -323,7 +355,7 @@ func (r *Runner) handleChildResearch(ctx context.Context, req mcp.CallToolReques
 		child: &childSpawn{name: name, parent: parent, isolated: true},
 	}
 	if req.GetBool(childParamBackground, false) {
-		jobID := r.startAgentJob(spec, parent.bgJobID)
+		jobID := r.startAgentJob(spec, parent.bgJobID, childTerminalNotifier(ctx))
 		return mcp.NewToolResultText(fmt.Sprintf(
 			"name: %s\njob_id: %s\nstatus: running", name, jobID,
 		)), nil
@@ -623,7 +655,9 @@ const childDestroyDescription = "Destroy a child sandbox created by sandbox_crea
 	"Its /out is preserved under the parent's tree."
 
 const childBackgroundDescription = "When true, returns immediately with {name, job_id, status:\"running\"} " +
-	"instead of blocking; poll with sandbox_status / sandbox_wait, cancel with sandbox_cancel. " +
+	"instead of blocking. A terminal logging notification is attempted automatically; there is no separate opt-in. " +
+	"Delivery is advisory and does not guarantee client display, wake-up, or model-context injection, so poll with " +
+	"sandbox_status / sandbox_wait for authoritative completion and results; cancel with sandbox_cancel. " +
 	"Use for concurrent fan-out, detachment, progress polling, or explicit job control."
 
 const childStatusDescription = `Get the current status of a background sandbox job.
