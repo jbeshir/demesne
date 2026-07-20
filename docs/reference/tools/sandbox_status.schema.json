@@ -7,6 +7,11 @@
     "job_id": {
       "type": "string",
       "description": "Job ID returned by a background sandbox_script, sandbox_agent, or sandbox_research call."
+    },
+    "include_stdout_tail": {
+      "type": "boolean",
+      "description": "When true, include the existing bounded stdout tail. Defaults to false.",
+      "default": false
     }
   },
   "required": ["job_id"],

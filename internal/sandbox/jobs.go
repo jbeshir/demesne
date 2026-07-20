@@ -27,10 +27,10 @@ const jobTTL = time.Hour
 const reapInterval = 5 * time.Minute
 
 // defaultWaitTimeout is used when the caller passes timeout <= 0.
-const defaultWaitTimeout = 30 * time.Second
+const defaultWaitTimeout = 30 * time.Minute
 
 // maxWaitTimeout is the server-side cap on sandbox_wait timeout.
-const maxWaitTimeout = 120 * time.Second
+const maxWaitTimeout = 48 * time.Hour
 
 // statusStdoutTailBytes is the maximum bytes of stdout tail returned by Status.
 const statusStdoutTailBytes int64 = 16 * 1024
@@ -320,10 +320,10 @@ func (m *JobManager) Start(
 	return id
 }
 
-// Status returns the current observable state of job id. Cost and stdout tail
-// are read from the job's outHost on a best-effort basis; missing files
-// return zero values rather than errors.
-func (m *JobManager) Status(id JobID) (StatusResult, error) {
+// Status returns the current observable state of job id. Cost and, when
+// requested, the stdout tail are read from the job's outHost on a best-effort
+// basis; missing files return zero values rather than errors.
+func (m *JobManager) Status(id JobID, includeStdoutTail bool) (StatusResult, error) {
 	m.mu.RLock()
 	j, ok := m.jobs[id]
 	m.mu.RUnlock()
@@ -369,11 +369,13 @@ func (m *JobManager) Status(id JobID) (StatusResult, error) {
 		}
 	}
 
-	tail, err := tailFile(filepath.Join(outHost, stdoutBasename), statusStdoutTailBytes)
-	if err != nil {
-		log.Printf("sandbox: status tail for job %s: %v", id, err)
+	if includeStdoutTail {
+		tail, err := tailFile(filepath.Join(outHost, stdoutBasename), statusStdoutTailBytes)
+		if err != nil {
+			log.Printf("sandbox: status tail for job %s: %v", id, err)
+		}
+		res.StdoutTail = tail
 	}
-	res.StdoutTail = tail
 
 	return res, nil
 }

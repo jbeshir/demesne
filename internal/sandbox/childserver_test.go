@@ -439,3 +439,11 @@ func TestFormatChildStatusResult_CarriesCostAndTail(t *testing.T) {
 		assert.Contains(t, out, want)
 	}
 }
+
+func TestFormatChildStatusResult_OmitsTailSectionWhenNotRequested(t *testing.T) {
+	out := formatChildStatusResult(StatusResult{
+		JobID: JobID("job-4"), Status: JobStatusRunning,
+	})
+	assert.NotContains(t, out, "stdout_tail")
+	assert.NotContains(t, out, "---")
+}

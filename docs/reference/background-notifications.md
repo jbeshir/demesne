@@ -2,7 +2,7 @@
 
 With `background: true`, Demesne automatically attempts one advisory MCP logging notification when the job first reaches `succeeded`, `failed`, or `cancelled`. The JSON-RPC method is `notifications/message`; `params.level` is `info`, `params.logger` is `demesne.background-job`, and `params.data` contains `job_id`, `status`, and a polling reminder. Synchronous calls do not register this notification. There is no separate subscription or opt-in parameter.
 
-The notification is deliberately advisory. A disconnected client, closed writer, unsupported logging session, or filtered log level can prevent delivery or display without changing the terminal job state. Continue to use `sandbox_status`, or call `sandbox_wait` repeatedly, to obtain a reliable terminal result.
+The notification is deliberately advisory. A disconnected client, closed writer, unsupported logging session, or filtered log level can prevent delivery or display without changing the terminal job state. Continue to use `sandbox_status`, or call `sandbox_wait`, to obtain a reliable terminal result.
 
 ## Evidence and compatibility
 

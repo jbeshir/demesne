@@ -13,25 +13,26 @@ import (
 )
 
 const (
-	paramSandboxID       = "sandbox_id"
-	paramOutputDir       = "output_dir"
-	paramCommand         = "command"
-	paramImage           = "image"
-	paramEgress          = "egress"
-	paramFiles           = "files"
-	paramDirectories     = "directories"
-	paramPrompt          = "prompt"
-	paramModel           = "model"
-	paramPreamble        = "preamble"
-	paramSrc             = "src"
-	paramDst             = "dst"
-	paramOutputPath      = "output_path"
-	paramOutputFormat    = "output_format"
-	paramSuccessCriteria = "success_criteria"
-	paramBackground      = "background"
-	paramJobID           = "job_id"
-	paramTimeoutSeconds  = "timeout_seconds"
-	sandboxHandleDesc    = "Sandbox handle returned by sandbox_create."
+	paramSandboxID         = "sandbox_id"
+	paramOutputDir         = "output_dir"
+	paramCommand           = "command"
+	paramImage             = "image"
+	paramEgress            = "egress"
+	paramFiles             = "files"
+	paramDirectories       = "directories"
+	paramPrompt            = "prompt"
+	paramModel             = "model"
+	paramPreamble          = "preamble"
+	paramSrc               = "src"
+	paramDst               = "dst"
+	paramOutputPath        = "output_path"
+	paramOutputFormat      = "output_format"
+	paramSuccessCriteria   = "success_criteria"
+	paramBackground        = "background"
+	paramJobID             = "job_id"
+	paramTimeoutSeconds    = "timeout_seconds"
+	paramIncludeStdoutTail = "include_stdout_tail"
+	sandboxHandleDesc      = "Sandbox handle returned by sandbox_create."
 
 	// agentNameCodex / agentNameClaudeCode are the caller-facing
 	// provider identifiers, mirrored from internal/sandbox so the
@@ -467,6 +468,9 @@ func (s *Server) registerTools() {
 			mcp.Required(),
 			mcp.Description("Job ID returned by a background sandbox_script/agent/research call."),
 		),
+		mcp.WithBoolean(paramIncludeStdoutTail,
+			mcp.Description("When true, include the existing bounded stdout tail. Defaults to false."),
+		),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(true),
@@ -482,7 +486,7 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithNumber(paramTimeoutSeconds,
 			mcp.Description("Maximum seconds to wait for the job to reach a terminal state. "+
-				"0 or omitted → 30 s default; hard-capped at 120 s."),
+				"0 or omitted → 1800 s (30 minute) default; hard-capped at 172800 s (48 hours)."),
 		),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -617,8 +621,9 @@ billing, so the user is not charged per request).`
 const statusToolDescription = `Get the current status of a background sandbox job.
 
 Returns the job ID, status (running/succeeded/failed/cancelled), elapsed
-time, a tail of any captured stdout so far, and cost/exit-code when the
-job has completed. Use sandbox_wait to block until completion.`
+time, and cost/exit-code when the job has completed. Pass
+include_stdout_tail=true to include a bounded tail of captured stdout.
+Use sandbox_wait to block until completion.`
 
 const waitToolDescription = `Block until a background sandbox job reaches a terminal state.
 

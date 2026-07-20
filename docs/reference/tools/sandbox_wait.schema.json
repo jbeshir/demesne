@@ -10,8 +10,8 @@
     },
     "timeout_seconds": {
       "type": "number",
-      "description": "Maximum seconds to wait for the job to reach a terminal state. 0 or omitted → 30 s default; hard-capped at 120 s.",
-      "default": 30
+      "description": "Maximum seconds to wait for the job to reach a terminal state. 0 or omitted → 1800 s (30 minute) default; hard-capped at 172800 s (48 hours).",
+      "default": 1800
     }
   },
   "required": ["job_id"],

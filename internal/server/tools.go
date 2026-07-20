@@ -278,7 +278,10 @@ func (s *Server) handleSandboxStatus(
 	if errRes != nil {
 		return errRes, nil
 	}
-	res, err := s.runner.Status(sandbox.StatusRequest{JobID: sandbox.JobID(jobID)})
+	res, err := s.runner.Status(sandbox.StatusRequest{
+		JobID:             sandbox.JobID(jobID),
+		IncludeStdoutTail: request.GetBool(paramIncludeStdoutTail, false),
+	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}

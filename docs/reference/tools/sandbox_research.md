@@ -16,7 +16,7 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 
 ## Async usage
 
-Synchronous research calls may run to completion (subject to the explicit 48h runtime limit) and remain cancellable. Pass `background: true` for concurrent work, detachment, status/progress polling, or deliberate job control. The response is `{job_id, status: "running"}`; poll it with `sandbox_status` or block (up to 120s per call) with `sandbox_wait`, and cancel its descendant subtree with `sandbox_cancel`.
+Synchronous research calls may run to completion (subject to the explicit 48h runtime limit) and remain cancellable. Pass `background: true` for concurrent work, detachment, status/progress polling, or deliberate job control. The response is `{job_id, status: "running"}`; inspect it with `sandbox_status` or block (30-minute default, up to 48 hours) with `sandbox_wait`, and cancel its descendant subtree with `sandbox_cancel`.
 
 ## Annotations
 

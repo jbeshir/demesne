@@ -89,7 +89,7 @@ func (r *Runner) StartResearch(req ResearchRequest, notify TerminalNotifier) Job
 
 // Status returns the current observable state of a background job.
 func (r *Runner) Status(req StatusRequest) (StatusResult, error) {
-	return r.jobs.Status(req.JobID)
+	return r.jobs.Status(req.JobID, req.IncludeStdoutTail)
 }
 
 // Wait blocks until the background job reaches a terminal state or the

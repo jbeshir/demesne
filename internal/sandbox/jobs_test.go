@@ -56,7 +56,7 @@ func TestJobStartStatusSucceed(t *testing.T) {
 	id := m.startForTest(ToolSandboxScript, syncRun(release, want, nil))
 
 	// Status while running.
-	s, err := m.Status(id)
+	s, err := m.Status(id, false)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusRunning, s.Status)
 	assert.Equal(t, id, s.JobID)
@@ -71,7 +71,7 @@ func TestJobStartStatusSucceed(t *testing.T) {
 	require.NotNil(t, j)
 	<-j.done
 
-	s, err = m.Status(id)
+	s, err = m.Status(id, false)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusSucceeded, s.Status)
 }
@@ -90,7 +90,7 @@ func TestJobFailedOnError(t *testing.T) {
 	m.mu.RUnlock()
 	<-j.done
 
-	s, err := m.Status(id)
+	s, err := m.Status(id, false)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusFailed, s.Status)
 }
@@ -186,7 +186,7 @@ func TestJobCancelUnknown(t *testing.T) {
 // ErrJobNotFound.
 func TestJobStatusUnknown(t *testing.T) {
 	m, _ := makeTestManager(t)
-	_, err := m.Status(JobID("job-no-such"))
+	_, err := m.Status(JobID("job-no-such"), false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrJobNotFound)
 }
@@ -294,7 +294,7 @@ func TestJobWaitCancellationDoesNotCancelJob(t *testing.T) {
 	cancel()
 	_, err := m.Wait(ctx, id, time.Second)
 	require.ErrorIs(t, err, context.Canceled)
-	status, err := m.Status(id)
+	status, err := m.Status(id, false)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusRunning, status.Status)
 	close(release)
@@ -313,7 +313,7 @@ func TestJobStartDoesNotInheritRequestCancellation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("background job did not start")
 	}
-	status, err := m.Status(id)
+	status, err := m.Status(id, false)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusRunning, status.Status)
 }
@@ -436,7 +436,7 @@ func TestJobHooksOnOutputReadyRecordsFields(t *testing.T) {
 
 	// Status must succeed even when outHost points to a non-existent path
 	// (files are read best-effort; missing files produce zero values, not errors).
-	_, err := m.Status(id)
+	_, err := m.Status(id, false)
 	require.NoError(t, err)
 }
 
@@ -454,7 +454,7 @@ func TestJobPanicRecoveredAsFailed(t *testing.T) {
 	m.mu.RUnlock()
 	<-j.done
 
-	s, err := m.Status(id)
+	s, err := m.Status(id, false)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusFailed, s.Status)
 }
@@ -471,6 +471,33 @@ func TestJobWaitClampsTimeout(t *testing.T) {
 	res, err := m.Wait(context.Background(), id, 0)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusSucceeded, res.Status)
+}
+
+func TestWaitTimeoutConfiguration(t *testing.T) {
+	assert.Equal(t, 30*time.Minute, defaultWaitTimeout)
+	assert.Equal(t, 48*time.Hour, maxWaitTimeout)
+}
+
+func TestStatusStdoutTailIsOptIn(t *testing.T) {
+	m, _ := makeTestManager(t)
+	outHost := t.TempDir()
+	release := make(chan struct{})
+	id := m.startForTest(ToolSandboxScript, func(_ context.Context, hooks JobHooks) (JobOutcome, error) {
+		require.NoError(t, os.WriteFile(filepath.Join(outHost, "stdout.log"), []byte("useful tail"), 0o600))
+		hooks.OnOutputReady(outHost, "")
+		<-release
+		return JobOutcome{}, nil
+	})
+	defer close(release)
+
+	require.Eventually(t, func() bool {
+		withTail, err := m.Status(id, true)
+		return err == nil && withTail.StdoutTail == "useful tail"
+	}, time.Second, 5*time.Millisecond)
+
+	withoutTail, err := m.Status(id, false)
+	require.NoError(t, err)
+	assert.Empty(t, withoutTail.StdoutTail)
 }
 
 // TestStatusIncrementalCostFromResultsHost verifies that Status surfaces a
@@ -499,11 +526,11 @@ func TestStatusIncrementalCostFromResultsHost(t *testing.T) {
 
 	// Poll until the hook has fired and Status returns the incremental cost.
 	require.Eventually(t, func() bool {
-		s, err := m.Status(id)
+		s, err := m.Status(id, false)
 		return err == nil && s.CostUSD > 0
 	}, time.Second, 5*time.Millisecond, "expected non-zero CostUSD from resultsHost")
 
-	s, err := m.Status(id)
+	s, err := m.Status(id, false)
 	require.NoError(t, err)
 	assert.Equal(t, JobStatusRunning, s.Status)
 	assert.InDelta(t, wantCost, s.CostUSD, 1e-6)

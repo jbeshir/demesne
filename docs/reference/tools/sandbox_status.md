@@ -7,6 +7,7 @@ Get the current status of a background sandbox job.
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `job_id` | string | yes | — | Job ID returned by a background `sandbox_script`, `sandbox_agent`, or `sandbox_research` call. |
+| `include_stdout_tail` | boolean | no | `false` | Include the existing bounded tail of captured stdout. |
 
 ## Annotations
 
@@ -27,7 +28,8 @@ Get the current status of a background sandbox job.
   "params": {
     "name": "sandbox_status",
     "arguments": {
-      "job_id": "job-3f2a1b4c-..."
+      "job_id": "job-3f2a1b4c-...",
+      "include_stdout_tail": true
     }
   }
 }
@@ -101,7 +103,7 @@ Returned as `structuredContent` against the declared output schema — see [Stru
 | `job_id` | string | always |
 | `status` | string | always — one of `running`, `succeeded`, `failed`, `cancelled` |
 | `elapsed_seconds` | number | always |
-| `stdout_tail` | string | stdout has been captured |
+| `stdout_tail` | string | `include_stdout_tail` is true and stdout has been captured |
 | `exit_code` | integer | terminal state (succeeded or failed) |
 | `cost_usd` | number | terminal state and cost was tracked |
 | `total_usage_usd` | number | terminal state and cost was tracked |

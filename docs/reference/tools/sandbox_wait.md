@@ -7,7 +7,7 @@ Block until a background sandbox job reaches a terminal state or the timeout ela
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `job_id` | string | yes | — | Job ID returned by a background `sandbox_script`, `sandbox_agent`, or `sandbox_research` call. |
-| `timeout_seconds` | number | no | `30` | Maximum seconds to wait. 0 or omitted → 30 s default; hard-capped at 120 s. |
+| `timeout_seconds` | number | no | `1800` | Maximum seconds to wait. 0 or omitted → 1800 s (30 minutes); hard-capped at 172800 s (48 hours). |
 
 ## Annotations
 
