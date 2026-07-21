@@ -35,7 +35,7 @@ See [trust-boundary.md](trust-boundary.md) for the full trust-edge diagram showi
 
 **OpenAI / Codex proxy — `127.0.0.1:8086`** (`internal/proxies/openai`)
 
-Present in `sandbox_agent` sandboxes using the codex provider (the default). For the ChatGPT Codex backend, demesne reads the host's OAuth token set from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written by `codex login`), holds it off-agent, refreshes it autonomously, and injects a fresh access token into each forwarded request. The containerised Codex sees only a per-sandbox synthetic token (`demesne-agent-…`) and never the real credential.
+Present in `sandbox_agent` sandboxes using the codex provider (the preferred default when enabled and configured). For the ChatGPT Codex backend, demesne reads the host's OAuth token set from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written by `codex login`), holds it off-agent, refreshes it autonomously, and injects a fresh access token into each forwarded request. The containerised Codex sees only a per-sandbox synthetic token (`demesne-agent-…`) and never the real credential.
 
 **Anthropic API proxy — `127.0.0.1:8088`** (`internal/proxies/anthropic`)
 

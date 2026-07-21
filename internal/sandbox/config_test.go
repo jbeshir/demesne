@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -9,8 +10,9 @@ import (
 )
 
 const (
-	testDomain = "localhost:8080"
-	testKey    = "key"
+	testDomain      = "localhost:8080"
+	testKey         = "key"
+	codexEnabledEnv = "DEMESNE_CODEX_ENABLED"
 )
 
 func TestLoadConfigFromEnv(t *testing.T) {
@@ -108,6 +110,8 @@ func TestLoadConfigFromEnv(t *testing.T) {
 			t.Setenv("OPEN_SANDBOX_PROTOCOL", "")
 			t.Setenv("DEMESNE_CLAUDE_CODE_OAUTH_TOKEN", "")
 			t.Setenv("DEMESNE_CODEX_AUTH_FILE", "")
+			t.Setenv(codexEnabledEnv, "true")
+			t.Setenv("DEMESNE_CLAUDE_CODE_ENABLED", "true")
 
 			cfg, err := LoadConfigFromEnv()
 			if tt.wantErr != "" {
@@ -118,6 +122,59 @@ func TestLoadConfigFromEnv(t *testing.T) {
 			require.NoError(t, err)
 			if tt.checkCfg != nil {
 				tt.checkCfg(t, cfg)
+			}
+		})
+	}
+}
+
+func TestProviderEnabledConfig(t *testing.T) {
+	baseEnv := func(t *testing.T) {
+		t.Helper()
+		t.Setenv("DEMESNE_ALLOWED_PATHS", t.TempDir())
+		t.Setenv("DEMESNE_OUTPUT_ROOT", t.TempDir())
+		t.Setenv("OPEN_SANDBOX_DOMAIN", testDomain)
+		t.Setenv("OPEN_SANDBOX_API_KEY", testKey)
+	}
+
+	t.Run("unset defaults both enabled", func(t *testing.T) {
+		baseEnv(t)
+		require.NoError(t, os.Unsetenv(codexEnabledEnv))
+		t.Cleanup(func() { _ = os.Unsetenv(codexEnabledEnv) })
+		require.NoError(t, os.Unsetenv("DEMESNE_CLAUDE_CODE_ENABLED"))
+		t.Cleanup(func() { _ = os.Unsetenv("DEMESNE_CLAUDE_CODE_ENABLED") })
+		cfg, err := LoadConfigFromEnv()
+		require.NoError(t, err)
+		assert.True(t, cfg.CodexEnabled)
+		assert.True(t, cfg.ClaudeCodeEnabled)
+	})
+
+	for _, tt := range []struct {
+		name, variable, value string
+		want                  bool
+		wantErr               bool
+	}{
+		{"false", codexEnabledEnv, "false", false, false},
+		{"numeric true", codexEnabledEnv, "1", true, false},
+		{"uppercase true", "DEMESNE_CLAUDE_CODE_ENABLED", "TRUE", true, false},
+		{"invalid", "DEMESNE_CLAUDE_CODE_ENABLED", "sometimes", false, true},
+		{"explicit empty invalid", codexEnabledEnv, "", false, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			baseEnv(t)
+			t.Setenv(codexEnabledEnv, "true")
+			t.Setenv("DEMESNE_CLAUDE_CODE_ENABLED", "true")
+			t.Setenv(tt.variable, tt.value)
+			cfg, err := LoadConfigFromEnv()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.variable+" must be a valid boolean")
+				return
+			}
+			require.NoError(t, err)
+			if tt.variable == codexEnabledEnv {
+				assert.Equal(t, tt.want, cfg.CodexEnabled)
+			} else {
+				assert.Equal(t, tt.want, cfg.ClaudeCodeEnabled)
 			}
 		})
 	}

@@ -3,14 +3,14 @@
 `sandbox_agent` and `sandbox_research` both run a registered AI
 coding agent inside a fresh sandbox against a caller-supplied prompt.
 Two providers are registered. **codex** (the OpenAI Codex CLI) is the
-default when its credentials are configured: it talks to the ChatGPT
+preferred default when it is enabled and its credentials are configured: it talks to the ChatGPT
 Codex backend via a mirrored credential-holding proxy on loopback, using
 ChatGPT-OAuth (not an API key). demesne reads the host's OAuth token set
 from `DEMESNE_CODEX_AUTH_FILE` (default `~/.codex/auth.json`, written by
 `codex login`); the proxy holds that token set off-agent, refreshes it
 autonomously, and swaps in a fresh access token when forwarding — the
 containerised Codex only ever sees a per-sandbox fake bearer. **claude-code**
-(the Anthropic Claude Code CLI) is the fallback: it authenticates with a
+(the Anthropic Claude Code CLI) is the enabled-and-configured fallback: it authenticates with a
 long-lived `CLAUDE_CODE_OAUTH_TOKEN` generated on the host via
 `claude setup-token`.
 

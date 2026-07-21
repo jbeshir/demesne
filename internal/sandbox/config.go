@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/jbeshir/demesne/internal/mcpproxy"
@@ -14,6 +15,11 @@ import (
 // environment-derived (see LoadConfigFromEnv); the MCP fields are
 // populated by main after the host MCP aggregator starts.
 type Config struct {
+	// CodexEnabled and ClaudeCodeEnabled control whether each agent provider
+	// participates in resolution and model advertisement. Both default true.
+	CodexEnabled      bool
+	ClaudeCodeEnabled bool
+
 	// AllowedPaths is the colon-separated list of host paths under which
 	// callers are permitted to mount files or directories.
 	AllowedPaths []string
@@ -99,7 +105,17 @@ func defaultOutputRoot() string {
 // DEMESNE_ALLOWED_PATHS and OPEN_SANDBOX_DOMAIN / OPEN_SANDBOX_API_KEY are mandatory; MCPServers
 // and Owner are not env-derived and must be set after construction.
 func LoadConfigFromEnv() (Config, error) {
+	codexEnabled, err := envBoolOrTrue("DEMESNE_CODEX_ENABLED")
+	if err != nil {
+		return Config{}, err
+	}
+	claudeCodeEnabled, err := envBoolOrTrue("DEMESNE_CLAUDE_CODE_ENABLED")
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
+		CodexEnabled:         codexEnabled,
+		ClaudeCodeEnabled:    claudeCodeEnabled,
 		OutputRoot:           envOr("DEMESNE_OUTPUT_ROOT", defaultOutputRoot()),
 		OpenSandboxDomain:    os.Getenv("OPEN_SANDBOX_DOMAIN"),
 		OpenSandboxProtocol:  envOr("OPEN_SANDBOX_PROTOCOL", "http"),
@@ -109,21 +125,9 @@ func LoadConfigFromEnv() (Config, error) {
 
 	cfg.CodexAuthFile = resolveCodexAuthFile()
 
-	rawAllowed := os.Getenv("DEMESNE_ALLOWED_PATHS")
-	if rawAllowed == "" {
-		return Config{}, errors.New(
-			"DEMESNE_ALLOWED_PATHS is required " +
-				"(colon-separated list of host paths permitted as mount sources)",
-		)
-	}
-	for _, p := range strings.Split(rawAllowed, ":") {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			cfg.AllowedPaths = append(cfg.AllowedPaths, p)
-		}
-	}
-	if len(cfg.AllowedPaths) == 0 {
-		return Config{}, errors.New("DEMESNE_ALLOWED_PATHS must contain at least one path")
+	cfg.AllowedPaths, err = allowedPathsFromEnv()
+	if err != nil {
+		return Config{}, err
 	}
 
 	// Always include the output root in the effective allowlist so /out
@@ -154,6 +158,42 @@ func LoadConfigFromEnv() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func allowedPathsFromEnv() ([]string, error) {
+	rawAllowed := os.Getenv("DEMESNE_ALLOWED_PATHS")
+	if rawAllowed == "" {
+		return nil, errors.New(
+			"DEMESNE_ALLOWED_PATHS is required " +
+				"(colon-separated list of host paths permitted as mount sources)",
+		)
+	}
+
+	var allowedPaths []string
+	for _, path := range strings.Split(rawAllowed, ":") {
+		path = strings.TrimSpace(path)
+		if path != "" {
+			allowedPaths = append(allowedPaths, path)
+		}
+	}
+	if len(allowedPaths) == 0 {
+		return nil, errors.New("DEMESNE_ALLOWED_PATHS must contain at least one path")
+	}
+	return allowedPaths, nil
+}
+
+// envBoolOrTrue parses Go's standard boolean syntax and defaults to true only
+// when the variable is absent. An explicitly empty value is invalid.
+func envBoolOrTrue(name string) (bool, error) {
+	raw, ok := os.LookupEnv(name)
+	if !ok {
+		return true, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a valid boolean: %w", name, err)
+	}
+	return v, nil
 }
 
 func envOr(name, fallback string) string {

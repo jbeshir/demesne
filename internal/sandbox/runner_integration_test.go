@@ -318,6 +318,7 @@ func agentIntegrationRunner(t *testing.T, oauthToken string) *Runner {
 	require.NotEmpty(t, domain, "OPEN_SANDBOX_DOMAIN is required for integration tests")
 	require.NotEmpty(t, apiKey, "OPEN_SANDBOX_API_KEY is required for integration tests")
 	return NewRunner(Config{
+		ClaudeCodeEnabled:   true,
 		AllowedPaths:         []string{t.TempDir()},
 		OutputRoot:           t.TempDir(),
 		OpenSandboxDomain:    domain,
@@ -555,6 +556,7 @@ func TestRunner_Integration_ChildBrowserRender(t *testing.T) {
 	defer cancel()
 
 	runner := NewRunner(Config{
+		ClaudeCodeEnabled:   true,
 		AllowedPaths:         []string{t.TempDir(), fixtureDir},
 		OutputRoot:           t.TempDir(),
 		OpenSandboxDomain:    domain,

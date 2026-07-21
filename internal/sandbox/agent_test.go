@@ -24,6 +24,7 @@ import (
 const (
 	caseCodexOnly  = "only codex configured"
 	caseClaudeOnly = "only claude configured"
+	claudeTok      = "tok"
 )
 
 func TestEgressOrDefault(t *testing.T) {
@@ -85,8 +86,6 @@ func TestAvailableAgentNames(t *testing.T) {
 	codexAuth := filepath.Join(dir, "auth.json")
 	require.NoError(t, os.WriteFile(codexAuth, []byte("{}"), 0o600))
 	missingAuth := filepath.Join(dir, "does-not-exist.json")
-	const claudeTok = "tok"
-
 	tests := []struct {
 		name        string
 		codexFile   string
@@ -101,7 +100,7 @@ func TestAvailableAgentNames(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}
+			cfg := Config{CodexEnabled: true, ClaudeCodeEnabled: true, CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}
 			assert.Equal(t, tt.want, availableAgentNames(cfg))
 		})
 	}
@@ -116,8 +115,6 @@ func TestAvailableAgents(t *testing.T) {
 	codexAuth := filepath.Join(dir, "auth.json")
 	require.NoError(t, os.WriteFile(codexAuth, []byte("{}"), 0o600))
 	missingAuth := filepath.Join(dir, "does-not-exist.json")
-	const claudeTok = "tok"
-
 	codexAgent, err := agents.Lookup(agentNameCodex)
 	require.NoError(t, err)
 	claudeAgent, err := agents.Lookup(agentNameClaudeCode)
@@ -167,7 +164,7 @@ func TestAvailableAgents(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &Runner{cfg: Config{CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}}
+			r := &Runner{cfg: Config{CodexEnabled: true, ClaudeCodeEnabled: true, CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}}
 			assert.Equal(t, tt.want, r.AvailableAgents())
 		})
 	}
@@ -183,8 +180,6 @@ func TestResolveDefaultAgent(t *testing.T) {
 	codexAuth := filepath.Join(dir, "auth.json")
 	require.NoError(t, os.WriteFile(codexAuth, []byte("{}"), 0o600))
 	missingAuth := filepath.Join(dir, "does-not-exist.json")
-	const claudeTok = "tok"
-
 	tests := []struct {
 		name        string
 		codexFile   string
@@ -200,10 +195,58 @@ func TestResolveDefaultAgent(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}
-			assert.Equal(t, tt.want, resolveDefaultAgent(cfg))
+			cfg := Config{CodexEnabled: true, ClaudeCodeEnabled: true, CodexAuthFile: tt.codexFile, ClaudeCodeOAuthToken: tt.claudeToken}
+			got, err := resolveDefaultAgent(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestDisabledProvidersExcluded(t *testing.T) {
+	dir := t.TempDir()
+	codexAuth := filepath.Join(dir, "auth.json")
+	require.NoError(t, os.WriteFile(codexAuth, []byte("{}"), 0o600))
+
+	t.Run("disabled codex falls back to claude and is not advertised", func(t *testing.T) {
+		r := &Runner{cfg: Config{
+			ClaudeCodeEnabled:    true,
+			CodexAuthFile:        codexAuth,
+			ClaudeCodeOAuthToken: claudeTok,
+		}}
+		got, err := resolveDefaultAgent(r.cfg)
+		require.NoError(t, err)
+		assert.Equal(t, agentNameClaudeCode, got)
+		require.Len(t, r.AvailableAgents(), 1)
+		assert.Equal(t, agentNameClaudeCode, r.AvailableAgents()[0].Name)
+		_, _, err = r.resolveAgentModel("gpt-5.5")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "provider \"codex\" is disabled")
+	})
+
+	t.Run("disabled claude falls back to codex and is not advertised", func(t *testing.T) {
+		r := &Runner{cfg: Config{
+			CodexEnabled:         true,
+			CodexAuthFile:        codexAuth,
+			ClaudeCodeOAuthToken: claudeTok,
+		}}
+		got, err := resolveDefaultAgent(r.cfg)
+		require.NoError(t, err)
+		assert.Equal(t, agentNameCodex, got)
+		require.Len(t, r.AvailableAgents(), 1)
+		assert.Equal(t, agentNameCodex, r.AvailableAgents()[0].Name)
+		_, _, err = r.resolveAgentModel("sonnet")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "provider \"claude-code\" is disabled")
+	})
+
+	t.Run("both disabled fails default resolution", func(t *testing.T) {
+		r := &Runner{cfg: Config{CodexAuthFile: codexAuth, ClaudeCodeOAuthToken: claudeTok}}
+		assert.Empty(t, r.AvailableAgents())
+		_, _, err := r.resolveAgentModel("")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no agent providers are enabled")
+	})
 }
 
 // vendorStubAgent is a minimal agents.Agent whose only meaningful method

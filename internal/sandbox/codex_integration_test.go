@@ -195,6 +195,7 @@ func codexAgentIntegrationRunner(t *testing.T, authFile string) *Runner {
 	require.NotEmpty(t, domain, "OPEN_SANDBOX_DOMAIN is required for integration tests")
 	require.NotEmpty(t, apiKey, "OPEN_SANDBOX_API_KEY is required for integration tests")
 	return NewRunner(Config{
+		CodexEnabled:       true,
 		AllowedPaths:        []string{t.TempDir()},
 		OutputRoot:          t.TempDir(),
 		OpenSandboxDomain:   domain,

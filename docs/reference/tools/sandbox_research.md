@@ -7,7 +7,7 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `prompt` | string | yes | — | Research task for the agent. Free-form text. |
-| `model` | string | no | credential-aware | Model for the agent; the provider is inferred from the model. claude-code uses `fable` (most capable), `opus`, `sonnet`, or `haiku`; codex uses `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, or `gpt-5.4-mini`. Defaults to the credential-aware provider's default model: codex/gpt-5.6-sol when Codex credentials are configured, otherwise claude-code/sonnet. The MCP input schema's enum is filtered at registration time to the union of the configured providers' models. |
+| `model` | string | no | credential-aware | Model for the agent; the provider is inferred from the model. claude-code uses `fable` (most capable), `opus`, `sonnet`, or `haiku`; codex uses `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, or `gpt-5.4-mini`. Defaults to the first enabled provider with configured credentials in Codex-first order. The MCP input schema's enum is filtered at registration time to the union of enabled providers with configured credentials. |
 | `preamble` | string | no | — | Optional prose prepended verbatim to the generated agent context file (e.g. CLAUDE.md for claude-code) before the auto-generated environment section. |
 | `output_path` | string | no | — | Optional. Where the agent should write its final artefact. Rendered as a Definition of done block. |
 | `output_format` | string | no | — | Optional. Expected shape/format of the output. |
@@ -77,7 +77,9 @@ Output format, cost reporting, the `output_dir` contents, and the host MCP proxy
 | Error | When it occurs |
 |-------|----------------|
 | `prompt is required` | `prompt` parameter is present but empty or whitespace-only. |
-| `model "<name>" unknown model (known: [...])` | `model` parameter is not known to any configured provider. |
+| `model "<name>" unknown model (known: [...])` | `model` parameter is not known to any registered provider. |
+| `model "<name>" is unavailable because agent provider "<provider>" is disabled` | The selected model belongs to a provider disabled by its `DEMESNE_*_ENABLED` variable. |
+| `no agent providers are enabled` | Both `DEMESNE_CODEX_ENABLED` and `DEMESNE_CLAUDE_CODE_ENABLED` are false. |
 | `DEMESNE_CLAUDE_CODE_OAUTH_TOKEN is required for sandbox_research (run 'claude setup-token' to obtain one)` | The Claude Code OAuth token env var is not set on the demesne process. Required when the resolved provider is claude-code. |
 | `DEMESNE_CODEX_AUTH_FILE (default ~/.codex/auth.json) is required for sandbox_research when using a codex model` | The Codex auth file is not set. Required when the resolved provider is codex. |
 | `model "<name>" is not in the Anthropic allowlist ([sonnet opus fable haiku])` | `model` parameter is not one of the valid Claude tiers. |
