@@ -152,14 +152,17 @@ type ResearchRequest struct {
 type StatusRequest struct {
 	// JobID is the public handle returned by a background spawn.
 	JobID JobID
+	// IncludeStdoutTail requests the bounded stdout tail. It is omitted by
+	// default to keep routine status checks compact.
+	IncludeStdoutTail bool
 }
 
 // WaitRequest captures the inputs to sandbox_wait.
 type WaitRequest struct {
 	// JobID is the public handle returned by a background spawn.
 	JobID JobID
-	// TimeoutSeconds is the maximum time to wait; clamped to [1ms, 120s].
-	// Zero or negative uses the default of 30s.
+	// TimeoutSeconds is the maximum time to wait; clamped to [1ms, 48h].
+	// Zero or negative uses the default of 30 minutes.
 	TimeoutSeconds int
 }
 

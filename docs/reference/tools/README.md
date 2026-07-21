@@ -20,16 +20,16 @@ Demesne exposes eleven MCP tools over its stdio JSON-RPC interface. Four categor
 
 Pass `background: true` on `sandbox_script`, `sandbox_agent`, or `sandbox_research` to start a run without blocking the MCP tool-call. The tool returns immediately with `{job_id, status: "running"}`. Use the following tools to manage the job:
 
-- **`sandbox_status`** — non-blocking snapshot: current status, elapsed time, a tail of captured stdout, and cost/exit-code once terminal.
-- **`sandbox_wait`** — blocking poll: waits up to `timeout_seconds` (default 30, hard-capped at 120) for the job to reach a terminal state. Returns the final result or `{status: "running", message: "still running; call sandbox_wait again"}` on timeout. Call repeatedly to implement a poll loop.
+- **`sandbox_status`** — non-blocking snapshot: current status, elapsed time, and cost/exit-code once terminal. Pass `include_stdout_tail: true` to include a bounded stdout tail.
+- **`sandbox_wait`** — blocking wait: waits up to `timeout_seconds` (default 1800, hard-capped at 172800) for the job to reach a terminal state. Returns the final result or `{status: "running", message: "still running; call sandbox_wait again"}` on timeout.
 - **`sandbox_cancel`** — cancels the job and its entire descendant subtree depth-first (child jobs cancelled before parent), then tears down their sandboxes. Idempotent: already-terminal jobs return their final status without error.
 
 **Typical poll idiom:**
 1. Call `sandbox_agent` or `sandbox_research` with `background: true` → get `job_id`.
-2. Call `sandbox_wait` with `timeout_seconds: 120` in a loop until `status` is not `"running"`.
+2. Call `sandbox_wait` (30-minute default) until `status` is not `"running"`; raise `timeout_seconds` up to 172800 for longer jobs.
 3. Inspect `result_text`, `output_path`, and `cost_usd` from the final `sandbox_wait` response.
 
-Synchronous calls may run to completion (subject to the explicit 48h runtime limit) and remain cancellable. Use background mode for concurrent work, detachment, status/progress polling, or deliberate job control; `sandbox_wait` remains a 30s-default, 120s-maximum bounded poll. The job registry is in-memory; jobs do NOT survive MCP-server restarts (a stale job_id returns an error after restart); completed jobs are retained ~1h via a TTL reaper.
+Synchronous calls may run to completion (subject to the explicit 48h runtime limit) and remain cancellable. Background mode automatically attempts exactly one advisory MCP logging notification (`notifications/message`) at a succeeded, failed, or cancelled transition; there is no separate notification opt-in, and synchronous work emits none. Delivery/display is best-effort and does not replace waiting: use `sandbox_status` or `sandbox_wait` when the client does not surface notifications or when wake/context-injection behavior is unknown. See [background notification compatibility](../background-notifications.md). `sandbox_wait` uses a 30-minute default and 48-hour maximum. The job registry is in-memory; jobs do NOT survive MCP-server restarts (a stale job_id returns an error after restart); completed jobs are retained ~1h via a TTL reaper.
 
 All three async/job-control tools are dual-registered on the in-sandbox child surface (the `demesne` MCP server available to containerised agents), so child agents can launch and manage their own background sub-jobs.
 

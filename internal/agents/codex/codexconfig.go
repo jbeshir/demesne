@@ -22,7 +22,7 @@ const codexConfigBasename = "config.toml"
 
 // codexMCPToolTimeoutSeconds permits MCP calls to run for Demesne's maximum
 // sandbox job lifetime. Caller cancellation and shorter operation-specific
-// limits, such as sandbox_wait's bounded poll, still apply.
+// limits, such as sandbox_wait's bounded wait, still apply.
 const codexMCPToolTimeoutSeconds = 48 * 60 * 60
 
 // writeCodexConfig writes the Codex config.toml into configDir.

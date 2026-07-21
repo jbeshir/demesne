@@ -142,12 +142,16 @@ func TestHandleSandboxStatus_HappyPath(t *testing.T) {
 	}
 	s := NewServer(r)
 	got, err := s.handleSandboxStatus(context.Background(), newRequest(map[string]any{
-		paramJobID: bgStatusJobID,
+		paramJobID:             bgStatusJobID,
+		paramIncludeStdoutTail: true,
 	}))
 	require.NoError(t, err)
 	require.False(t, got.IsError, msgUnexpectedErr, resultText(t, got))
 	assert.Equal(t, 1, r.statusCalls)
-	assert.Equal(t, sandbox.StatusRequest{JobID: sandbox.JobID(bgStatusJobID)}, r.gotStatusReq)
+	assert.Equal(t, sandbox.StatusRequest{
+		JobID:             sandbox.JobID(bgStatusJobID),
+		IncludeStdoutTail: true,
+	}, r.gotStatusReq)
 	out := resultStructured[statusOutput](t, got)
 	assert.Equal(t, bgStatusJobID, out.JobID)
 	assert.Equal(t, string(sandbox.JobStatusSucceeded), out.Status)
@@ -164,6 +168,7 @@ func TestHandleSandboxStatus_JobNotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, got.IsError, "expected IsError for job-not-found")
 	assert.Equal(t, 1, r.statusCalls)
+	assert.False(t, r.gotStatusReq.IncludeStdoutTail)
 }
 
 // --- handleSandboxWait ---

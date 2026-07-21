@@ -27,10 +27,10 @@ const jobTTL = time.Hour
 const reapInterval = 5 * time.Minute
 
 // defaultWaitTimeout is used when the caller passes timeout <= 0.
-const defaultWaitTimeout = 30 * time.Second
+const defaultWaitTimeout = 30 * time.Minute
 
 // maxWaitTimeout is the server-side cap on sandbox_wait timeout.
-const maxWaitTimeout = 120 * time.Second
+const maxWaitTimeout = 48 * time.Hour
 
 // statusStdoutTailBytes is the maximum bytes of stdout tail returned by Status.
 const statusStdoutTailBytes int64 = 16 * 1024
@@ -90,6 +90,11 @@ type JobOutcome struct {
 	TotalUsageUSD float64
 }
 
+// TerminalNotifier is called once after a background job wins its transition
+// to a terminal state. Delivery is advisory: implementations must return
+// promptly and handle their own errors without changing job state.
+type TerminalNotifier func(JobID, JobStatus)
+
 // StatusResult is the response shape for JobManager.Status.
 type StatusResult struct {
 	// JobID is the public handle for the job.
@@ -146,6 +151,7 @@ type job struct {
 	done      chan struct{} // closed exactly once when the goroutine exits
 	startedAt time.Time
 	parent    JobID
+	notify    TerminalNotifier
 
 	// mu protects all mutable fields below.
 	mu          sync.Mutex
@@ -241,6 +247,7 @@ func (m *JobManager) Start(
 	parent JobID,
 	tool string,
 	run func(ctx context.Context, h JobHooks) (JobOutcome, error),
+	notify TerminalNotifier,
 ) JobID {
 	id := JobID("job-" + uuid.NewString())
 	jobCtx, jobCancel := context.WithCancel(m.rootCtx)
@@ -254,6 +261,7 @@ func (m *JobManager) Start(
 		done:           make(chan struct{}),
 		startedAt:      m.now(),
 		parent:         parent,
+		notify:         notify,
 	}
 
 	// Register BEFORE launching the goroutine so an early Cancel finds the job.
@@ -285,6 +293,9 @@ func (m *JobManager) Start(
 					j.mu.Lock()
 					j.finishedAt = m.now()
 					j.mu.Unlock()
+					if j.notify != nil {
+						j.notify(j.id, JobStatusFailed)
+					}
 				}
 			}
 		}()
@@ -300,16 +311,19 @@ func (m *JobManager) Start(
 			j.outcome = outcome
 			j.finishedAt = m.now()
 			j.mu.Unlock()
+			if j.notify != nil {
+				j.notify(j.id, jobStateToStatus(newState))
+			}
 		}
 	}()
 
 	return id
 }
 
-// Status returns the current observable state of job id. Cost and stdout tail
-// are read from the job's outHost on a best-effort basis; missing files
-// return zero values rather than errors.
-func (m *JobManager) Status(id JobID) (StatusResult, error) {
+// Status returns the current observable state of job id. Cost and, when
+// requested, the stdout tail are read from the job's outHost on a best-effort
+// basis; missing files return zero values rather than errors.
+func (m *JobManager) Status(id JobID, includeStdoutTail bool) (StatusResult, error) {
 	m.mu.RLock()
 	j, ok := m.jobs[id]
 	m.mu.RUnlock()
@@ -355,11 +369,13 @@ func (m *JobManager) Status(id JobID) (StatusResult, error) {
 		}
 	}
 
-	tail, err := tailFile(filepath.Join(outHost, stdoutBasename), statusStdoutTailBytes)
-	if err != nil {
-		log.Printf("sandbox: status tail for job %s: %v", id, err)
+	if includeStdoutTail {
+		tail, err := tailFile(filepath.Join(outHost, stdoutBasename), statusStdoutTailBytes)
+		if err != nil {
+			log.Printf("sandbox: status tail for job %s: %v", id, err)
+		}
+		res.StdoutTail = tail
 	}
-	res.StdoutTail = tail
 
 	return res, nil
 }
@@ -476,6 +492,9 @@ func (m *JobManager) cancelSubtree(id JobID) {
 	j.mu.Unlock()
 
 	j.cancel()
+	if j.notify != nil {
+		j.notify(j.id, JobStatusCancelled)
+	}
 }
 
 // reapLoop is the background TTL reaper goroutine. It ticks every

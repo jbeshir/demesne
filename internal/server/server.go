@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -11,25 +13,26 @@ import (
 )
 
 const (
-	paramSandboxID       = "sandbox_id"
-	paramOutputDir       = "output_dir"
-	paramCommand         = "command"
-	paramImage           = "image"
-	paramEgress          = "egress"
-	paramFiles           = "files"
-	paramDirectories     = "directories"
-	paramPrompt          = "prompt"
-	paramModel           = "model"
-	paramPreamble        = "preamble"
-	paramSrc             = "src"
-	paramDst             = "dst"
-	paramOutputPath      = "output_path"
-	paramOutputFormat    = "output_format"
-	paramSuccessCriteria = "success_criteria"
-	paramBackground      = "background"
-	paramJobID           = "job_id"
-	paramTimeoutSeconds  = "timeout_seconds"
-	sandboxHandleDesc    = "Sandbox handle returned by sandbox_create."
+	paramSandboxID         = "sandbox_id"
+	paramOutputDir         = "output_dir"
+	paramCommand           = "command"
+	paramImage             = "image"
+	paramEgress            = "egress"
+	paramFiles             = "files"
+	paramDirectories       = "directories"
+	paramPrompt            = "prompt"
+	paramModel             = "model"
+	paramPreamble          = "preamble"
+	paramSrc               = "src"
+	paramDst               = "dst"
+	paramOutputPath        = "output_path"
+	paramOutputFormat      = "output_format"
+	paramSuccessCriteria   = "success_criteria"
+	paramBackground        = "background"
+	paramJobID             = "job_id"
+	paramTimeoutSeconds    = "timeout_seconds"
+	paramIncludeStdoutTail = "include_stdout_tail"
+	sandboxHandleDesc      = "Sandbox handle returned by sandbox_create."
 
 	// agentNameCodex / agentNameClaudeCode are the caller-facing
 	// provider identifiers, mirrored from internal/sandbox so the
@@ -50,9 +53,9 @@ type Runner interface {
 	Destroy(ctx context.Context, req sandbox.DestroyRequest) error
 	Agent(ctx context.Context, req sandbox.AgentRequest) (sandbox.AgentResult, error)
 	Research(ctx context.Context, req sandbox.ResearchRequest) (sandbox.AgentResult, error)
-	StartScript(req sandbox.ScriptRequest) sandbox.JobID
-	StartAgent(req sandbox.AgentRequest) sandbox.JobID
-	StartResearch(req sandbox.ResearchRequest) sandbox.JobID
+	StartScript(req sandbox.ScriptRequest, notify sandbox.TerminalNotifier) sandbox.JobID
+	StartAgent(req sandbox.AgentRequest, notify sandbox.TerminalNotifier) sandbox.JobID
+	StartResearch(req sandbox.ResearchRequest, notify sandbox.TerminalNotifier) sandbox.JobID
 	Status(req sandbox.StatusRequest) (sandbox.StatusResult, error)
 	Wait(ctx context.Context, req sandbox.WaitRequest) (sandbox.WaitResult, error)
 	Cancel(ctx context.Context, req sandbox.CancelRequest) (sandbox.CancelResult, error)
@@ -98,12 +101,30 @@ func NewServer(runner Runner) *Server {
 // in-flight tool-call workers via workerWg.Wait() before returning — so deferred
 // killSandbox / sidecar.Remove calls in the runner complete cleanly.
 func (s *Server) RunContext(ctx context.Context) error {
+	return s.serve(ctx, os.Stdin, os.Stdout)
+}
+
+func (s *Server) serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	stdioSrv := server.NewStdioServer(s.mcpServer)
-	return stdioSrv.Listen(ctx, os.Stdin, os.Stdout)
+	return stdioSrv.Listen(ctx, in, out)
 }
 
 // Run starts the MCP server with stdio transport.
 func (s *Server) Run() error { return s.RunContext(context.Background()) }
+
+func (s *Server) terminalNotifier(ctx context.Context) sandbox.TerminalNotifier {
+	ctx = context.WithoutCancel(ctx)
+	return func(jobID sandbox.JobID, status sandbox.JobStatus) {
+		n := mcp.NewLoggingMessageNotification(mcp.LoggingLevelInfo, "demesne.background-job", map[string]any{
+			"job_id":  string(jobID),
+			"status":  string(status),
+			"message": "background job reached a terminal state; use sandbox_status or sandbox_wait for the result",
+		})
+		if err := s.mcpServer.SendLogMessageToClient(ctx, n); err != nil {
+			log.Printf("demesne: background job %s notification: %v", jobID, err)
+		}
+	}
+}
 
 func stringArrayItems() map[string]any { return map[string]any{"type": "string"} }
 
@@ -233,7 +254,8 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithBoolean(paramBackground,
 			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
-				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"instead of blocking and automatically attempts one advisory terminal MCP logging notification; "+
+				"client display or wake is not guaranteed, so poll with sandbox_status / sandbox_wait; "+
 				"cancel with sandbox_cancel."),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -385,7 +407,8 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithBoolean(paramBackground,
 			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
-				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"instead of blocking and automatically attempts one advisory terminal MCP logging notification; "+
+				"client display or wake is not guaranteed, so poll with sandbox_status / sandbox_wait; "+
 				"cancel with sandbox_cancel."),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -428,7 +451,8 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithBoolean(paramBackground,
 			mcp.Description("When true, returns immediately with {job_id, status:\"running\"} "+
-				"instead of blocking; poll with sandbox_status / sandbox_wait, "+
+				"instead of blocking and automatically attempts one advisory terminal MCP logging notification; "+
+				"client display or wake is not guaranteed, so poll with sandbox_status / sandbox_wait; "+
 				"cancel with sandbox_cancel."),
 		),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -443,6 +467,9 @@ func (s *Server) registerTools() {
 		mcp.WithString(paramJobID,
 			mcp.Required(),
 			mcp.Description("Job ID returned by a background sandbox_script/agent/research call."),
+		),
+		mcp.WithBoolean(paramIncludeStdoutTail,
+			mcp.Description("When true, include the existing bounded stdout tail. Defaults to false."),
 		),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -459,7 +486,7 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithNumber(paramTimeoutSeconds,
 			mcp.Description("Maximum seconds to wait for the job to reach a terminal state. "+
-				"0 or omitted → 30 s default; hard-capped at 120 s."),
+				"0 or omitted → 1800 s (30 minute) default; hard-capped at 172800 s (48 hours)."),
 		),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -594,8 +621,9 @@ billing, so the user is not charged per request).`
 const statusToolDescription = `Get the current status of a background sandbox job.
 
 Returns the job ID, status (running/succeeded/failed/cancelled), elapsed
-time, a tail of any captured stdout so far, and cost/exit-code when the
-job has completed. Use sandbox_wait to block until completion.`
+time, and cost/exit-code when the job has completed. Pass
+include_stdout_tail=true to include a bounded tail of captured stdout.
+Use sandbox_wait to block until completion.`
 
 const waitToolDescription = `Block until a background sandbox job reaches a terminal state.
 

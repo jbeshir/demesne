@@ -12,11 +12,11 @@ Run a long-running research agent in a fresh sandbox with unrestricted outbound 
 | `output_path` | string | no | — | Optional. Where the agent should write its final artefact. Rendered as a Definition of done block. |
 | `output_format` | string | no | — | Optional. Expected shape/format of the output. |
 | `success_criteria` | array of strings | no | — | Optional. Checklist of conditions the output must satisfy. |
-| `background` | boolean | no | `false` | When `true`, returns immediately with `{job_id, status:"running"}` instead of blocking; poll with `sandbox_status` / `sandbox_wait`, cancel with `sandbox_cancel`. |
+| `background` | boolean | no | `false` | When `true`, returns immediately and automatically attempts one advisory terminal MCP logging notification. Client display/wake is not guaranteed; poll with `sandbox_status` / `sandbox_wait`, cancel with `sandbox_cancel`. |
 
 ## Async usage
 
-Synchronous research calls may run to completion (subject to the explicit 48h runtime limit) and remain cancellable. Pass `background: true` for concurrent work, detachment, status/progress polling, or deliberate job control. The response is `{job_id, status: "running"}`; poll it with `sandbox_status` or block (up to 120s per call) with `sandbox_wait`, and cancel its descendant subtree with `sandbox_cancel`.
+Synchronous research calls may run to completion (subject to the explicit 48h runtime limit) and remain cancellable. Pass `background: true` for concurrent work, detachment, status/progress polling, or deliberate job control. The response is `{job_id, status: "running"}`; inspect it with `sandbox_status` or block (30-minute default, up to 48 hours) with `sandbox_wait`, and cancel its descendant subtree with `sandbox_cancel`.
 
 ## Annotations
 

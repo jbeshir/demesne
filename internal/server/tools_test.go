@@ -70,12 +70,16 @@ type fakeRunner struct {
 	startScriptCalls    int
 	gotStartScriptReq   sandbox.ScriptRequest
 	startScriptJobID    sandbox.JobID
+	startScriptNotify   sandbox.TerminalNotifier
+	notifyOnStart       bool
 	startAgentCalls     int
 	gotStartAgentReq    sandbox.AgentRequest
 	startAgentJobID     sandbox.JobID
+	startAgentNotify    sandbox.TerminalNotifier
 	startResearchCalls  int
 	gotStartResearchReq sandbox.ResearchRequest
 	startResearchJobID  sandbox.JobID
+	startResearchNotify sandbox.TerminalNotifier
 
 	// Status/Wait/Cancel injectable return values and call captures.
 	statusCalls  int
@@ -146,27 +150,33 @@ func (f *fakeRunner) Research(_ context.Context, req sandbox.ResearchRequest) (s
 	return f.researchRes, f.researchErr
 }
 
-func (f *fakeRunner) StartScript(req sandbox.ScriptRequest) sandbox.JobID {
+func (f *fakeRunner) StartScript(req sandbox.ScriptRequest, notify sandbox.TerminalNotifier) sandbox.JobID {
 	f.startScriptCalls++
 	f.gotStartScriptReq = req
+	f.startScriptNotify = notify
+	if f.notifyOnStart && notify != nil {
+		notify(f.startScriptJobID, sandbox.JobStatusSucceeded)
+	}
 	if f.startScriptJobID != "" {
 		return f.startScriptJobID
 	}
 	return "fake-job-script"
 }
 
-func (f *fakeRunner) StartAgent(req sandbox.AgentRequest) sandbox.JobID {
+func (f *fakeRunner) StartAgent(req sandbox.AgentRequest, notify sandbox.TerminalNotifier) sandbox.JobID {
 	f.startAgentCalls++
 	f.gotStartAgentReq = req
+	f.startAgentNotify = notify
 	if f.startAgentJobID != "" {
 		return f.startAgentJobID
 	}
 	return "fake-job-agent"
 }
 
-func (f *fakeRunner) StartResearch(req sandbox.ResearchRequest) sandbox.JobID {
+func (f *fakeRunner) StartResearch(req sandbox.ResearchRequest, notify sandbox.TerminalNotifier) sandbox.JobID {
 	f.startResearchCalls++
 	f.gotStartResearchReq = req
+	f.startResearchNotify = notify
 	if f.startResearchJobID != "" {
 		return f.startResearchJobID
 	}

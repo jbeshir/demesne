@@ -31,7 +31,7 @@ Skills that fan work out across sibling children dispatch them **in the backgrou
 The canonical fan-out loop every parallel stage uses:
 
 1. **Dispatch** each child with `background: true`, collecting its `job_id`. Keep at most **8 in flight** — a host-resource guard, not an MCP limit (demesne enforces no cap). For N ≤ 8 dispatch all N; for N > 8 dispatch 8 and launch one more each time a job finishes (a rolling window).
-2. **Poll** each `job_id` with `sandbox_wait` (`timeout_seconds: 120`), re-calling any still `running` until every job reaches a terminal state (`succeeded`/`failed`/`cancelled`); `sandbox_cancel` kills a stuck job and its subtree.
+2. **Wait** on each `job_id` with `sandbox_wait` using its long default, re-calling only a result that is still `running` until every job reaches a terminal state (`succeeded`/`failed`/`cancelled`); `sandbox_cancel` kills a stuck job and its subtree.
 3. **Harvest** each child's output from `/out/child/<name>/` (siblings read a completed peer at `/in/previous-jobs/<name>/`).
 
 Barriers still hold where a stage genuinely needs every prior result — a reducer over all map outputs, a judge over all candidates, debate round N+1 over round N: drain the whole in-flight set before dispatching the next stage. Steps that are **sequential by construction** — shared-`/workspace/repo` edit phases, a bisect probe loop — do not fan out at all and keep their blocking calls.
