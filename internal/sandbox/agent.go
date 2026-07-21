@@ -463,7 +463,11 @@ func (r *Runner) resolveCodexTokens(ctx context.Context, agent agents.Agent) (pr
 // provider, since model aliases are globally unique across providers.
 func (r *Runner) resolveAgentModel(rawModel string) (agents.Agent, agents.ModelName, error) {
 	if rawModel == "" {
-		agent, err := agents.Lookup(resolveDefaultAgent(r.cfg))
+		name, err := resolveDefaultAgent(r.cfg)
+		if err != nil {
+			return nil, "", err
+		}
+		agent, err := agents.Lookup(name)
 		if err != nil {
 			return nil, "", err
 		}
@@ -476,6 +480,9 @@ func (r *Runner) resolveAgentModel(rawModel string) (agents.Agent, agents.ModelN
 	agent, err := agents.LookupByModel(rawModel)
 	if err != nil {
 		return nil, "", err
+	}
+	if !agentEnabled(r.cfg, agent.Name()) {
+		return nil, "", fmt.Errorf("model %q is unavailable because agent provider %q is disabled", rawModel, agent.Name())
 	}
 	model, err := agent.ResolveModel(rawModel)
 	if err != nil {
@@ -533,7 +540,7 @@ const (
 	agentNameClaudeCode = "claude-code"
 )
 
-// availableAgentNames returns the agent provider names whose host
+// availableAgentNames returns the enabled agent provider names whose host
 // credentials are configured, in codex-first order. Codex availability
 // is determined by the resolved auth file path existing on disk
 // (matching how checkAgentCredentials and resolveCodexTokens use it).
@@ -544,29 +551,45 @@ const (
 // AvailableAgents). An empty slice means neither is configured.
 func availableAgentNames(cfg Config) []string {
 	var names []string
-	if cfg.CodexAuthFile != "" {
+	if cfg.CodexEnabled && cfg.CodexAuthFile != "" {
 		if _, err := os.Stat(cfg.CodexAuthFile); err == nil {
 			names = append(names, agentNameCodex)
 		}
 	}
-	if cfg.ClaudeCodeOAuthToken != "" {
+	if cfg.ClaudeCodeEnabled && cfg.ClaudeCodeOAuthToken != "" {
 		names = append(names, agentNameClaudeCode)
 	}
 	return names
 }
 
-// resolveDefaultAgent picks the default agent provider when the caller
-// leaves the `model` parameter empty (with no model, the provider can't
-// be inferred, so it falls back to this default). It prefers Codex: both or
-// neither set → codex; only claude-code set → claude-code; only codex
-// set → codex. The neither-set branch falls through to codex so the
-// missing-auth error names the Codex setup path consistently.
-func resolveDefaultAgent(cfg Config) string {
+// resolveDefaultAgent picks the default enabled provider when the caller
+// leaves the model empty. Configured credentials win in codex-first order;
+// without credentials it falls back in the same order so the subsequent
+// error identifies the enabled provider's setup path. Disabling both is an
+// immediate configuration error for agent calls.
+func resolveDefaultAgent(cfg Config) (string, error) {
 	names := availableAgentNames(cfg)
-	if len(names) == 1 && names[0] == agentNameClaudeCode {
-		return agentNameClaudeCode
+	if len(names) > 0 {
+		return names[0], nil
 	}
-	return agentNameCodex
+	if cfg.CodexEnabled {
+		return agentNameCodex, nil
+	}
+	if cfg.ClaudeCodeEnabled {
+		return agentNameClaudeCode, nil
+	}
+	return "", errors.New("no agent providers are enabled; enable DEMESNE_CODEX_ENABLED or DEMESNE_CLAUDE_CODE_ENABLED")
+}
+
+func agentEnabled(cfg Config, name string) bool {
+	switch name {
+	case agentNameCodex:
+		return cfg.CodexEnabled
+	case agentNameClaudeCode:
+		return cfg.ClaudeCodeEnabled
+	default:
+		return true
+	}
 }
 
 // AgentOption describes one available agent provider and the model

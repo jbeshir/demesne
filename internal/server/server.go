@@ -138,8 +138,8 @@ func stringArrayItems() map[string]any { return map[string]any{"type": "string"}
 func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 	if len(available) == 0 {
 		return mcp.WithString(paramModel, mcp.Description(
-			"Model for the agent. No agent credentials are configured, so "+
-				"no models are available.",
+			"Model for the agent. No enabled agent provider has configured "+
+				"credentials, so no models are available.",
 		))
 	}
 	var models []string
@@ -166,8 +166,8 @@ func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 		}
 	}
 	desc := "Model for the agent. The provider is inferred automatically from the chosen model. " +
-		"When omitted, defaults to the default model of the credential-aware default provider " +
-		"(codex's gpt-5.6-sol when Codex credentials are configured, otherwise claude-code's sonnet). " +
+		"When omitted, defaults to the default model of the first enabled provider with configured " +
+		"credentials in codex-first order. " +
 		"Provider-specific: " + joinSemi(clauses) + "."
 	return mcp.WithString(paramModel, mcp.Description(desc), mcp.Enum(models...))
 }

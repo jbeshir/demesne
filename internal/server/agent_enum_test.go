@@ -88,10 +88,10 @@ func TestModelEnumReflectsAvailability(t *testing.T) {
 			modelDescNotCheck: []string{"claude-code uses"},
 		},
 		{
-			name:           "neither configured omits enum",
+			name:           "no enabled provider with credentials omits enum",
 			available:      []sandbox.AgentOption{},
 			wantModelOmit:  true,
-			modelDescCheck: []string{"No agent credentials are configured"},
+			modelDescCheck: []string{"No enabled agent provider has configured credentials"},
 		},
 	}
 
