@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Anthropic indicative rates**: `sonnet` (Claude Sonnet 5.5) and `fable` (Claude Fable 5.1) rates corrected to Anthropic's published per-model prices.
 - **Sandbox lifetime limits raised to 48h across the board**: one-shot `commandTimeout`/`oneShotSandboxTTLSeconds` (`sandbox_script`/`sandbox_agent`/`sandbox_research`) go from 12h to 48h, and persistent `persistentSandboxTTLSeconds`/`renewDuration` (`sandbox_create`/`sandbox_exec`) go from 24h to 48h, so both cap out at the same limit (`internal/sandbox/runner.go`, `internal/sandbox/exec.go`).
 
+### Fixed
+- **Codex MCP tool calls**: the Codex image now also installs `codex-code-mode-host`, the helper current Codex releases run MCP tool calls through. Without it every tunneled MCP call failed with "`/usr/local/bin/codex-code-mode-host` is missing".
+
 ### Removed
 - **`gpt-5.4-mini`**: removed from the Codex allowlist and indicative pricing; it was retired from Codex with ChatGPT sign-in on 2026-08-31.
 
