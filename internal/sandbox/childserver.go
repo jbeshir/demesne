@@ -621,10 +621,10 @@ Not for: deterministic verification or shell scripting — use sandbox_script
 
 Model: 'haiku' for lookup, 'sonnet' (default) for general agentic work,
 'opus' for complex synthesis, 'fable' for the hardest synthesis (most
-capable, above opus); codex uses 'gpt-5.6-sol' (default), 'gpt-5.6-terra',
-'gpt-5.6-luna', 'gpt-5.5', or 'gpt-5.4-mini'. Hand off via /workspace files
-referenced from the child's prompt; copy artefacts you want returned into your
-own /out.`
+capable, above opus); codex uses 'gpt-6.1-sol' (default), 'gpt-6-astra',
+'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', or
+'gpt-5.5'. Hand off via /workspace files referenced from the child's
+prompt; copy artefacts you want returned into your own /out.`
 
 const childResearchDescription = `Spawn a long-running child research agent with open internet egress.
 
@@ -650,8 +650,9 @@ const childPreambleDescription = "Prose prepended to the child's context file. "
 
 const childModelDescription = "Model: 'fable' (most capable; hardest synthesis), " +
 	"'opus' (complex synthesis), 'sonnet' (default; general agentic work), " +
-	"'haiku' (lookup / cheap); codex models are 'gpt-5.6-sol' (default), " +
-	"'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', and 'gpt-5.4-mini'. " +
+	"'haiku' (lookup / cheap); codex models are 'gpt-6.1-sol' (default), " +
+	"'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', " +
+	"'gpt-5.6-terra', 'gpt-5.6-luna', and 'gpt-5.5'. " +
 	"The provider is inferred automatically from the chosen model."
 
 const childCreateDescription = `Create a persistent child sandbox and return its handle.

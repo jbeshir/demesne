@@ -35,8 +35,8 @@ const codexMCPToolTimeoutSeconds = 48 * 60 * 60
 // approval_policy=never and sandbox_mode=danger-full-access give full-auto
 // operation because we are already inside demesne's sandbox isolation.
 //
-// wire_api="responses" and url-based [mcp_servers] schema are verified
-// against Codex rust-v0.144.3 (see repo docs).
+// wire_api="responses" and the url-based [mcp_servers] schema have not been
+// re-verified against the Codex CLI pinned by proxyopenai.CodexVersion.
 func writeCodexConfig(configDir string, servers []agents.MCPServerInfo) error {
 	var b strings.Builder
 

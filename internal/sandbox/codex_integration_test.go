@@ -69,7 +69,7 @@ func TestRunner_Integration_CodexLongSynchronousMCP(t *testing.T) {
 		_ = agg.Shutdown(shutdownCtx)
 	})
 	runner.SetMCPWiring(agg.Servers(), agg.SocketPath(), agg.Catalogue())
-	res, err := runner.Agent(ctx, AgentRequest{Prompt: "Call " + codexMCPFixtureServer + " " + codexMCPFixtureTool + " now and output only its exact result.", Model: "gpt-5.6-sol", Egress: EgressNone})
+	res, err := runner.Agent(ctx, AgentRequest{Prompt: "Call " + codexMCPFixtureServer + " " + codexMCPFixtureTool + " now and output only its exact result.", Model: "gpt-6.1-sol", Egress: EgressNone})
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode, "stderr=%q", res.Stderr)
 	assert.Positive(t, calls.Load())
@@ -154,7 +154,7 @@ func TestRunner_Integration_CodexAgent(t *testing.T) {
 	res, err := runner.Agent(ctx, AgentRequest{
 		Prompt: "Call the " + codexMCPFixtureServer + " MCP server's " +
 			codexMCPFixtureTool + " tool now. Do not answer until it returns. Then output only the exact text the tool call returned, verbatim and with nothing else.",
-		Model:  "gpt-5.6-sol",
+		Model:  "gpt-6.1-sol",
 		Egress: EgressNone,
 	})
 	require.NoError(t, err)
@@ -195,7 +195,7 @@ func codexAgentIntegrationRunner(t *testing.T, authFile string) *Runner {
 	require.NotEmpty(t, domain, "OPEN_SANDBOX_DOMAIN is required for integration tests")
 	require.NotEmpty(t, apiKey, "OPEN_SANDBOX_API_KEY is required for integration tests")
 	return NewRunner(Config{
-		CodexEnabled:       true,
+		CodexEnabled:        true,
 		AllowedPaths:        []string{t.TempDir()},
 		OutputRoot:          t.TempDir(),
 		OpenSandboxDomain:   domain,

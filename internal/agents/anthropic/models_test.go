@@ -24,7 +24,7 @@ func TestResolveModel_ValidPassthrough(t *testing.T) {
 	}
 }
 
-func TestResolveModel_RejectsRemoved(t *testing.T) {
+func TestResolveModel_RejectsUnlisted(t *testing.T) {
 	for _, name := range []string{"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-5"} {
 		t.Run(name, func(t *testing.T) {
 			_, err := ResolveModel(name)

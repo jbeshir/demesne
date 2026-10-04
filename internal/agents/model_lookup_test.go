@@ -38,6 +38,10 @@ func TestLookupByModel(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "claude-code", a.Name())
 
+	a, err = LookupByModel("gpt-6.1-sol")
+	require.NoError(t, err)
+	assert.Equal(t, "codex", a.Name())
+
 	a, err = LookupByModel("gpt-5.6-sol")
 	require.NoError(t, err)
 	assert.Equal(t, "codex", a.Name())

@@ -29,7 +29,7 @@ func NewTracker(usagePath string) *Tracker {
 
 // Add folds another request's token counts into the per-model totals
 // and rewrites usage.json. modelID may be a dated Anthropic ID (e.g.
-// "claude-opus-4-8-20260101"); pricing uses longest-prefix-match so
+// "claude-opus-5-5-20260101"); pricing uses longest-prefix-match so
 // dated IDs route to their family.
 func (t *Tracker) Add(id ModelID, tc TokenCounts, requestID string) {
 	t.Tracker.Add(string(id), tc, requestID)

@@ -86,15 +86,15 @@ func TestReadPerModelTokens_AbsentFile(t *testing.T) {
 func TestReadPerModelTokens_SumsPerModel(t *testing.T) {
 	out := t.TempDir()
 	lines := "" +
-		`{"requestId":"r1","ts":"2026-01-01T00:00:00Z","model":"claude-3-5","input":100,"output":200,"cache_creation":50,"cache_read":10}` + "\n" +
-		`{"requestId":"r2","ts":"2026-01-01T00:00:01Z","model":"claude-3-5","input":30,"output":40,"cache_creation":0,"cache_read":5}` + "\n" +
-		`{"requestId":"r3","ts":"2026-01-01T00:00:02Z","model":"gpt-4o","input":10,"output":20,"cache_creation":0,"cache_read":3}` + "\n"
+		`{"requestId":"r1","ts":"2026-01-01T00:00:00Z","model":"claude-sonnet-5-5","input":100,"output":200,"cache_creation":50,"cache_read":10}` + "\n" +
+		`{"requestId":"r2","ts":"2026-01-01T00:00:01Z","model":"claude-sonnet-5-5","input":30,"output":40,"cache_creation":0,"cache_read":5}` + "\n" +
+		`{"requestId":"r3","ts":"2026-01-01T00:00:02Z","model":"gpt-6.1-sol","input":10,"output":20,"cache_creation":0,"cache_read":3}` + "\n"
 	require.NoError(t, os.WriteFile(filepath.Join(out, "usage.jsonl"), []byte(lines), 0o600))
 
 	result := readPerModelTokens(out)
 	require.NotNil(t, result)
-	assert.Equal(t, TokenTotals{Input: 130, Output: 240, CacheCreation: 50, CacheRead: 15}, result["claude-3-5"])
-	assert.Equal(t, TokenTotals{Input: 10, Output: 20, CacheCreation: 0, CacheRead: 3}, result["gpt-4o"])
+	assert.Equal(t, TokenTotals{Input: 130, Output: 240, CacheCreation: 50, CacheRead: 15}, result["claude-sonnet-5-5"])
+	assert.Equal(t, TokenTotals{Input: 10, Output: 20, CacheCreation: 0, CacheRead: 3}, result["gpt-6.1-sol"])
 }
 
 func TestReadPerModelTokens_SkipsMalformedLines(t *testing.T) {

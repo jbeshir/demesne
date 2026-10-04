@@ -27,8 +27,13 @@ const chatgptResponsesPath = "/backend-api/codex/responses"
 
 // chatgptModelsPath is the path on the ChatGPT backend that serves the
 // Codex model catalog. The local sidecar exposes the same narrow path;
-// client_version and any other query parameters pass through unchanged.
+// the proxy replaces any client query with client_version=CodexVersion.
 const chatgptModelsPath = "/backend-api/codex/models"
+
+// CodexVersion is the Codex CLI release installed in the agent image and
+// the client version the proxy reports upstream: the version header, the
+// User-Agent, and the models catalog's client_version query parameter.
+const CodexVersion = "0.160.0"
 
 // listenPort is the loopback port the proxy binds inside the per-sandbox
 // sidecar. The sidecar's network namespace is isolated, so the port is
@@ -73,9 +78,10 @@ const (
 	pathResponses = "/v1/responses"
 	pathModels    = chatgptModelsPath
 
+	queryClientVersion = "client_version"
+
 	originatorValue = "codex_cli_rs"
-	codexVersion    = "0.144.3"
-	userAgentValue  = "codex_cli_rs/0.144.3 (demesne)"
+	userAgentValue  = originatorValue + "/" + CodexVersion + " (demesne)"
 )
 
 // allowedEndpoints is the explicit (method, path) allowlist the proxy
@@ -164,6 +170,7 @@ func newProxyServer(
 				r.Out.URL.Path = chatgptResponsesPath
 			case pathModels:
 				r.Out.URL.Path = chatgptModelsPath
+				r.Out.URL.RawQuery = url.Values{queryClientVersion: {CodexVersion}}.Encode()
 			}
 			if tracker != nil {
 				// Force identity so the usage parser sees raw SSE bytes —
@@ -200,8 +207,9 @@ func newProxyServer(
 // gatingHandler wraps the reverse proxy with the endpoint allowlist and the
 // agent-token check. On a valid request the handler stamps accessToken onto
 // Authorization, sets ChatGPT-Account-ID when accountID is non-empty, and
-// adds the originator/version/user-agent headers before forwarding. The
-// access token is used as-is; the handler never refreshes it.
+// adds the originator/version/user-agent headers before forwarding; version
+// and User-Agent derive from CodexVersion, so clients need not send them.
+// The access token is used as-is; the handler never refreshes it.
 func gatingHandler(next http.Handler, agentToken, accessToken, accountID string) http.Handler {
 	expectedAuth := bearerPrefix + agentToken
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +231,7 @@ func gatingHandler(next http.Handler, agentToken, accessToken, accountID string)
 			r.Header.Set(headerAccountID, accountID)
 		}
 		r.Header.Set(headerOriginator, originatorValue)
-		r.Header.Set(headerVersion, codexVersion)
+		r.Header.Set(headerVersion, CodexVersion)
 		r.Header.Set(headerUserAgent, userAgentValue)
 		next.ServeHTTP(w, r)
 	})
