@@ -161,9 +161,9 @@ func modelParamOptions(available []sandbox.AgentOption) mcp.ToolOption {
 				"'opus' (complex synthesis), 'sonnet' (default; general agentic work), "+
 				"or 'haiku' (lookup / cheap)")
 		case agentNameCodex:
-			clauses = append(clauses, "codex uses 'gpt-6-sol' (default), "+
-				"'gpt-6-astra', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', "+
-				"'gpt-5.6-luna', 'gpt-5.5', or 'gpt-5.4-mini'")
+			clauses = append(clauses, "codex uses 'gpt-6.1-sol' (default), "+
+				"'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', "+
+				"'gpt-5.6-terra', 'gpt-5.6-luna', or 'gpt-5.5'")
 		}
 	}
 	desc := "Model for the agent. The provider is inferred automatically from the chosen model. " +

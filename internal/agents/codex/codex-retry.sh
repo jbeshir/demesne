@@ -45,13 +45,13 @@ fetch_model_catalog() {
     fi
 
     tmp_catalog=$(mktemp)
+    # The sidecar proxy supplies the Codex version, User-Agent and
+    # client_version query, so none are sent from here.
     status=$(curl -sS \
         -H "Authorization: Bearer $DEMESNE_OPENAI_AGENT_KEY" \
-        -H "version: 0.155.1" \
-        -H "User-Agent: codex_cli_rs/0.155.1 (demesne)" \
         -o "$tmp_catalog" \
         -w '%{http_code}' \
-        'http://127.0.0.1:8086/backend-api/codex/models?client_version=0.155.1') || {
+        'http://127.0.0.1:8086/backend-api/codex/models') || {
         rc=$?
         rm -f "$tmp_catalog"
         printf 'codex-retry: failed to fetch Codex model catalog from sidecar (curl exit %d)\n' "$rc" >&2

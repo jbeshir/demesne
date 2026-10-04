@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	proxyopenai "github.com/jbeshir/demesne/internal/proxies/openai"
 )
 
 const fakeCodex = `#!/bin/sh
@@ -406,4 +408,15 @@ func requireSh(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh unavailable")
 	}
+}
+
+// TestCodexWrapperScript_SendsNoClientVersion pins that the catalog fetch
+// leaves version, User-Agent and client_version to the sidecar proxy, so
+// proxyopenai.CodexVersion is the only place the Codex version is set.
+func TestCodexWrapperScript_SendsNoClientVersion(t *testing.T) {
+	script := string(wrapperScriptBytes)
+	assert.NotContains(t, script, "client_version=")
+	assert.NotContains(t, script, `"version:`)
+	assert.NotContains(t, script, `"User-Agent:`)
+	assert.NotContains(t, script, proxyopenai.CodexVersion)
 }

@@ -43,9 +43,9 @@ func TestResolveModel_UnknownError(t *testing.T) {
 	}
 }
 
-func TestResolveModel_RejectsRemoved(t *testing.T) {
-	removed := []string{"gpt-5.4", "gpt-5.3-codex", "gpt-5.2"}
-	for _, name := range removed {
+func TestResolveModel_RejectsUnlisted(t *testing.T) {
+	unlisted := []string{"gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.2"}
+	for _, name := range unlisted {
 		t.Run(name, func(t *testing.T) {
 			_, err := ResolveModel(name)
 			require.Error(t, err)
@@ -55,17 +55,19 @@ func TestResolveModel_RejectsRemoved(t *testing.T) {
 }
 
 func TestModels_MatchCatalog(t *testing.T) {
-	assert.Len(t, Models, 8)
-	assert.Equal(t, ModelGPT6Sol, Models[0])
-	assert.Equal(t, ModelGPT6Astra, Models[1])
-	assert.Equal(t, ModelGPT6Luna, Models[2])
-	assert.Equal(t, ModelGPT56Sol, Models[3])
-	assert.Equal(t, ModelGPT56Terra, Models[4])
-	assert.Equal(t, ModelGPT56Luna, Models[5])
-	assert.Equal(t, ModelGPT55, Models[6])
-	assert.Equal(t, ModelGPT54Mini, Models[7])
-	assert.Equal(t, ModelGPT6Sol, DefaultModel)
-	assert.Equal(t, string(ModelGPT6Sol), proxyopenai.Aliases()[0])
+	assert.Equal(t, []ModelName{
+		ModelGPT61Sol,
+		ModelGPT6Astra,
+		ModelGPT6Sol,
+		ModelGPT6Luna,
+		ModelGPT56Sol,
+		ModelGPT56Terra,
+		ModelGPT56Luna,
+		ModelGPT55,
+	}, Models)
+	assert.Equal(t, ModelGPT61Sol, DefaultModel)
+	assert.Equal(t, DefaultModel, Models[0])
+	assert.Equal(t, string(DefaultModel), proxyopenai.Aliases()[0])
 }
 
 func TestAgent_Models(t *testing.T) {

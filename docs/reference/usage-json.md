@@ -11,7 +11,7 @@ The top-level object and each per-model entry share the following structure.
 | Field | JSON tag | Type | Units | Description |
 |-------|----------|------|-------|-------------|
 | Total cost | `cost_usd` | number | USD | Sum of `cost_usd` across all models seen in this run. Indicative — see Notes. |
-| Per-model breakdown | `per_model` | object | — | Map from model ID string to a `ModelReport` object. Keys are the Anthropic or OpenAI model identifiers as returned by the API (e.g. `"claude-sonnet-5-5"`, `"gpt-6-sol"`). |
+| Per-model breakdown | `per_model` | object | — | Map from model ID string to a `ModelReport` object. Keys are the Anthropic or OpenAI model identifiers as returned by the API (e.g. `"claude-sonnet-5-5"`, `"gpt-6.1-sol"`). |
 
 ### Per-model entry — Anthropic provider (`ModelReport`)
 

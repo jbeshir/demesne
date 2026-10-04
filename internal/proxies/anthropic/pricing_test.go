@@ -59,19 +59,19 @@ func TestLookupPricing_PrefixMatchDatedID(t *testing.T) {
 	assert.InDelta(t, 10.0, float64(p3.InputPerMTok), 1e-9)
 }
 
-func TestLookupPricing_RemovedFallbacks(t *testing.T) {
-	// These model IDs must not match any entry in the updated catalog.
-	removed := []string{
-		"claude-opus-4-8",          // superseded by Opus 5.5 — removed
-		"claude-opus-4-8-20260101", // dated form of Opus 4.8 — removed
-		"claude-opus-4-7",          // old explicit entry — removed
-		"claude-opus-4-7-20251201", // dated form of the old entry — removed
-		"claude-opus-4-anything",   // loose claude-opus-4 fallback — removed
-		"claude-sonnet-4-3",        // does not prefix-match claude-sonnet-5 — removed
-		"claude-haiku-4-3",         // does not prefix-match claude-haiku-4-5 — removed
-		"claude-opus-3",            // older series — never had an entry
+func TestLookupPricing_UnpricedIDs(t *testing.T) {
+	// These model IDs are not in the catalog and must not match any entry.
+	unpriced := []string{
+		"claude-opus-4-8",          // not in catalog; must not match the claude-opus-5 prefix
+		"claude-opus-4-8-20260101", // dated form; must not match the claude-opus-5 prefix
+		"claude-opus-4-7",          // not in catalog; must not match the claude-opus-5 prefix
+		"claude-opus-4-7-20251201", // dated form; must not match the claude-opus-5 prefix
+		"claude-opus-4-anything",   // no loose claude-opus-4 prefix entry
+		"claude-sonnet-4-3",        // must not match the claude-sonnet-5 prefix
+		"claude-haiku-4-3",         // must not match the claude-haiku-4-5 prefix
+		"claude-opus-3",            // no claude-opus-3 entry
 	}
-	for _, id := range removed {
+	for _, id := range unpriced {
 		_, ok := LookupPricing(ModelID(id))
 		assert.False(t, ok, "expected no match for %q", id)
 	}

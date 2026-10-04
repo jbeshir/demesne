@@ -11,14 +11,14 @@ import (
 // Model alias literals used in the schema-shape tests; pulled out so
 // goconst doesn't flag the repetition.
 const (
-	modelGPT6Sol    = "gpt-6-sol"
+	modelGPT61Sol   = "gpt-6.1-sol"
 	modelGPT6Astra  = "gpt-6-astra"
+	modelGPT6Sol    = "gpt-6-sol"
 	modelGPT6Luna   = "gpt-6-luna"
 	modelGPT56Sol   = "gpt-5.6-sol"
 	modelGPT56Terra = "gpt-5.6-terra"
 	modelGPT56Luna  = "gpt-5.6-luna"
 	modelGPT55      = "gpt-5.5"
-	modelGPT54Mini  = "gpt-5.4-mini"
 )
 
 // toolEnumStrings reads a registered tool's property enum from the mcp
@@ -77,17 +77,17 @@ func TestModelEnumReflectsAvailability(t *testing.T) {
 		{
 			name: "both configured codex-first",
 			available: []sandbox.AgentOption{
-				{Name: agentNameCodex, Models: []string{modelGPT6Sol, modelGPT6Astra, modelGPT6Luna, modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, modelGPT54Mini}},
+				{Name: agentNameCodex, Models: []string{modelGPT61Sol, modelGPT6Astra, modelGPT6Sol, modelGPT6Luna, modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55}},
 				{Name: agentNameClaudeCode, Models: []string{"sonnet", "opus", "fable", "haiku"}},
 			},
-			wantModelEnum:  []string{modelGPT6Sol, modelGPT6Astra, modelGPT6Luna, modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, modelGPT54Mini, "sonnet", "opus", "fable", "haiku"},
-			modelDescCheck: []string{"claude-code uses", "gpt-6-sol", "gpt-6-astra", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini", "inferred"},
+			wantModelEnum:  []string{modelGPT61Sol, modelGPT6Astra, modelGPT6Sol, modelGPT6Luna, modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, "sonnet", "opus", "fable", "haiku"},
+			modelDescCheck: []string{"claude-code uses", "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "inferred"},
 		},
 		{
 			name:              "only codex configured single-value enum",
-			available:         []sandbox.AgentOption{{Name: agentNameCodex, Models: []string{modelGPT6Sol, modelGPT6Astra, modelGPT6Luna, modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, modelGPT54Mini}}},
-			wantModelEnum:     []string{modelGPT6Sol, modelGPT6Astra, modelGPT6Luna, modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55, modelGPT54Mini},
-			modelDescCheck:    []string{"gpt-6-sol", "gpt-6-astra", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini"},
+			available:         []sandbox.AgentOption{{Name: agentNameCodex, Models: []string{modelGPT61Sol, modelGPT6Astra, modelGPT6Sol, modelGPT6Luna, modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55}}},
+			wantModelEnum:     []string{modelGPT61Sol, modelGPT6Astra, modelGPT6Sol, modelGPT6Luna, modelGPT56Sol, modelGPT56Terra, modelGPT56Luna, modelGPT55},
+			modelDescCheck:    []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"},
 			modelDescNotCheck: []string{"claude-code uses"},
 		},
 		{

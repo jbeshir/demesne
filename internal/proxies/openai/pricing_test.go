@@ -1,11 +1,20 @@
 package openai
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestLookupPricing_GPT61Sol_ExactPrices(t *testing.T) {
+	p, ok := LookupPricing("gpt-6.1-sol")
+	require.True(t, ok)
+	assert.InDelta(t, 2.0, float64(p.InputPerMTok), 1e-9)
+	assert.InDelta(t, 0.10, float64(p.CachedInputPerMTok), 1e-9)
+	assert.InDelta(t, 10.0, float64(p.OutputPerMTok), 1e-9)
+}
 
 func TestLookupPricing_GPT6Sol_ExactPrices(t *testing.T) {
 	p, ok := LookupPricing("gpt-6-sol")
@@ -63,18 +72,18 @@ func TestLookupPricing_GPT55_ExactPrices(t *testing.T) {
 	assert.InDelta(t, 30.0, float64(p.OutputPerMTok), 1e-9)
 }
 
-func TestLookupPricing_GPT54Mini_ExactPrices(t *testing.T) {
-	p, ok := LookupPricing("gpt-5.4-mini")
-	require.True(t, ok)
-	assert.InDelta(t, 0.75, float64(p.InputPerMTok), 1e-9)
-	assert.InDelta(t, 0.075, float64(p.CachedInputPerMTok), 1e-9)
-	assert.InDelta(t, 4.50, float64(p.OutputPerMTok), 1e-9)
-}
-
 func TestLookupPricing_PrefixMatchVersionedID(t *testing.T) {
+	p61, ok := LookupPricing("gpt-6.1-sol-2026-09-29")
+	require.True(t, ok)
+	assert.InDelta(t, 2.0, float64(p61.InputPerMTok), 1e-9)
+	assert.InDelta(t, 0.10, float64(p61.CachedInputPerMTok), 1e-9)
+	assert.InDelta(t, 10.0, float64(p61.OutputPerMTok), 1e-9)
+
+	// gpt-6-sol-2026-09-01 must resolve to the gpt-6-sol entry, not gpt-6.1-sol.
 	p6, ok := LookupPricing("gpt-6-sol-2026-09-01")
 	require.True(t, ok)
 	assert.InDelta(t, 2.0, float64(p6.InputPerMTok), 1e-9)
+	assert.InDelta(t, 0.20, float64(p6.CachedInputPerMTok), 1e-9)
 	assert.InDelta(t, 10.0, float64(p6.OutputPerMTok), 1e-9)
 
 	p6astra, ok := LookupPricing("gpt-6-astra-2026-09-01")
@@ -97,17 +106,10 @@ func TestLookupPricing_PrefixMatchVersionedID(t *testing.T) {
 	require.True(t, ok)
 	assert.InDelta(t, 5.0, float64(p55.InputPerMTok), 1e-9)
 	assert.InDelta(t, 30.0, float64(p55.OutputPerMTok), 1e-9)
-
-	// gpt-5.4-mini-20260101 must resolve to the gpt-5.4-mini entry, not gpt-5.5.
-	pmini, ok := LookupPricing("gpt-5.4-mini-20260101")
-	require.True(t, ok)
-	assert.InDelta(t, 0.75, float64(pmini.InputPerMTok), 1e-9)
-	assert.InDelta(t, 0.075, float64(pmini.CachedInputPerMTok), 1e-9)
-	assert.InDelta(t, 4.50, float64(pmini.OutputPerMTok), 1e-9)
 }
 
-func TestLookupPricing_UnknownRemoved(t *testing.T) {
-	for _, id := range []ModelID{"gpt-5.4", "gpt-5.3-codex", "gpt-5.2", "claude-sonnet-4-6"} {
+func TestLookupPricing_UnpricedIDs(t *testing.T) {
+	for _, id := range []ModelID{"gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.2", "claude-sonnet-4-6"} {
 		_, ok := LookupPricing(id)
 		assert.False(t, ok, "expected no match for %q", id)
 	}
@@ -132,6 +134,18 @@ func TestCostUSD_GPT55_CachedSubset(t *testing.T) {
 	tc.OutputTokens = 1_000_000
 	c := CostUSD("gpt-5.5", tc)
 	assert.InDelta(t, 31.40, float64(c), 1e-9)
+}
+
+func TestCostUSD_GPT61Sol_CachedSubset(t *testing.T) {
+	// 1M total input: 500k uncached, 500k cached read; 1M output on gpt-6.1-sol.
+	// Cost = 500k * $2.00/MTok + 500k * $0.10/MTok + 1M * $10.00/MTok
+	//      = $1.00 + $0.05 + $10.00 = $11.05.
+	var tc TokenCounts
+	tc.InputTokens = 1_000_000
+	tc.InputTokensDetails.CachedTokens = 500_000
+	tc.OutputTokens = 1_000_000
+	c := CostUSD("gpt-6.1-sol", tc)
+	assert.InDelta(t, 11.05, float64(c), 1e-9)
 }
 
 func TestCostUSD_GPT6Sol_CachedSubset(t *testing.T) {
@@ -206,16 +220,19 @@ func TestCostUSD_GPT56Luna_CachedSubset(t *testing.T) {
 	assert.InDelta(t, 1.31, float64(c), 1e-9)
 }
 
-func TestCostUSD_GPT54Mini_Math(t *testing.T) {
-	// 1M input (0 cached) + 1M output on gpt-5.4-mini @ $0.75/$4.50 per MTok = $5.25.
-	c := CostUSD("gpt-5.4-mini", TokenCounts{
-		InputTokens:  1_000_000,
-		OutputTokens: 1_000_000,
-	})
-	assert.InDelta(t, 5.25, float64(c), 1e-9)
-}
-
 func TestCostUSD_UnknownModelReturnsZero(t *testing.T) {
 	c := CostUSD("claude-sonnet-4-6", TokenCounts{InputTokens: 1_000_000})
 	assert.InDelta(t, 0.0, float64(c), 1e-9)
+}
+
+// TestModelCatalog_NoPrefixShadowing guards LookupPricing's first-match
+// contract: no entry's IDPrefix may start with an earlier entry's IDPrefix,
+// or IDs of the later family would resolve to the earlier family's prices.
+func TestModelCatalog_NoPrefixShadowing(t *testing.T) {
+	for i, earlier := range modelCatalog {
+		for _, later := range modelCatalog[i+1:] {
+			assert.False(t, strings.HasPrefix(string(later.IDPrefix), string(earlier.IDPrefix)),
+				"%q is shadowed by earlier prefix %q", later.IDPrefix, earlier.IDPrefix)
+		}
+	}
 }
