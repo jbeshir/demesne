@@ -123,7 +123,7 @@ func TestProxyCatalogRequestRewritesHeadersAndQuery(t *testing.T) {
 	tsrv := httptest.NewServer(p.server.Handler)
 	defer tsrv.Close()
 
-	req := mustGetRequest(t, tsrv.URL+pathModels+"?client_version=0.144.3")
+	req := mustGetRequest(t, tsrv.URL+pathModels+"?client_version=0.155.1")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
@@ -134,7 +134,7 @@ func TestProxyCatalogRequestRewritesHeadersAndQuery(t *testing.T) {
 	assert.JSONEq(t, `{"models":[{"slug":"gpt-test"}]}`, string(body))
 	assert.Equal(t, chatgptModelsPath, got.path)
 	assert.Equal(t, http.MethodGet, got.method)
-	assert.Equal(t, "client_version=0.144.3", got.rawQuery)
+	assert.Equal(t, "client_version=0.155.1", got.rawQuery)
 	assert.Equal(t, bearerPrefix+realToken, got.authHeader)
 	assert.Equal(t, testAccountID, got.accountID)
 	assert.Equal(t, codexVersion, got.version)

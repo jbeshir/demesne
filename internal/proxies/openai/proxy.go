@@ -74,8 +74,8 @@ const (
 	pathModels    = chatgptModelsPath
 
 	originatorValue = "codex_cli_rs"
-	codexVersion    = "0.144.3"
-	userAgentValue  = "codex_cli_rs/0.144.3 (demesne)"
+	codexVersion    = "0.155.1"
+	userAgentValue  = "codex_cli_rs/0.155.1 (demesne)"
 )
 
 // allowedEndpoints is the explicit (method, path) allowlist the proxy

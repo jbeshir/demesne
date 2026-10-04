@@ -7,7 +7,7 @@ import (
 // USD represents US dollars (indicative).
 type USD float64
 
-// ModelID is an OpenAI Responses API model identifier, e.g. "gpt-5.6-sol",
+// ModelID is an OpenAI Responses API model identifier, e.g. "gpt-6-sol",
 // "gpt-5.5". Versioned or dated IDs resolve to their family via longest-prefix
 // match in LookupPricing.
 type ModelID string
@@ -67,38 +67,71 @@ type OutputTokenDetails struct {
 // most specific match. The current set has no ambiguous prefix overlap, but the
 // contract is maintained for future additions.
 // Add new families here (longest prefix first) when they ship.
+//
+// Source: https://platform.openai.com/docs/pricing (Standard tier, accessed 2026-10-04).
 var modelCatalog = []catalogEntry{
-	// gpt-5.6-sol — verified observable rates: $5.00/$30.00/$0.50 per MTok (in/out/cached).
+	// gpt-6-sol — index 0 = DefaultModel; $2.00/$10.00/$0.20 per MTok (in/out/cached).
+	{
+		Alias:    "gpt-6-sol",
+		IDPrefix: "gpt-6-sol",
+		Pricing: Pricing{
+			InputPerMTok:       2.00,
+			OutputPerMTok:      10.0,
+			CachedInputPerMTok: 0.20,
+		},
+	},
+	// gpt-6-astra — $10.00/$50.00/$1.00 per MTok (in/out/cached).
+	{
+		Alias:    "gpt-6-astra",
+		IDPrefix: "gpt-6-astra",
+		Pricing: Pricing{
+			InputPerMTok:       10.00,
+			OutputPerMTok:      50.0,
+			CachedInputPerMTok: 1.00,
+		},
+	},
+	// gpt-6-luna — $0.10/$0.50/$0.01 per MTok (in/out/cached).
+	{
+		Alias:    "gpt-6-luna",
+		IDPrefix: "gpt-6-luna",
+		Pricing: Pricing{
+			InputPerMTok:       0.10,
+			OutputPerMTok:      0.50,
+			CachedInputPerMTok: 0.01,
+		},
+	},
+	// gpt-5.6-sol — $4.00/$20.00/$0.40 per MTok (in/out/cached); promotional
+	// pricing, available at least through November 21, 2026.
 	{
 		Alias:    "gpt-5.6-sol",
 		IDPrefix: "gpt-5.6-sol",
 		Pricing: Pricing{
-			InputPerMTok:       5.00,
-			OutputPerMTok:      30.0,
-			CachedInputPerMTok: 0.50,
+			InputPerMTok:       4.00,
+			OutputPerMTok:      20.0,
+			CachedInputPerMTok: 0.40,
 		},
 	},
-	// gpt-5.6-terra — verified observable rates: $2.50/$15.00/$0.25 per MTok (in/out/cached).
+	// gpt-5.6-terra — $2.00/$12.00/$0.20 per MTok (in/out/cached).
 	{
 		Alias:    "gpt-5.6-terra",
 		IDPrefix: "gpt-5.6-terra",
 		Pricing: Pricing{
-			InputPerMTok:       2.50,
-			OutputPerMTok:      15.0,
-			CachedInputPerMTok: 0.25,
+			InputPerMTok:       2.00,
+			OutputPerMTok:      12.0,
+			CachedInputPerMTok: 0.20,
 		},
 	},
-	// gpt-5.6-luna — verified observable rates: $1.00/$6.00/$0.10 per MTok (in/out/cached).
+	// gpt-5.6-luna — $0.20/$1.20/$0.02 per MTok (in/out/cached).
 	{
 		Alias:    "gpt-5.6-luna",
 		IDPrefix: "gpt-5.6-luna",
 		Pricing: Pricing{
-			InputPerMTok:       1.00,
-			OutputPerMTok:      6.0,
-			CachedInputPerMTok: 0.10,
+			InputPerMTok:       0.20,
+			OutputPerMTok:      1.20,
+			CachedInputPerMTok: 0.02,
 		},
 	},
-	// gpt-5.5 — verified observable rates: $5.00/$30.00/$0.50 per MTok (in/out/cached).
+	// gpt-5.5 — $5.00/$30.00/$0.50 per MTok (in/out/cached).
 	{
 		Alias:    "gpt-5.5",
 		IDPrefix: "gpt-5.5",
@@ -108,7 +141,7 @@ var modelCatalog = []catalogEntry{
 			CachedInputPerMTok: 0.50,
 		},
 	},
-	// gpt-5.4-mini — verified observable rates: $0.75/$4.50/$0.075 per MTok (in/out/cached).
+	// gpt-5.4-mini — $0.75/$4.50/$0.075 per MTok (in/out/cached).
 	{
 		Alias:    "gpt-5.4-mini",
 		IDPrefix: "gpt-5.4-mini",

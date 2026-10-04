@@ -270,6 +270,6 @@ data: {"type":"message_stop"}
 		return tracker.snapshot().CostUSD > 0
 	}, time.Second, time.Millisecond, "cost must be recorded after the SSE stream is closed")
 	snap := tracker.snapshot()
-	// 1k input @ $3/MTok + 2k output @ $15/MTok = $0.003 + $0.030 = $0.033.
-	assert.InDelta(t, 0.033, float64(snap.CostUSD), 1e-9)
+	// 1k input @ $2/MTok + 2k output @ $10/MTok = $0.002 + $0.020 = $0.022.
+	assert.InDelta(t, 0.022, float64(snap.CostUSD), 1e-9)
 }

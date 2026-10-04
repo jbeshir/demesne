@@ -9,13 +9,16 @@ import (
 )
 
 // ModelName is an alias for agents.ModelName so callers in this package
-// can write ModelGPT56Sol/ModelGPT55/etc. without an extra import.
+// can write ModelGPT6Sol/ModelGPT55/etc. without an extra import.
 type ModelName = agents.ModelName
 
 // Model constants for Codex model IDs validated against the live Codex CLI
 // on ChatGPT-account billing. Unsupported variants are rejected by the backend
 // with "not supported when using Codex with a ChatGPT account".
 const (
+	ModelGPT6Sol    ModelName = "gpt-6-sol"
+	ModelGPT6Astra  ModelName = "gpt-6-astra"
+	ModelGPT6Luna   ModelName = "gpt-6-luna"
 	ModelGPT56Sol   ModelName = "gpt-5.6-sol"
 	ModelGPT56Terra ModelName = "gpt-5.6-terra"
 	ModelGPT56Luna  ModelName = "gpt-5.6-luna"
@@ -37,7 +40,7 @@ var Models = func() []ModelName {
 
 // DefaultModel is the model used when the caller does not specify one.
 // Must equal the alias at index 0 of proxyopenai's modelCatalog.
-const DefaultModel ModelName = ModelGPT56Sol
+const DefaultModel ModelName = ModelGPT6Sol
 
 // ErrUnknownModel is the sentinel wrapped by ResolveModel when the
 // requested model is not in the allowlist. Use errors.Is to distinguish

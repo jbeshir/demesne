@@ -1,6 +1,6 @@
 FROM node:22-slim
 
-ARG CODEX_VERSION=0.144.3
+ARG CODEX_VERSION=0.155.1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git \

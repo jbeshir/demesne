@@ -21,8 +21,8 @@ func TestTracker_AddAccumulates(t *testing.T) {
 	model := snap.PerModel["claude-sonnet-5"]
 	assert.Equal(t, int64(150), model.InputTokens)
 	assert.Equal(t, int64(225), model.OutputTokens)
-	// 150 input @ $3/MTok + 225 output @ $15/MTok = 0.00045 + 0.003375 = 0.003825
-	assert.InDelta(t, 0.003825, float64(snap.CostUSD), 1e-9)
+	// 150 input @ $2/MTok + 225 output @ $10/MTok = 0.0003 + 0.00225 = 0.00255
+	assert.InDelta(t, 0.00255, float64(snap.CostUSD), 1e-9)
 }
 
 func TestTracker_WritesUsageJSONAtomically(t *testing.T) {

@@ -47,11 +47,11 @@ fetch_model_catalog() {
     tmp_catalog=$(mktemp)
     status=$(curl -sS \
         -H "Authorization: Bearer $DEMESNE_OPENAI_AGENT_KEY" \
-        -H "version: 0.144.3" \
-        -H "User-Agent: codex_cli_rs/0.144.3 (demesne)" \
+        -H "version: 0.155.1" \
+        -H "User-Agent: codex_cli_rs/0.155.1 (demesne)" \
         -o "$tmp_catalog" \
         -w '%{http_code}' \
-        'http://127.0.0.1:8086/backend-api/codex/models?client_version=0.144.3') || {
+        'http://127.0.0.1:8086/backend-api/codex/models?client_version=0.155.1') || {
         rc=$?
         rm -f "$tmp_catalog"
         printf 'codex-retry: failed to fetch Codex model catalog from sidecar (curl exit %d)\n' "$rc" >&2

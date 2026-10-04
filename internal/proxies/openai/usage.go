@@ -28,7 +28,7 @@ func NewTracker(usagePath string) *Tracker {
 
 // Add folds another request's token counts into the per-model totals
 // and rewrites usage.json. modelID may be a versioned OpenAI ID (e.g.
-// "gpt-5.6-sol-2026..."); pricing uses longest-prefix-match so versioned
+// "gpt-6-sol-2026..."); pricing uses longest-prefix-match so versioned
 // IDs route to their family.
 func (t *Tracker) Add(id ModelID, tc TokenCounts, requestID string) {
 	t.Tracker.Add(string(id), tc, requestID)

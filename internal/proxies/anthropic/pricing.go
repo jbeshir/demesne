@@ -7,14 +7,16 @@ import (
 // USD represents US dollars (indicative).
 type USD float64
 
-// ModelID is an Anthropic API model identifier, e.g. "claude-sonnet-5",
-// "claude-opus-4-8-20260101". Dated IDs resolve to their family via
+// ModelID is an Anthropic API model identifier, e.g. "claude-sonnet-5-5",
+// "claude-opus-5-5-20260101". Dated IDs resolve to their family via
 // longest-prefix match in LookupPricing.
 type ModelID string
 
 // Pricing is the per-million-token rate (USD) for one Anthropic model
-// family. Cache rates follow Anthropic's published multipliers:
-// cache write = 1.25x base input, cache read = 0.1x base input.
+// family. Each field is the published per-family rate: the 5-minute cache
+// write is 1.25x base input, but the cache-read multiplier varies by family
+// (0.1x on most, 0.05x on Opus 5.5, 0.025x on Fable 5.1), so read rates are
+// stored as published rather than derived from input.
 type Pricing struct {
 	InputPerMTok      USD
 	OutputPerMTok     USD
@@ -40,31 +42,31 @@ func (e catalogEntry) Price() Pricing { return e.Pricing }
 // overlap so longest-prefix ordering is moot, but the contract is
 // maintained. Add new families here when they ship.
 //
-// Source: https://docs.anthropic.com/en/docs/about-claude/pricing
+// Source: https://platform.claude.com/docs/en/about-claude/pricing (accessed 2026-10-04).
 var modelCatalog = []catalogEntry{
-	// sonnet — index 0 = DefaultModel; verified rates per MTok (in/out/write/read).
+	// sonnet — index 0 = DefaultModel; $2/$10/$2.50/$0.20 per MTok (in/out/write/read).
 	{
 		Alias:    "sonnet",
 		IDPrefix: "claude-sonnet-5",
 		Pricing: Pricing{
-			InputPerMTok:      3.00,
-			OutputPerMTok:     15.00,
-			CacheWritePerMTok: 3.75,
-			CacheReadPerMTok:  0.30,
+			InputPerMTok:      2.00,
+			OutputPerMTok:     10.00,
+			CacheWritePerMTok: 2.50,
+			CacheReadPerMTok:  0.20,
 		},
 	},
-	// opus — verified rates per MTok (in/out/write/read).
+	// opus — $4/$20/$5/$0.20 per MTok (in/out/write/read).
 	{
 		Alias:    "opus",
-		IDPrefix: "claude-opus-4-8",
+		IDPrefix: "claude-opus-5",
 		Pricing: Pricing{
-			InputPerMTok:      5.00,
-			OutputPerMTok:     25.00,
-			CacheWritePerMTok: 6.25,
-			CacheReadPerMTok:  0.50,
+			InputPerMTok:      4.00,
+			OutputPerMTok:     20.00,
+			CacheWritePerMTok: 5.00,
+			CacheReadPerMTok:  0.20,
 		},
 	},
-	// fable — most capable tier, above opus; verified rates per MTok (in/out/write/read).
+	// fable — most capable tier, above opus; $10/$50/$12.50/$0.25 per MTok (in/out/write/read).
 	{
 		Alias:    "fable",
 		IDPrefix: "claude-fable-5",
@@ -72,10 +74,10 @@ var modelCatalog = []catalogEntry{
 			InputPerMTok:      10.00,
 			OutputPerMTok:     50.00,
 			CacheWritePerMTok: 12.50,
-			CacheReadPerMTok:  1.00,
+			CacheReadPerMTok:  0.25,
 		},
 	},
-	// haiku — verified rates per MTok (in/out/write/read).
+	// haiku — $1/$5/$1.25/$0.10 per MTok (in/out/write/read).
 	{
 		Alias:    "haiku",
 		IDPrefix: "claude-haiku-4-5",

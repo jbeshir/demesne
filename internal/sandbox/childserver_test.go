@@ -358,7 +358,7 @@ func TestChildMCPServer_BackgroundParamPresent(t *testing.T) {
 	}
 }
 
-func TestChildMCPServer_ModelDescriptionIncludesCodex56(t *testing.T) {
+func TestChildMCPServer_ModelDescriptionIncludesCodexModels(t *testing.T) {
 	r := NewRunner(Config{})
 	_, tools, _ := r.ChildMCPServer()
 
@@ -373,6 +373,9 @@ func TestChildMCPServer_ModelDescriptionIncludesCodex56(t *testing.T) {
 		prop, ok := tl.InputSchema.Properties[childParamModel].(map[string]any)
 		require.True(t, ok, "tool %q model property missing or wrong type", toolName)
 		desc, _ := prop["description"].(string)
+		assert.Contains(t, desc, "'gpt-6-sol' (default)")
+		assert.Contains(t, desc, "gpt-6-astra")
+		assert.Contains(t, desc, "gpt-6-luna")
 		assert.Contains(t, desc, "gpt-5.6-sol")
 		assert.Contains(t, desc, "gpt-5.6-terra")
 		assert.Contains(t, desc, "gpt-5.6-luna")
