@@ -11,15 +11,15 @@ import (
 // wrapperScriptBasename is the file WriteAgentConfig drops in the run's
 // config dir. The runner mounts that dir read-only at
 // agents.AgentConfigDir, so the in-sandbox path is wrapperScriptPath;
-// the provider's Command runs codex through it via `sh <wrapperScriptPath>`.
-const wrapperScriptBasename = "codex-retry.sh"
+// the provider's Command runs codex through it via `node <wrapperScriptPath>`.
+const wrapperScriptBasename = "codex-retry.mjs"
 
 // wrapperScriptPath is the in-sandbox absolute path of the wrapper under
 // the read-only config-dir mount.
 const wrapperScriptPath = agents.AgentConfigDir + "/" + wrapperScriptBasename
 
 // writeWrapperScript writes the embedded exec wrapper into configDir.
-// The provider's Command invokes it via `sh <wrapperScriptPath>`, so no
+// The provider's Command invokes it via `node <wrapperScriptPath>`, so no
 // exec bit is needed; 0o600 matches writeCodexConfig and the read-only
 // config-dir mount the in-sandbox user reads it from.
 //

@@ -59,10 +59,10 @@ func (claudeCodeAgent) Models() []ModelName { return Models }
 
 func (claudeCodeAgent) Command(prompt string, model ModelName) []string {
 	return []string{
-		// sh retryScriptPath claude: the wrapper relaunches claude on quota
-		// exhaustion; everything after "claude" is the argv it runs (and
-		// re-runs with --resume on a rate-limit reset). $1=claude.
-		"sh", retryScriptPath, "claude",
+		// node retryScriptPath claude: the wrapper relaunches claude on quota
+		// exhaustion; everything from argv[2] ("claude") on is the command
+		// it runs (and re-runs with --resume on a rate-limit reset).
+		"node", retryScriptPath, "claude",
 		"-p", prompt,
 		"--model", string(model),
 		// stream-json emits the full NDJSON event stream (messages, tool

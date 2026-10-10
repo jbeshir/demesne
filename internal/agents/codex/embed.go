@@ -8,5 +8,5 @@ import _ "embed"
 //go:embed Dockerfile
 var dockerfileBytes []byte
 
-//go:embed codex-retry.sh
+//go:embed codex-retry.mjs
 var wrapperScriptBytes []byte

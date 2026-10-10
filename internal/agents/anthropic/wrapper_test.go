@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +13,7 @@ import (
 func TestCommand_InvokesWrapper(t *testing.T) {
 	got := claudeCodeAgent{}.Command("my prompt", "opus")
 
-	assert.Equal(t, "sh", got[0])
+	assert.Equal(t, "node", got[0])
 	assert.Equal(t, retryScriptPath, got[1])
 	assert.Equal(t, "claude", got[2])
 
@@ -29,7 +28,7 @@ func TestCommand_InvokesWrapper(t *testing.T) {
 		"--strict-mcp-config",
 	}, got[2:])
 
-	assert.Equal(t, agents.AgentConfigDir+"/claude-retry.sh", retryScriptPath)
+	assert.Equal(t, agents.AgentConfigDir+"/claude-retry.mjs", retryScriptPath)
 }
 
 func TestWriteAgentConfig_WritesScriptAndMCP(t *testing.T) {
@@ -42,9 +41,9 @@ func TestWriteAgentConfig_WritesScriptAndMCP(t *testing.T) {
 	_, err = os.Stat(mcpPath)
 	require.NoError(t, err, ".demesne-mcp.json should exist")
 
-	scriptPath := filepath.Join(dir, "claude-retry.sh")
+	scriptPath := filepath.Join(dir, "claude-retry.mjs")
 	data, err := os.ReadFile(scriptPath) //nolint:gosec // path under t.TempDir()
-	require.NoError(t, err, "claude-retry.sh should exist")
+	require.NoError(t, err, "claude-retry.mjs should exist")
 	assert.Equal(t, retryScriptBytes, data)
 
 	info, err := os.Stat(scriptPath)
@@ -54,5 +53,5 @@ func TestWriteAgentConfig_WritesScriptAndMCP(t *testing.T) {
 
 func TestRetryScriptEmbedded(t *testing.T) {
 	assert.NotEmpty(t, retryScriptBytes)
-	assert.True(t, bytes.HasPrefix(retryScriptBytes, []byte("#!")))
+	assert.Contains(t, string(retryScriptBytes), "claude-retry: ")
 }

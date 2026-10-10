@@ -57,7 +57,7 @@ func (codexAgent) Models() []ModelName { return Models }
 func (codexAgent) ProxyVendor() agents.ProxyVendor { return agents.ProxyOpenAI }
 
 func (codexAgent) Command(prompt string, model ModelName) []string {
-	return []string{"sh", wrapperScriptPath, string(model), prompt}
+	return []string{"node", wrapperScriptPath, string(model), prompt}
 }
 
 func (codexAgent) PostRunCapture() string { return ":" }
