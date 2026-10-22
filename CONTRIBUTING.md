@@ -2,7 +2,7 @@
 
 ## Building from source
 
-Building from source requires Go 1.26+ (see `go.mod`).
+Building from source requires Go 1.27.3+ (see `go.mod`).
 
 `go install` route:
 

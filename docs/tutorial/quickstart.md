@@ -27,7 +27,7 @@ curl -L "https://github.com/jbeshir/demesne/releases/download/${VERSION}/demesne
   | tar xz -C /usr/local/bin demesne-mcp
 ```
 
-### Option B: Build from source (requires Go 1.26+)
+### Option B: Build from source (requires Go 1.27.3+)
 
 ```bash
 go install github.com/jbeshir/demesne/cmd/demesne-mcp@latest

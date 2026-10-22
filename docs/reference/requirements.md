@@ -16,7 +16,7 @@ Releases are published for `linux/amd64`, `darwin/amd64`, `darwin/arm64`, and `w
 
 ## Building from source (optional)
 
-The release binaries linked from the quickstart need no Go toolchain. If you want to build from source instead (e.g. as a contributor), see [CONTRIBUTING.md](../../CONTRIBUTING.md). The build requires Go 1.26 or later (see `go.mod`).
+The release binaries linked from the quickstart need no Go toolchain. If you want to build from source instead (e.g. as a contributor), see [CONTRIBUTING.md](../../CONTRIBUTING.md). The build requires Go 1.27.3 or later (see `go.mod`).
 
 ## OpenSandbox
 

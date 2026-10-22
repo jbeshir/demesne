@@ -1,6 +1,6 @@
 module github.com/jbeshir/demesne
 
-go 1.26.2
+go 1.27.3
 
 require (
 	github.com/alibaba/OpenSandbox/sdks/sandbox/go v1.0.0
