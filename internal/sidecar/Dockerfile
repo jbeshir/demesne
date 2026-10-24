@@ -1,4 +1,4 @@
-FROM gcr.io/distroless/static-debian12
+FROM gcr.io/distroless/static-debian13
 COPY demesne-sidecar /usr/local/bin/demesne-sidecar
 # Run as root inside the container so the bind-mounted /sidecar-results
 # (owned by the host user) is writable. Under rootless podman, container
