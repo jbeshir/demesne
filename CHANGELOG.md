@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-26
+
 ### Added
 - **GPT-5.6 Codex models**: added explicit support and indicative pricing for `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`.
 - **GPT-6 Codex models**: added explicit support and indicative pricing for `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna`. Codex now defaults to `gpt-6.1-sol` when Codex credentials are configured. The Codex allowlist follows the live Codex model catalog's listed models in its priority order.
@@ -15,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Go 1.27.3**: the module's `go` directive (and so CI/release via `go-version-file: go.mod`) is bumped from 1.26.2 to 1.27.3, picking up the crypto/x509 security fix distrusting the compromised eMudhra intermediate CAs. Building from source now requires Go 1.27.3+.
+- **Sidecar base image**: the sidecar image moves from `gcr.io/distroless/static-debian12` to `static-debian13`; the debian12 distroless tags no longer receive updates, including CA bundle fixes.
 - **Agent retry wrappers in Node.js**: the claude-code and Codex retry wrappers are now Node.js ES modules (`claude-retry.mjs`, `codex-retry.mjs`) run via `node`, parsing the agent's NDJSON stream as JSON rather than grepping it. stdout is still passed through byte-for-byte across retries. The wrappers now forward SIGTERM/SIGINT to the running agent and exit promptly when signalled while waiting for a quota reset.
 - **Codex CLI 0.160.0**: the Codex CLI in the sandbox image is bumped from 0.144.3 to 0.160.0. The version is now set in one place, `CodexVersion` in `internal/proxies/openai`: the image's `CODEX_VERSION` build arg (which has no Dockerfile default), and the `version` header, `User-Agent` and models-catalog `client_version` the OpenAI proxy sends upstream, all derive from it. The Codex retry wrapper no longer sends any of them.
 - **Lint toolchain**: golangci-lint is bumped to v2.14.0 (Go 1.27 support) and goimports (`golang.org/x/tools`) to v0.51.0; this raises the direct dependencies `github.com/pelletier/go-toml/v2` to v2.4.3 and `github.com/stretchr/testify` to v1.12.1.
@@ -25,13 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **claude-code five-hour quota retry**: the retry wrapper now waits for the rejected window's reset (`rate_limit_info.resetsAt`, falling back to `unifiedWindows[rateLimitType]`). It previously took the last `resetsAt` on the line, the seven-day window's, which put the wait beyond the budget, so the wrapper gave up instead of resuming once the five-hour window reset.
 - **Codex MCP tool calls**: the Codex image now also installs `codex-code-mode-host`, the helper current Codex releases run MCP tool calls through. Without it every tunneled MCP call failed with "`/usr/local/bin/codex-code-mode-host` is missing".
+- **`opus` cost accounting**: `opus` (`claude-opus-5-5`) usage was priced at $0 and so escaped cost caps; it is now priced at Claude Opus 5.5 rates. The Claude Opus 4.8 pricing entry is removed, so `claude-opus-4-8` usage is unpriced.
+- **Long-running Codex MCP calls**: generated Codex configuration now permits each MCP server tool call to run for up to Demesne's 48-hour maximum sandbox job lifetime, instead of setting `tool_timeout_sec = 0` (which Codex treats as an immediate timeout). Caller cancellation and bounded `sandbox_wait` polling are unchanged.
 
 ### Removed
 - **`gpt-5.4-mini`**: removed from the Codex allowlist and indicative pricing; it was retired from Codex with ChatGPT sign-in on 2026-08-31.
-
-### Fixed
-- **`opus` cost accounting**: `opus` (`claude-opus-5-5`) usage was priced at $0 and so escaped cost caps; it is now priced at Claude Opus 5.5 rates. The Claude Opus 4.8 pricing entry is removed, so `claude-opus-4-8` usage is unpriced.
-- **Long-running Codex MCP calls**: generated Codex configuration now permits each MCP server tool call to run for up to Demesne's 48-hour maximum sandbox job lifetime, instead of setting `tool_timeout_sec = 0` (which Codex treats as an immediate timeout). Caller cancellation and bounded `sandbox_wait` polling are unchanged.
 
 ## [0.2.0] - 2026-06-27
 
@@ -175,7 +176,8 @@ The milestone sections below (M1–M6) are the per-feature development log that 
 - CI workflow, integration test suite (`runner_integration_test.go`), and README with architecture
   diagrams.
 
-[unreleased]: https://github.com/jbeshir/demesne/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/jbeshir/demesne/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jbeshir/demesne/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jbeshir/demesne/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jbeshir/demesne/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jbeshir/demesne/releases/tag/v0.1.0
